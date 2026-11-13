@@ -90,6 +90,8 @@ public class Ui {
     private boolean appShutter;
     private boolean remoteEnabled;
     private String remoteCode;
+    private boolean mcpEnabled;
+    private String mcpToken;
     /** Standby while the app runs: -1 camera setting, 0 never, otherwise minutes without use */
     private int standbyMinutes;
     private static final int[] STANDBY_STEPS = {-1, 5, 10, 30, 0};
@@ -132,6 +134,8 @@ public class Ui {
         appShutter = prefs.getBoolean("appshutter", true);
         remoteEnabled = prefs.getBoolean("remote", false);
         remoteCode = prefs.getString("remotecode", null);
+        mcpEnabled = prefs.getBoolean("mcp", false);
+        mcpToken = prefs.getString("mcptoken", null);
         standbyMinutes = prefs.getInt("standby", -1);
     }
 
@@ -141,6 +145,23 @@ public class Ui {
     public boolean remoteEnabled() { return remoteEnabled; }
 
     public String remoteCode() { return remoteCode; }
+
+    /** MCP interface for AI assistants in the home network, protected by its own token */
+    public boolean mcpEnabled() { return mcpEnabled; }
+
+    public String mcpToken() { return mcpToken; }
+
+    /** 8 characters without easily confused ones; only used in the home network */
+    @android.annotation.SuppressLint("TrulyRandom")
+    private static String newToken() {
+        String chars = "abcdefghjkmnpqrstuvwxyz23456789";
+        java.util.Random r = new java.security.SecureRandom();
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < 8; i++) {
+            b.append(chars.charAt(r.nextInt(chars.length())));
+        }
+        return b.toString();
+    }
 
     private static String standbyText(int m) {
         return m < 0 ? "wie Kamera" : m == 0 ? "nie" : "nach " + m + " min";
@@ -414,9 +435,10 @@ public class Ui {
                         if (!wifiEnabled) {
                             debugEnabled = false;
                             remoteEnabled = false;
+                            mcpEnabled = false;
                         }
                         prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
-                                .putBoolean("remote", remoteEnabled).apply();
+                                .putBoolean("remote", remoteEnabled).putBoolean("mcp", mcpEnabled).apply();
                         host.applyNetwork();
                     }
                 }, wifiEnabled ? "Ein" : "Aus", -1));
@@ -435,6 +457,33 @@ public class Ui {
                         host.applyNetwork();
                     }
                 }, remoteEnabled ? "Ein · Code " + remoteCode : "Aus", -1));
+                out.add(new Row("MCP-Schnittstelle (KI)", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        mcpEnabled = !mcpEnabled;
+                        if (mcpEnabled) {
+                            // The token stays the same, so the PC side does not need to be changed again
+                            if (mcpToken == null) {
+                                mcpToken = newToken();
+                            }
+                            wifiEnabled = true;
+                            debugEnabled = true;
+                        }
+                        prefs.edit().putBoolean("mcp", mcpEnabled).putString("mcptoken", mcpToken)
+                                .putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                        host.applyNetwork();
+                    }
+                }, mcpEnabled ? "Ein · Token " + mcpToken : "Aus", -1));
+                if (mcpToken != null) {
+                    out.add(new Row("MCP-Token erneuern", null, new Runnable() {
+                        @Override
+                        public void run() {
+                            mcpToken = newToken();
+                            prefs.edit().putString("mcptoken", mcpToken).apply();
+                            showMessage("Neuer MCP-Token " + mcpToken, false);
+                        }
+                    }, "", -1));
+                }
                 out.add(new Row("Debug-Server", null, new Runnable() {
                     @Override
                     public void run() {
@@ -443,9 +492,10 @@ public class Ui {
                             wifiEnabled = true;
                         } else {
                             remoteEnabled = false;
+                            mcpEnabled = false;
                         }
                         prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
-                                .putBoolean("remote", remoteEnabled).apply();
+                                .putBoolean("remote", remoteEnabled).putBoolean("mcp", mcpEnabled).apply();
                         host.applyNetwork();
                     }
                 }, debugEnabled ? (host.debugAddress() != null ? host.debugAddress() : "Ein, wartet auf WLAN") : "Aus", -1));

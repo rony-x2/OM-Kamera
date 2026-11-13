@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Single activity: live view at the bottom, overlay with the own interface on top.
  */
-public class MainActivity extends Activity implements SurfaceHolder.Callback, CameraSession.Listener, Ui.Host {
+public class MainActivity extends Activity implements SurfaceHolder.Callback, CameraSession.Listener, Ui.Host, McpServer.Host {
     private CameraSession session;
     private Ui ui;
     private OverlayView overlay;
@@ -35,6 +35,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private final Handler handler = new Handler();
     private Network network;
     private DebugServer debugServer;
+    private final McpServer mcp = new McpServer(this);
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
         @Override
@@ -357,7 +358,28 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     }
 
     /** Runs code on the main thread and waits for its result (camera and UI are not thread-safe). */
-    private <T> T onMain(final java.util.concurrent.Callable<T> task) {
+    @Override
+    public CameraSession session() {
+        return session;
+    }
+
+    @Override
+    public Ui ui() {
+        return ui;
+    }
+
+    @Override
+    public String version() {
+        return BuildConfig.VERSION_NAME;
+    }
+
+    @Override
+    public byte[] screenPng() {
+        return overlayPng(true);
+    }
+
+    @Override
+    public <T> T onMain(final java.util.concurrent.Callable<T> task) {
         final Object[] result = new Object[1];
         final CountDownLatch done = new CountDownLatch(1);
         handler.post(new Runnable() {
@@ -380,7 +402,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         return r;
     }
 
-    private String asset(String name) {
+    @Override
+    public String asset(String name) {
         java.io.InputStream in = null;
         try {
             in = getAssets().open(name);
@@ -449,6 +472,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                     return stateJson();
                 }
             }));
+        }
+        if (path.equals("/mcp")) {
+            return mcp.handle(r);
         }
         if (!path.startsWith("/api/") && !path.equals("/live.jpg") && !path.equals("/overlay.png")) {
             return null;
@@ -652,12 +678,30 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
 
     /** The app's overlay as PNG, as it is drawn on the camera (without the live view). */
     private byte[] overlayPng() {
+        return overlayPng(false);
+    }
+
+    /** The overlay as PNG; stretched=true scales it to the panel's real aspect ratio (640x480 shown as 16:9) */
+    private byte[] overlayPng(boolean stretched) {
         if (overlay.getWidth() <= 0) {
             return null;
         }
         android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(overlay.getWidth(), overlay.getHeight(),
                 android.graphics.Bitmap.Config.ARGB_8888);
-        overlay.draw(new android.graphics.Canvas(b));
+        android.graphics.Canvas canvas = new android.graphics.Canvas(b);
+        if (stretched) {
+            // Neutral grey instead of the live view, so white text stays readable
+            canvas.drawColor(0xFF3A424C);
+        }
+        overlay.draw(canvas);
+        if (stretched) {
+            int w = Math.round(overlay.getWidth() * session.pixelAspect(overlay.getWidth(), overlay.getHeight()));
+            android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(b, w, overlay.getHeight(), true);
+            if (scaled != b) {
+                b.recycle();
+                b = scaled;
+            }
+        }
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
         b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
         b.recycle();
