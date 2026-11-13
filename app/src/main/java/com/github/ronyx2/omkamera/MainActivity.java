@@ -99,7 +99,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             return;
         }
         if (surfaceReady) {
-            session.startPreview(holder);
+            session.startPreview(holder, !ui.appShutter());
         }
         // Follow the mode dial position the camera had when the app started
         int dial = ModeDial.position();
@@ -135,7 +135,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     public void surfaceCreated(SurfaceHolder h) {
         surfaceReady = true;
         if (session.isOpen()) {
-            session.startPreview(h);
+            session.startPreview(h, !ui.appShutter());
         }
     }
 
@@ -157,9 +157,27 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         // Every key with its codes, to learn the layout of each camera model
         Log.info("key " + key + " scan=" + event.getScanCode() + " code=" + keyCode
                 + (event.getRepeatCount() > 0 ? " repeat=" + event.getRepeatCount() : ""));
-        if (ModeDial.isModeDial(event.getScanCode())) {
-            ui.onModeDial(event.getScanCode());
+        int scan = event.getScanCode();
+        if (scan == ModeDial.CHANGED) {
+            // The dial reports a change; the position is read from the key status
+            ui.onModeDial(ModeDial.position());
             return true;
+        }
+        if (ModeDial.isModeDial(scan)) {
+            ui.onModeDial(scan);
+            return true;
+        }
+        if (!session.isDirectShutter() && event.getRepeatCount() == 0) {
+            if (key == Keys.Key.SHUTTER_HALF) {
+                ui.onKey(key);
+                session.startFocus();
+                return true;
+            }
+            if (key == Keys.Key.SHUTTER_FULL) {
+                ui.onKey(key);
+                session.capture();
+                return true;
+            }
         }
         if (key == Keys.Key.OTHER) {
             return super.onKeyDown(keyCode, event);
@@ -178,11 +196,26 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         Keys.Key key = Keys.map(event);
+        if (!session.isDirectShutter()) {
+            if (key == Keys.Key.SHUTTER_HALF) {
+                session.cancelFocus();
+                return true;
+            }
+            if (key == Keys.Key.SHUTTER_FULL) {
+                session.stopCapture(isBurst());
+                return true;
+            }
+        }
         if (key == Keys.Key.SHUTTER_HALF || key == Keys.Key.SHUTTER_FULL || key == Keys.Key.OTHER) {
             return super.onKeyUp(keyCode, event);
         }
         // Key up of keys handled on key down must not reach the system (e.g. MENU would close the app)
         return true;
+    }
+
+    private boolean isBurst() {
+        String drive = Settings.get("drive").safeGet(session.current());
+        return drive != null && (drive.contains("burst") || drive.contains("continu") || drive.contains("speed"));
     }
 
     // ---- callbacks ----

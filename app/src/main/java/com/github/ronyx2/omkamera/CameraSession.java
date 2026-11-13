@@ -88,6 +88,12 @@ public class CameraSession {
     private CameraEx cameraEx;
     private Camera camera;
     private DisplayManager displayManager;
+    /** Built-in flash popped up / external flash attached, as reported by the equipment callback */
+    private volatile boolean internalFlash;
+    private volatile boolean externalFlash;
+    /** Width of a screen pixel relative to its height (1.33 on a 16:9 panel driven with 640x480) */
+    private float pixelAspect = 1f;
+    private boolean directShutter;
     private List<FocusFrame> focusFrames = new ArrayList<FocusFrame>();
     private String focusFramesKey;
     private Params current;
@@ -114,6 +120,7 @@ public class CameraSession {
         camera = cameraEx.getNormalCamera();
         try {
             displayManager = new DisplayManager();
+            readPixelAspect();
         } catch (Throwable t) {
             Log.error("DisplayManager", t);
         }
@@ -140,6 +147,21 @@ public class CameraSession {
             Log.error("setSettingChangedListener", t);
         }
         try {
+            cameraEx.setShutterListener(new CameraEx.ShutterListener() {
+                @Override
+                public void onShutter(final int status, CameraEx ex) {
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            CameraSession.this.onShutter(status);
+                        }
+                    });
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setShutterListener", t);
+        }
+        try {
             cameraEx.setEquipmentCallback(new CameraEx.EquipmentCallback() {
                 @Override
                 public void onEquipmentChange(final int type, final int status, CameraEx ex) {
@@ -147,6 +169,12 @@ public class CameraSession {
                         @Override
                         public void run() {
                             Log.info("equipment type=" + type + " status=" + status);
+                            if (type == CameraEx.EquipmentCallback.DEVICE_TYPE_INTERNAL_FLASH) {
+                                internalFlash = status == CameraEx.EquipmentCallback.DEVICE_AVAILABLE;
+                            } else if (type == CameraEx.EquipmentCallback.DEVICE_TYPE_EXTERNAL_FLASH) {
+                                externalFlash = status == CameraEx.EquipmentCallback.DEVICE_AVAILABLE;
+                            }
+                            Settings.flashReady = flashReady();
                             refresh();
                             invalidateFocusFrames();
                             listener.onParamsChanged();
@@ -260,8 +288,48 @@ public class CameraSession {
         handler.post(r);
     }
 
-    /** Starts the live view on the given surface and lets the camera handle the shutter button. */
-    public void startPreview(SurfaceHolder holder) {
+    /**
+     * The panel's aspect ratio compared with its pixel grid. The ILCE-6000 drives a 16:9 panel
+     * with 640x480 pixels, so every pixel is a third wider than high.
+     */
+    private void readPixelAspect() {
+        try {
+            DisplayManager.DeviceInfo info = displayManager.getDeviceInfo(displayManager.getActiveDevice());
+            if (info != null && info.res_w > 0 && info.res_h > 0) {
+                float panel;
+                switch (info.aspect) {
+                    case 2: panel = 16f / 9f; break;  // ASPECT_RATIO_16_9
+                    case 1: panel = 3f / 2f; break;   // ASPECT_RATIO_3_2
+                    case 3: panel = 4f / 3f; break;   // ASPECT_RATIO_4_3
+                    case 4: panel = 5f / 3f; break;   // ASPECT_RATIO_5_3
+                    case 5: panel = 11f / 9f; break;  // ASPECT_RATIO_11_9
+                    default: panel = 0;
+                }
+                if (panel > 0) {
+                    pixelAspect = panel / ((float) info.res_w / info.res_h);
+                }
+                Log.info("display " + info.res_w + "x" + info.res_h + " aspect=" + info.aspect + " pixelAspect=" + pixelAspect);
+            }
+        } catch (Throwable t) {
+            Log.error("display info", t);
+        }
+    }
+
+    public float pixelAspect() {
+        return pixelAspect;
+    }
+
+    public boolean flashReady() {
+        return internalFlash || externalFlash;
+    }
+
+    /**
+     * Starts the live view on the given surface.
+     * @param direct true: the camera handles the shutter button by itself (no AF feedback to the app);
+     *               false: the app starts AF and capture itself
+     */
+    public void startPreview(SurfaceHolder holder, boolean direct) {
+        directShutter = direct;
         if (camera == null || previewRunning) {
             return;
         }
@@ -274,6 +342,9 @@ public class CameraSession {
             Log.error("startPreview", t);
             return;
         }
+        if (!direct) {
+            return;
+        }
         try {
             // The camera then handles half press (AF) and full press (capture) by itself
             cameraEx.startDirectShutter();
@@ -281,6 +352,85 @@ public class CameraSession {
         } catch (Throwable t) {
             Log.error("startDirectShutter", t);
         }
+    }
+
+    public boolean isDirectShutter() {
+        return directShutter;
+    }
+
+    private boolean focusing;
+    private boolean capturing;
+
+    /** Half press: start the autofocus. The result arrives through the AF listener. */
+    public void startFocus() {
+        if (camera == null || focusing || capturing) {
+            return;
+        }
+        focusing = true;
+        try {
+            camera.autoFocus(new Camera.AutoFocusCallback() {
+                @Override
+                public void onAutoFocus(boolean success, Camera c) {
+                    Log.info("autoFocus done success=" + success);
+                }
+            });
+        } catch (Throwable t) {
+            focusing = false;
+            Log.error("autoFocus", t);
+        }
+    }
+
+    /** Half press released */
+    public void cancelFocus() {
+        if (camera == null || !focusing || capturing) {
+            return;
+        }
+        focusing = false;
+        try {
+            camera.cancelAutoFocus();
+        } catch (Throwable t) {
+            Log.error("cancelAutoFocus", t);
+        }
+    }
+
+    /** Full press: take a picture. The live view is started again when the camera reports the shot. */
+    public void capture() {
+        if (cameraEx == null || capturing) {
+            return;
+        }
+        capturing = true;
+        try {
+            cameraEx.burstableTakePicture();
+            Log.info("burstableTakePicture");
+        } catch (Throwable t) {
+            capturing = false;
+            Log.error("burstableTakePicture", t);
+        }
+    }
+
+    /** Full press released: ends a burst */
+    public void stopCapture(boolean burst) {
+        if (cameraEx == null || !capturing || !burst) {
+            return;
+        }
+        try {
+            cameraEx.cancelTakePicture();
+        } catch (Throwable t) {
+            Log.error("cancelTakePicture", t);
+        }
+    }
+
+    private void onShutter(int status) {
+        Log.info("shutter status=" + status);
+        capturing = false;
+        focusing = false;
+        // After a shot the camera stops the live view; the camera's own apps start it again
+        try {
+            camera.startPreview();
+        } catch (Throwable t) {
+            Log.error("startPreview after shot", t);
+        }
+        listener.onFocus(0, new int[0]);
     }
 
     public void close() {
@@ -310,6 +460,8 @@ public class CameraSession {
             displayManager = null;
         }
         previewRunning = false;
+        focusing = false;
+        capturing = false;
         focusFrames = new ArrayList<FocusFrame>();
         focusFramesKey = null;
         cameraEx = null;

@@ -4,10 +4,11 @@ import android.media.MediaPlayer;
 
 /**
  * Plays the camera's own system sounds. The camera provides them as media URIs
- * ("SCALAR_A://" followed by the sound name), so they sound like the camera's own beeps.
+ * ("SCALAR_A://" followed by the sound id, e.g. BEEP_ID_FOCUSLOCK), so they sound like the camera's own beeps.
  */
 public class Beep {
-    public static final String FOCUS_LOCK = "focuslock";
+    /** Sound names as the camera knows them */
+    public static final String FOCUS_LOCK = "BEEP_ID_FOCUSLOCK";
 
     private MediaPlayer player;
     private boolean prepared;

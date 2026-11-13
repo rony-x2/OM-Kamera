@@ -10,8 +10,9 @@ import com.sony.scalar.sysutil.ScalarInput;
 public final class ModeDial {
     public static final int FIRST = 534;
     public static final int LAST = 549;
-    /** Key status code that holds the current dial position */
-    private static final int POSITION = 572;
+    /** Key event when the dial was turned; also the key status code that holds the position */
+    public static final int CHANGED = 572;
+    private static final int POSITION = CHANGED;
 
     private ModeDial() {
     }

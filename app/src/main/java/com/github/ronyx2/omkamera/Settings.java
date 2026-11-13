@@ -141,7 +141,8 @@ public final class Settings {
 
             @Override
             protected String get(CameraSession.Params p) {
-                return p.params.getFlashMode();
+                // Only offered while the built-in flash is up or an external flash is attached
+                return flashReady ? p.params.getFlashMode() : null;
             }
 
             @Override
@@ -162,7 +163,7 @@ public final class Settings {
 
             @Override
             protected String get(CameraSession.Params p) {
-                return String.valueOf(p.mod.getFlashCompensation());
+                return flashReady ? String.valueOf(p.mod.getFlashCompensation()) : null;
             }
 
             @Override
@@ -322,6 +323,9 @@ public final class Settings {
             return 1f / 3f;
         }
     }
+
+    /** Set by the activity from the camera's equipment reports */
+    static volatile boolean flashReady;
 
     static String ev(float ev) {
         if (Math.abs(ev) < 0.05f) {

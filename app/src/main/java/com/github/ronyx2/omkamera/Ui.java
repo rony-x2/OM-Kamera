@@ -77,6 +77,7 @@ public class Ui {
     private boolean framesEnabled;
     private boolean wifiEnabled;
     private boolean debugEnabled;
+    private boolean appShutter;
 
     // Battery as reported by the system, -1 if unknown
     private int batteryLevel = -1;
@@ -110,7 +111,11 @@ public class Ui {
         framesEnabled = prefs.getBoolean("frames", true);
         wifiEnabled = prefs.getBoolean("wifi", false);
         debugEnabled = prefs.getBoolean("debug", false);
+        appShutter = prefs.getBoolean("appshutter", true);
     }
+
+    /** true: the app controls AF and capture (AF frames and beep work); false: the camera does it directly */
+    public boolean appShutter() { return appShutter; }
 
     public boolean wifiEnabled() { return wifiEnabled; }
     public boolean debugEnabled() { return debugEnabled; }
@@ -277,6 +282,14 @@ public class Ui {
                         prefs.edit().putBoolean("frames", framesEnabled).apply();
                     }
                 }, framesEnabled ? "Ein" : "Aus", -1));
+                out.add(new Row("Auslöser-Steuerung", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        appShutter = !appShutter;
+                        prefs.edit().putBoolean("appshutter", appShutter).apply();
+                        showMessage("Wirkt nach dem nächsten Start der App", false);
+                    }
+                }, appShutter ? "App (mit Fokusanzeige)" : "Kamera direkt", -1));
                 out.add(new Row("WLAN in der App", null, new Runnable() {
                     @Override
                     public void run() {

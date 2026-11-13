@@ -13,6 +13,12 @@ import java.util.List;
 public class OverlayView extends View {
     private Ui ui;
     private float u = 1;
+    /**
+     * Drawing width in square pixels. The ILCE-6000 shows 640x480 pixels on a 16:9 panel,
+     * so the canvas is compressed horizontally and everything is laid out on a wider virtual width.
+     */
+    private float vw;
+    private float pixelAspect = 1f;
 
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -35,6 +41,10 @@ public class OverlayView extends View {
             return;
         }
         u = Theme.unit(getHeight());
+        pixelAspect = ui.session().pixelAspect();
+        vw = getWidth() * pixelAspect;
+        c.save();
+        c.scale(1f / pixelAspect, 1f);
         CameraSession.Params p = ui.session().current();
         switch (ui.state()) {
             case LIVE:
@@ -59,6 +69,7 @@ public class OverlayView extends View {
                 break;
         }
         drawMessage(c);
+        c.restore();
     }
 
     // ---- live view ----
@@ -79,7 +90,7 @@ public class OverlayView extends View {
             String value = s.safeGet(p);
             String t = s.currentText(p);
             float w = hasIcon(id, value) ? h : text.measureText(t) + 2 * Theme.PAD * u;
-            if (x + w > getWidth() - 230 * u) {
+            if (x + w > vw - 230 * u) {
                 break;
             }
             roundRect(c, x, y, x + w, y + h, Theme.PANEL);
@@ -102,7 +113,7 @@ public class OverlayView extends View {
         String t = level >= 0 ? level + "%" : "?";
         float bodyW = 30 * u;
         float w = bodyW + 6 * u + text.measureText(t) + 2 * pad;
-        float r = getWidth() - pad;
+        float r = vw - pad;
         float l = r - w;
         float y = pad;
         roundRect(c, l, y, r, y + h, Theme.PANEL);
@@ -186,7 +197,8 @@ public class OverlayView extends View {
     private void frame(Canvas c, CameraSession.FocusFrame f, int color, float width, float share) {
         stroke.setColor(color);
         stroke.setStrokeWidth(width);
-        float l = f.rect.left, t = f.rect.top, r = f.rect.right, b = f.rect.bottom;
+        // Frames come in real screen pixels; the canvas works in square pixels
+        float l = f.rect.left * pixelAspect, t = f.rect.top, r = f.rect.right * pixelAspect, b = f.rect.bottom;
         float len = Math.max(4 * u, Math.min(r - l, b - t) * share);
         c.drawLine(l, t, l + len, t, stroke);
         c.drawLine(l, t, l, t + len, stroke);
@@ -207,7 +219,7 @@ public class OverlayView extends View {
         float h = Theme.BAR * u;
         float top = getHeight() - h;
         fill.setColor(Theme.PANEL);
-        c.drawRect(0, top, getWidth(), getHeight(), fill);
+        c.drawRect(0, top, vw, getHeight(), fill);
 
         // Mode badge
         String mode = ui.modeName();
@@ -233,7 +245,7 @@ public class OverlayView extends View {
             false,
         };
         float left = 16 * u + bw;
-        float slot = (getWidth() - left) / items.length;
+        float slot = (vw - left) / items.length;
         for (int i = 0; i < items.length; i++) {
             float tw = text.measureText(items[i]);
             float x = left + slot * i + (slot - tw) / 2;
@@ -259,7 +271,7 @@ public class OverlayView extends View {
         float cellH = Theme.CELL_H * u;
         float bottom = getHeight() - Theme.BAR * u - pad;
         float top = bottom - FnLayout.ROWS * cellH - (FnLayout.ROWS - 1) * gap;
-        float cellW = (getWidth() - 2 * pad - (FnLayout.COLS - 1) * gap) / FnLayout.COLS;
+        float cellW = (vw - 2 * pad - (FnLayout.COLS - 1) * gap) / FnLayout.COLS;
 
         for (int i = 0; i < FnLayout.SIZE; i++) {
             int r = i / FnLayout.COLS;
@@ -298,7 +310,7 @@ public class OverlayView extends View {
         if (ui.state() == Ui.State.FN_EDIT) {
             Setting s = ui.fnLayout().get(ui.fnIndex());
             if (s != null) {
-                drawValueStrip(c, s, p, pad, top - 60 * u - gap, getWidth() - pad, top - gap);
+                drawValueStrip(c, s, p, pad, top - 60 * u - gap, vw - pad, top - gap);
             }
         }
     }
@@ -327,7 +339,7 @@ public class OverlayView extends View {
 
     private void drawMenu(Canvas c, CameraSession.Params p) {
         fill.setColor(Theme.PANEL_SOLID);
-        c.drawRect(0, 0, getWidth(), getHeight(), fill);
+        c.drawRect(0, 0, vw, getHeight(), fill);
 
         float tabW = 160 * u;
         float rowH = 46 * u;
@@ -354,7 +366,7 @@ public class OverlayView extends View {
 
         // Rows
         float left = tabW + 2 * pad;
-        float right = getWidth() - pad;
+        float right = vw - pad;
         List<Ui.Row> rows = ui.rows();
         int visible = (int) ((getHeight() - 2 * pad) / rowH);
         int first = Math.max(0, Math.min(ui.row() - visible / 2, rows.size() - visible));
@@ -416,7 +428,7 @@ public class OverlayView extends View {
         }
         textSize(Theme.TEXT_NORMAL);
         float w = text.measureText(m) + 30 * u;
-        float l = (getWidth() - w) / 2;
+        float l = (vw - w) / 2;
         float t = 50 * u;
         roundRect(c, l, t, l + w, t + 36 * u, ui.messageWarn() ? 0xEE5A2018 : Theme.PANEL_SOLID);
         drawText(c, m, l + 15 * u, t + 24 * u, ui.messageWarn() ? 0xFFFFD0C8 : Theme.TEXT);
