@@ -39,6 +39,12 @@ public class McpServer {
 
         /** Filtered acceleration x, y, z or null */
         float[] gravity();
+
+        /** Starts or stops the selected app sequence; null if no sequence is selected */
+        String sequenceRelease();
+
+        /** Progress of a running sequence, or null */
+        String sequenceStatus();
     }
 
     private static final String PROTOCOL = "2025-06-18";
@@ -181,6 +187,15 @@ public class McpServer {
             return text("ok");
         }
         if (name.equals("ausloesen")) {
+            String seq = host.onMain(new Callable<String>() {
+                @Override
+                public String call() {
+                    return host.sequenceRelease();
+                }
+            });
+            if (seq != null) {
+                return text(seq);
+            }
             if (session.isDirectShutter()) {
                 return error("Auslöser-Steuerung steht auf „Kamera direkt“, auslösen geht nur mit der App-Steuerung");
             }
@@ -396,6 +411,10 @@ public class McpServer {
             o.put("spot", fp[0] + "," + fp[1]);
         }
         o.put("restaufnahmen", ui.remainingShots());
+        String seq = host.sequenceStatus();
+        if (seq != null) {
+            o.put("ablauf", seq);
+        }
         o.put("warnungen", new JSONArray(host.warnings()));
         if (!Float.isNaN(ui.roll())) {
             o.put("neigung", String.format(java.util.Locale.US, "roll %.1f° pitch %.1f°", ui.roll(), ui.pitch()));

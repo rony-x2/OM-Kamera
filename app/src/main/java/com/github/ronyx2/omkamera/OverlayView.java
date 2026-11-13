@@ -62,6 +62,7 @@ public class OverlayView extends View {
                     drawWarnings(c, p);
                 }
                 drawSelfTimer(c);
+                drawSequence(c);
                 break;
             case FN:
             case FN_EDIT:
@@ -515,6 +516,36 @@ public class OverlayView extends View {
         roundRect(c, (vw - hw) / 2, hb - 30 * u, (vw + hw) / 2, hb, Theme.PANEL);
         drawText(c, hint, (vw - hw) / 2 + 12 * u, hb - 10 * u, Theme.TEXT);
         drawExposureBar(c, p);
+    }
+
+    /** Progress of a running app sequence, centred under the status line */
+    private void drawSequence(Canvas c) {
+        Sequencer q = ui.sequencer();
+        String t = q != null ? q.status() : null;
+        if (t == null) {
+            if (q != null && q.mode() != Sequencer.Mode.OFF && ui.infoVisible()) {
+                // Selected but not running: small hint which sequence the shutter starts
+                String h = q.mode().label;
+                textSize(Theme.TEXT_SMALL);
+                float w = text.measureText(h) + 24 * u;
+                float top = Theme.PAD * u + Theme.ICON * u + 12 * u;
+                roundRect(c, (vw - w) / 2, top, (vw + w) / 2, top + 28 * u, Theme.PANEL);
+                drawText(c, h, (vw - w) / 2 + 12 * u, top + 20 * u, Theme.ACCENT);
+            }
+            return;
+        }
+        textSize(Theme.TEXT_NORMAL);
+        text.setTypeface(Typeface.DEFAULT_BOLD);
+        float w = text.measureText(t) + 40 * u;
+        float top = Theme.PAD * u + Theme.ICON * u + 12 * u;
+        roundRect(c, (vw - w) / 2, top, (vw + w) / 2, top + 38 * u, Theme.PANEL_SOLID);
+        // Pulsing dot like the recording lamp
+        int alpha = 140 + (int) (115 * Math.abs(Math.sin(android.os.SystemClock.uptimeMillis() / 400.0)));
+        fill.setColor((alpha << 24) | 0xE53935);
+        c.drawCircle((vw - w) / 2 + 18 * u, top + 19 * u, 6 * u, fill);
+        drawText(c, t, (vw - w) / 2 + 30 * u, top + 27 * u, Theme.TEXT);
+        text.setTypeface(Typeface.DEFAULT);
+        postInvalidateDelayed(250);
     }
 
     /** Countdown of the running self-timer, large in the middle with a ring that runs down */

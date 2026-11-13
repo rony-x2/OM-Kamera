@@ -330,9 +330,74 @@ public class CameraSession {
         }
     }
 
-    /** Shutter speed in seconds, 0 if unknown */
+    /** Shutter speed in seconds, 0 if unknown or BULB */
     public double shutterSeconds() {
-        return shutterN > 0 && shutterD > 0 ? (double) shutterN / shutterD : 0;
+        return shutterN > 0 && shutterD > 0 && !isBulb() ? (double) shutterN / shutterD : 0;
+    }
+
+    /** BULB is reported as shutter speed 65535/1 (as in Sony's own apps) */
+    public boolean isBulb() {
+        return shutterN == 65535 && shutterD == 1;
+    }
+
+    /** A picture is being taken (or the self-timer runs) */
+    public boolean isCapturing() {
+        return capturing;
+    }
+
+    /** One picture without self-timer, for sequences run by the app */
+    public boolean captureSingle() {
+        if (cameraEx == null || capturing) {
+            return false;
+        }
+        capturing = true;
+        burstCapture = false;
+        try {
+            cameraEx.burstableTakePicture();
+            Log.info("sequence: burstableTakePicture");
+            return true;
+        } catch (Throwable t) {
+            capturing = false;
+            Log.error("burstableTakePicture", t);
+            return false;
+        }
+    }
+
+    /** Opens the shutter in BULB; it stays open until {@link #stopBulb()} */
+    public boolean startBulb() {
+        if (cameraEx == null || capturing || !isBulb()) {
+            return false;
+        }
+        capturing = true;
+        burstCapture = true;
+        try {
+            cameraEx.burstableTakePicture();
+            Log.info("bulb open");
+            return true;
+        } catch (Throwable t) {
+            capturing = false;
+            Log.error("bulb", t);
+            return false;
+        }
+    }
+
+    public void stopBulb() {
+        if (cameraEx != null && capturing) {
+            Log.info("bulb close");
+            endCapture();
+        }
+    }
+
+    /** Moves the focus by a number of steps (positive towards infinity); false at the end of the range */
+    public boolean shiftFocus(int steps) {
+        try {
+            boolean ok = cameraEx.shiftFocusPosition(steps);
+            Log.info("shiftFocusPosition " + steps + " -> " + ok);
+            return ok;
+        } catch (Throwable t) {
+            Log.error("shiftFocusPosition", t);
+            return false;
+        }
     }
 
     private void registerListeners() {
@@ -634,7 +699,8 @@ public class CameraSession {
             return;
         }
         capturing = true;
-        burstCapture = burst;
+        // In BULB the shutter stays open while the button is held, like a burst
+        burstCapture = burst || isBulb();
         int appTimer = appTimerSeconds();
         if (appTimer > 0) {
             // The app counts down and then releases like a normal single shot
@@ -1141,6 +1207,9 @@ public class CameraSession {
     // ---- display helpers ----
 
     public String shutterText() {
+        if (isBulb()) {
+            return "BULB";
+        }
         if (shutterN <= 0 || shutterD <= 0) {
             return "--";
         }

@@ -211,6 +211,11 @@ public class Ui {
     private Sub sub;
     private int subParentRow;
     private final KeyFunctions keys;
+    private Sequencer sequencer;
+
+    public void setSequencer(Sequencer s) { sequencer = s; }
+
+    public Sequencer sequencer() { return sequencer; }
     /** Setting changed by a custom key (state QUICK) */
     private Setting quick;
     /** Key that opened the quick change, it also closes it */
@@ -497,6 +502,7 @@ public class Ui {
             case TAB_SHOOTING:
                 group(out, "Bildqualität", "quality", "size", "aspect");
                 group(out, "Bildfolgemodus", "drive", "bracketstep", "bracketcount", "bracketlevel", "bracketorder");
+                sequenceRows(out);
                 group(out, "Aufnahme", "lenr");
                 displayRows(out);
                 break;
@@ -586,6 +592,87 @@ public class Ui {
         out.add(Row.info("Restaufnahmen", remainingShots >= 0 ? String.valueOf(remainingShots) : "–"));
         groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "style",
                 "afmf", "afmode", "afarea");
+    }
+
+    /** Sequences run by the app: interval, focus bracket, extended bracket, BULB timer */
+    private void sequenceRows(List<Row> out) {
+        if (sequencer == null) {
+            return;
+        }
+        final Sequencer q = sequencer;
+        out.add(Row.header("Aufnahmeablauf (App)"));
+        out.add(Row.action("Ablauf beim Auslösen", q.mode().label, new Runnable() {
+            @Override
+            public void run() {
+                Sequencer.Mode[] all = Sequencer.Mode.values();
+                q.setMode(all[(q.mode().ordinal() + 1) % all.length]);
+            }
+        }));
+        switch (q.mode()) {
+            case INTERVAL:
+                out.add(cycle("Startzeit", "iv.start", Sequencer.START_DELAYS, 0, new Fmt() {
+                    public String f(int v) { return Sequencer.duration(v); }
+                }));
+                out.add(cycle("Aufnahmeintervall", "iv.interval", Sequencer.INTERVALS, 5, new Fmt() {
+                    public String f(int v) { return Sequencer.duration(v); }
+                }));
+                out.add(cycle("Anzahl der Aufnahmen", "iv.count", Sequencer.COUNTS, 100, new Fmt() {
+                    public String f(int v) { return String.valueOf(v); }
+                }));
+                out.add(cycle("Belichtung festhalten", "iv.ael", new int[]{0, 1}, 0, new Fmt() {
+                    public String f(int v) { return v == 1 ? "Ein (AEL)" : "Aus (nachführen)"; }
+                }));
+                out.add(cycle("Zeitrafferfilm", "iv.film", Sequencer.FILM_FPS, 25, new Fmt() {
+                    public String f(int v) { return v == 0 ? "Aus" : v + " Bilder/s"; }
+                }));
+                break;
+            case FOCUS:
+                out.add(cycle("Schrittweite", "fb.step", Sequencer.FOCUS_STEPS, 3, new Fmt() {
+                    public String f(int v) { return String.valueOf(v); }
+                }));
+                out.add(cycle("Anzahl der Aufnahmen", "fb.count", Sequencer.FOCUS_COUNTS, 10, new Fmt() {
+                    public String f(int v) { return String.valueOf(v); }
+                }));
+                out.add(cycle("Pause zwischen Aufnahmen", "fb.pause", Sequencer.FOCUS_PAUSE, 0, new Fmt() {
+                    public String f(int v) { return v == 0 ? "kürzeste" : v + " s"; }
+                }));
+                break;
+            case BRACKET:
+                out.add(cycle("Anzahl der Aufnahmen", "eb.count", Sequencer.BRACKET_COUNTS, 5, new Fmt() {
+                    public String f(int v) { return v + " Bilder"; }
+                }));
+                out.add(cycle("Belichtungsstufe", "eb.step", Sequencer.BRACKET_STEPS, 3, new Fmt() {
+                    public String f(int v) { return Sequencer.ev(v); }
+                }));
+                out.add(cycle("Reihenfolge", "eb.order", new int[]{0, 1}, 0, new Fmt() {
+                    public String f(int v) { return v == 0 ? "0 → − → +" : "− → 0 → +"; }
+                }));
+                break;
+            case BULB:
+                out.add(cycle("Belichtungszeit", "bt.time", Sequencer.BULB_TIMES, 60, new Fmt() {
+                    public String f(int v) { return Sequencer.duration(v); }
+                }));
+                out.add(Row.info("Voraussetzung", "Modus M, Verschlusszeit BULB"));
+                break;
+            default:
+                break;
+        }
+        if (q.mode() != Sequencer.Mode.OFF) {
+            out.add(Row.info("Auslöser startet, erneut drücken bricht ab", ""));
+        }
+    }
+
+    interface Fmt {
+        String f(int v);
+    }
+
+    private Row cycle(String label, final String key, final int[] values, final int def, Fmt fmt) {
+        return Row.action(label, fmt.f(sequencer.get(key, def)), new Runnable() {
+            @Override
+            public void run() {
+                sequencer.cycle(key, values, def);
+            }
+        });
     }
 
     private void displayRows(List<Row> out) {

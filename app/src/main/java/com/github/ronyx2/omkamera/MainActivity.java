@@ -35,6 +35,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private final Handler handler = new Handler();
     private Network network;
     private DebugServer debugServer;
+    private Sequencer sequencer;
     private final McpServer mcp = new McpServer(this);
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
@@ -115,6 +116,34 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         session = new CameraSession(this);
         Settings.init(getSharedPreferences("ui", MODE_PRIVATE));
         ui = new Ui(session, new FnLayout(this), this, getSharedPreferences("ui", MODE_PRIVATE));
+        sequencer = new Sequencer(session, getSharedPreferences("ui", MODE_PRIVATE), new Sequencer.Host() {
+            @Override
+            public void redraw() {
+                MainActivity.this.redraw();
+            }
+
+            @Override
+            public void message(String text, boolean warn) {
+                ui.showMessage(text, warn);
+            }
+
+            @Override
+            public void keepAwake() {
+                lastActivity = SystemClock.uptimeMillis();
+            }
+
+            @Override
+            public void startFocus() {
+                session.startFocus();
+            }
+
+            @Override
+            public void cancelFocus() {
+                session.cancelFocus();
+                ui.onFocusReleased();
+            }
+        });
+        ui.setSequencer(sequencer);
         overlay.setUi(ui);
         network = new Network(this);
         writeMonitor = new WriteMonitor(new WriteMonitor.Listener() {
@@ -174,6 +203,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         handler.removeCallbacks(standbyTick);
         handler.removeCallbacks(cardTick);
         stopLevel();
+        sequencer.stop("abgebrochen (App beendet)");
         SonySystem.setAutoPowerOff(this, true);
         debugServer.stop();
         if (ui.wifiEnabled()) {
@@ -236,7 +266,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
             if (key == Keys.Key.SHUTTER_FULL) {
                 ui.onKey(key);
-                session.capture(isBurst());
+                if (sequencer.mode() != Sequencer.Mode.OFF || sequencer.isRunning()) {
+                    // A selected sequence starts (or stops) instead of a single picture
+                    sequencer.onFullPress();
+                    redraw();
+                } else {
+                    session.capture(isBurst());
+                }
                 return true;
             }
         }
@@ -277,7 +313,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                 return true;
             }
             if (key == Keys.Key.SHUTTER_FULL) {
-                session.stopCapture();
+                if (!sequencer.isRunning()) {
+                    session.stopCapture();
+                }
                 return true;
             }
         }
@@ -338,6 +376,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
 
     @Override
     public void onShot() {
+        sequencer.onShot();
         writeMonitor.onShot();
     }
 
@@ -493,6 +532,21 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
         }
     };
+
+    @Override
+    public String sequenceRelease() {
+        if (sequencer.mode() == Sequencer.Mode.OFF && !sequencer.isRunning()) {
+            return null;
+        }
+        String r = sequencer.onFullPress();
+        redraw();
+        return r;
+    }
+
+    @Override
+    public String sequenceStatus() {
+        return sequencer.status();
+    }
 
     @Override
     public java.util.List<String> warnings() {
