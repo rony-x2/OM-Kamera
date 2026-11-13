@@ -356,11 +356,78 @@ public class CameraSession {
 
     /** Focal length of the lens in mm, 0 if unknown */
     public float focalLength() {
+        // The camera reports it through the FocalLengthChangeListener; the parameter stays 0
+        if (focalRaw > 0) {
+            return focalRaw / focalScale();
+        }
+        CameraEx.LensInfo l = lens();
+        if (l != null && l.FocalLength != null && l.FocalLength.wide > 0) {
+            return l.FocalLength.wide / focalScale();
+        }
         try {
             return current != null ? current.params.getFocalLength() : 0;
         } catch (Throwable t) {
             return 0;
         }
+    }
+
+    // ---- lens ----
+
+    private volatile int focalRaw = -1;
+    private CameraEx.LensInfo lensInfo;
+    private boolean lensRead;
+
+    /** Lens data from the camera (name, focal range, aperture range), cached until the lens changes */
+    public CameraEx.LensInfo lens() {
+        if (!lensRead && cameraEx != null) {
+            lensRead = true;
+            try {
+                lensInfo = cameraEx.getLensInfo();
+                if (lensInfo != null) {
+                    Log.info("lens " + lensInfo.LensName + " type=" + lensInfo.LensType
+                            + " focal=" + (lensInfo.FocalLength != null ? lensInfo.FocalLength.wide + "-" + lensInfo.FocalLength.tele : "?")
+                            + " F=" + (lensInfo.MinFValue != null ? lensInfo.MinFValue.wide + "/" + lensInfo.MinFValue.tele : "?"));
+                }
+            } catch (Throwable t) {
+                Log.error("getLensInfo", t);
+            }
+        }
+        return lensInfo;
+    }
+
+    /**
+     * Units of the focal length are not documented: compare the reported shortest focal length
+     * with the number in the lens name ("FE 24-105mm F4" -> 24) to find the factor (1, 10 or 100).
+     */
+    private float focalScale() {
+        CameraEx.LensInfo l = lens();
+        if (l == null || l.FocalLength == null || l.FocalLength.wide <= 0 || l.LensName == null) {
+            return 1f;
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)(?:-\\d+)?\\s*mm").matcher(l.LensName);
+        if (m.find()) {
+            float named = Float.parseFloat(m.group(1));
+            if (named > 0) {
+                float ratio = l.FocalLength.wide / named;
+                if (ratio > 50) {
+                    return 100f;
+                }
+                if (ratio > 5) {
+                    return 10f;
+                }
+            }
+        }
+        return 1f;
+    }
+
+    /** "FE 24-105mm F4 G OSS · 50 mm" or null without lens data */
+    public String lensText() {
+        CameraEx.LensInfo l = lens();
+        if (l == null || l.LensName == null || l.LensName.length() == 0) {
+            return null;
+        }
+        float f = focalLength();
+        return l.LensName.trim() + (f > 0 ? " · " + Math.round(f) + " mm" : "");
     }
 
     /** Shutter speed in seconds, 0 if unknown or BULB */
@@ -486,6 +553,25 @@ public class CameraSession {
 
     private void registerListeners() {
         try {
+            cameraEx.setFocalLengthChangeListener(new CameraEx.FocalLengthChangeListener() {
+                @Override
+                public void onFocalLengthChanged(int length, CameraEx ex) {
+                    if (focalRaw != length) {
+                        Log.info("focal length raw=" + length);
+                    }
+                    focalRaw = length;
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.onExposureChanged();
+                        }
+                    });
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setFocalLengthChangeListener", t);
+        }
+        try {
             cameraEx.setFocusDriveListener(new CameraEx.FocusDriveListener() {
                 @Override
                 public void onChanged(CameraEx.FocusPosition p, CameraEx ex) {
@@ -584,6 +670,9 @@ public class CameraSession {
                         @Override
                         public void run() {
                             Log.info("equipment type=" + type + " status=" + status);
+                            // A lens change also arrives here: read the lens data again
+                            lensRead = false;
+                            focalRaw = -1;
                             if (type == CameraEx.EquipmentCallback.DEVICE_TYPE_INTERNAL_FLASH) {
                                 internalFlash = status == CameraEx.EquipmentCallback.DEVICE_AVAILABLE;
                             } else if (type == CameraEx.EquipmentCallback.DEVICE_TYPE_EXTERNAL_FLASH) {

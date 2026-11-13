@@ -464,7 +464,11 @@ public class McpServer {
         }
         short[][] h = s.histogram();
         o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
-        o.put("brennweite", s.focalLength());
+        o.put("brennweite", Math.round(s.focalLength()));
+        String lens = s.lensText();
+        if (lens != null) {
+            o.put("objektiv", lens);
+        }
         JSONObject values = new JSONObject();
         for (Setting st : Settings.all()) {
             if (st.isShown(p)) {

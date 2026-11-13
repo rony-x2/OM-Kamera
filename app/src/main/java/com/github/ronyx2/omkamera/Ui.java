@@ -604,6 +604,8 @@ public class Ui {
     private void mainRows(List<Row> out) {
         out.add(Row.info("Modus · Zeit · Blende", modeName() + "  ·  " + session.shutterText() + "  ·  " + session.apertureText()));
         out.add(Row.info("Restaufnahmen", remainingShots >= 0 ? String.valueOf(remainingShots) : "–"));
+        String lens = session.lensText();
+        out.add(Row.info("Objektiv", lens != null ? lens : "keine Daten (Adapter oder manuelles Objektiv)"));
         groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "style",
                 "afmf", "afmode", "afarea");
     }
@@ -981,6 +983,8 @@ public class Ui {
         out.add(Row.header("Info"));
         DeviceInfo d = DeviceInfo.getInstance();
         out.add(Row.info("Modell", safe(d.getModel())));
+        String lensInfo = session.lensText();
+        out.add(Row.info("Objektiv", lensInfo != null ? lensInfo : "keine Daten"));
         out.add(Row.info("Firmware", safe(d.getFirmwareVersion())));
         out.add(Row.info("Plattform (API)", String.valueOf(d.getApiVersion())));
         out.add(Row.info("Android", Build.VERSION.RELEASE));
