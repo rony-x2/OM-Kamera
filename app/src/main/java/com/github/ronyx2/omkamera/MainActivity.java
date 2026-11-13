@@ -772,6 +772,34 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (ui.remoteCode() == null || !ui.remoteCode().equals(r.param("k"))) {
             return DebugServer.Response.text(403, "text/plain", "Code fehlt oder falsch");
         }
+        if (path.equals("/api/file")) {
+            // A file from the card, e.g. the time-lapse film, for checking it on the PC
+            java.io.File root = android.os.Environment.getExternalStorageDirectory();
+            String rel = String.valueOf(r.param("path")).replace("..", "");
+            java.io.File f = new java.io.File(root, rel);
+            if (!f.isFile() || f.length() > 64L * 1024 * 1024) {
+                return DebugServer.Response.text(404, "text/plain", "keine Datei " + rel);
+            }
+            try {
+                byte[] data = new byte[(int) f.length()];
+                java.io.FileInputStream in = new java.io.FileInputStream(f);
+                try {
+                    int read = 0;
+                    while (read < data.length) {
+                        int n = in.read(data, read, data.length - read);
+                        if (n < 0) {
+                            break;
+                        }
+                        read += n;
+                    }
+                } finally {
+                    in.close();
+                }
+                return new DebugServer.Response(200, "application/octet-stream", data);
+            } catch (Exception e) {
+                return DebugServer.Response.text(500, "text/plain", String.valueOf(e));
+            }
+        }
         if (path.equals("/live.jpg")) {
             byte[] frame = session.liveFrame();
             return frame != null ? new DebugServer.Response(200, "image/jpeg", frame)

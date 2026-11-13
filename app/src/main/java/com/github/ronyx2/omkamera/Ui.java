@@ -633,6 +633,9 @@ public class Ui {
                 out.add(cycle("Anzahl der Aufnahmen", "iv.count", Sequencer.COUNTS, 100, new Fmt() {
                     public String f(int v) { return String.valueOf(v); }
                 }));
+                out.add(cycle("Scharfstellen", "iv.af", new int[]{0, 1}, 0, new Fmt() {
+                    public String f(int v) { return v == 0 ? "einmal am Anfang" : "vor jeder Aufnahme"; }
+                }));
                 out.add(cycle("Belichtung festhalten", "iv.ael", new int[]{0, 1}, 0, new Fmt() {
                     public String f(int v) { return v == 1 ? "Ein (AEL)" : "Aus (nachführen)"; }
                 }));

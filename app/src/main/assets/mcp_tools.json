@@ -228,6 +228,18 @@
     }
   },
   {
+    "name": "dateien",
+    "description": "Listet Dateien auf der Speicherkarte: 'OMKAMERA' (Zeitrafferfilme, Einstellungen), 'DCIM' (neuester Bildordner) oder ein Unterordner wie 'DCIM/10061114'.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "ordner": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
     "name": "jpeg_test",
     "description": "Diagnose: kodiert ein JPEG von der Speicherkarte mit Sonys Hardware-JpegExporter in mehreren Qualitätsstufen neu und meldet Dateigröße und Fehler je Stufe. Ohne 'datei' wird das neueste JPEG im DCIM-Ordner genommen. Die Testdateien landen in OMKTEST auf der Karte und können mit loeschen=true wieder entfernt werden.",
     "inputSchema": {

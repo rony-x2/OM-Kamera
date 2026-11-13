@@ -421,16 +421,57 @@ public class CameraSession {
         }
     }
 
-    /** Moves the focus by a number of steps (positive towards infinity); false at the end of the range */
-    public boolean shiftFocus(int steps) {
-        try {
-            boolean ok = cameraEx.shiftFocusPosition(steps);
-            Log.info("shiftFocusPosition " + steps + " -> " + ok);
-            return ok;
-        } catch (Throwable t) {
-            Log.error("shiftFocusPosition", t);
-            return false;
-        }
+    /**
+     * Moves the focus by a number of steps (positive towards infinity). The camera answers through
+     * the main thread, so the call must not run there (it would wait for itself): it runs on a
+     * worker thread and the result arrives on the main thread. ok is null when it took too long.
+     */
+    public interface ShiftResult {
+        void done(Boolean ok);
+    }
+
+    public void shiftFocus(final int steps, final ShiftResult result) {
+        final Boolean[] answer = new Boolean[1];
+        final boolean[] finished = new boolean[1];
+        final Runnable timeout = new Runnable() {
+            @Override
+            public void run() {
+                synchronized (finished) {
+                    if (finished[0]) {
+                        return;
+                    }
+                    finished[0] = true;
+                }
+                Log.info("shiftFocusPosition " + steps + " -> no answer after 5 s");
+                result.done(null);
+            }
+        };
+        handler.postDelayed(timeout, 5000);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    answer[0] = cameraEx.shiftFocusPosition(steps);
+                } catch (Throwable t) {
+                    Log.error("shiftFocusPosition", t);
+                    answer[0] = Boolean.FALSE;
+                }
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        synchronized (finished) {
+                            if (finished[0]) {
+                                return;
+                            }
+                            finished[0] = true;
+                        }
+                        handler.removeCallbacks(timeout);
+                        Log.info("shiftFocusPosition " + steps + " -> " + answer[0]);
+                        result.done(answer[0]);
+                    }
+                });
+            }
+        }, "focus-shift").start();
     }
 
     private void registerListeners() {

@@ -281,6 +281,9 @@ public class McpServer {
         if (name.equals("jpeg_test")) {
             return text(JpegProbe.run(a.optString("datei", null), a.optJSONArray("stufen"), a.optBoolean("loeschen", true)));
         }
+        if (name.equals("dateien")) {
+            return text(listFiles(a.optString("ordner", "OMKAMERA")));
+        }
         if (name.equals("log")) {
             int lines = Math.max(1, Math.min(400, a.optInt("zeilen", 60)));
             String[] all = Log.tail(64 * 1024).split("\n");
@@ -291,6 +294,42 @@ public class McpServer {
             return text(b.toString());
         }
         return error("unbekanntes Werkzeug " + name);
+    }
+
+    /** Files in a folder on the card (OMKAMERA, DCIM or a DCIM sub folder), newest last */
+    private static String listFiles(String folder) {
+        java.io.File root = android.os.Environment.getExternalStorageDirectory();
+        java.io.File dir = new java.io.File(root, folder.replace("..", ""));
+        if ("DCIM".equalsIgnoreCase(folder)) {
+            // The newest picture folder
+            java.io.File[] subs = dir.listFiles();
+            java.io.File newest = null;
+            if (subs != null) {
+                for (java.io.File f : subs) {
+                    if (f.isDirectory() && (newest == null || f.getName().compareTo(newest.getName()) > 0)) {
+                        newest = f;
+                    }
+                }
+            }
+            if (newest != null) {
+                dir = newest;
+            }
+        }
+        java.io.File[] files = dir.listFiles();
+        if (files == null) {
+            return "Ordner " + dir.getPath() + " nicht gefunden";
+        }
+        java.util.Arrays.sort(files, new java.util.Comparator<java.io.File>() {
+            @Override
+            public int compare(java.io.File x, java.io.File y) {
+                return x.getName().compareTo(y.getName());
+            }
+        });
+        StringBuilder b = new StringBuilder(dir.getPath()).append(" (").append(files.length).append(" Dateien)\n");
+        for (int i = Math.max(0, files.length - 40); i < files.length; i++) {
+            b.append(files[i].getName()).append("  ").append(files[i].isDirectory() ? "Ordner" : files[i].length() / 1024 + " KB").append('\n');
+        }
+        return b.toString();
     }
 
     /** Half press, waits up to 3 s for the result */

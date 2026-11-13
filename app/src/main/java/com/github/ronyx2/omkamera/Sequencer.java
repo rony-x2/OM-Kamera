@@ -211,6 +211,10 @@ public class Sequencer {
         }
         if (was == Mode.INTERVAL) {
             session.setExposureLock(false);
+            if (focusModeBefore != null) {
+                Settings.get("afmf").write(session, focusModeBefore);
+                focusModeBefore = null;
+            }
         }
         String filmInfo = closeFilm();
         Log.info("sequence " + was + " " + why + " after " + done + " shots");
@@ -277,6 +281,23 @@ public class Sequencer {
         int delay = get("iv.start", 0);
         running = Mode.INTERVAL;
         nextAt = SystemClock.uptimeMillis() + delay * 1000L;
+        // Focus once at the start and keep it (MF), unless every picture should focus again
+        focusModeBefore = null;
+        String af = Settings.get("afmf").safeGet(session.current());
+        if (get("iv.af", 0) == 0 && af != null && !"manual".equals(af)) {
+            focusModeBefore = af;
+            host.startFocus();
+            nextAt = Math.max(nextAt, SystemClock.uptimeMillis() + 1500);
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (running == Mode.INTERVAL) {
+                        host.cancelFocus();
+                        Settings.get("afmf").write(session, "manual");
+                    }
+                }
+            }, 1300);
+        }
         if (get("iv.ael", 0) == 1) {
             session.setExposureLock(true);
         }
@@ -367,6 +388,7 @@ public class Sequencer {
                 Log.error("film close", e);
             }
             film = null;
+            Log.info("film " + filmFile.getPath() + ": " + n + " frames, " + filmFile.length() / 1024 + " KB");
             if (n == 0) {
                 filmFile.delete();
                 return null;
@@ -428,17 +450,29 @@ public class Sequencer {
                 stop("fertig");
                 return;
             }
-            if (!session.shiftFocus(get("fb.step", 3))) {
-                // End of the range (infinity) reached, like on the camera
-                stop("fertig (Unendlich erreicht)");
-                return;
-            }
-            handler.postDelayed(new Runnable() {
+            session.shiftFocus(get("fb.step", 3), new CameraSession.ShiftResult() {
                 @Override
-                public void run() {
-                    focusShot();
+                public void done(Boolean ok) {
+                    if (running != Mode.FOCUS) {
+                        return;
+                    }
+                    if (ok == null) {
+                        stop("abgebrochen (Kamera verschiebt den Fokus nicht)");
+                        return;
+                    }
+                    if (!ok) {
+                        // End of the range (infinity) reached, like on the camera
+                        stop("fertig (Unendlich erreicht)");
+                        return;
+                    }
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            focusShot();
+                        }
+                    }, 250);
                 }
-            }, 250);
+            });
         }
     };
 
