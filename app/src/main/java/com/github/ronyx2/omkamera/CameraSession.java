@@ -120,6 +120,13 @@ public class CameraSession {
         return cameraEx != null;
     }
 
+    private final LiveView liveView = new LiveView();
+
+    /** One JPEG frame of the live view (for the browser), or null. Callable from any thread. */
+    public byte[] liveFrame() {
+        return liveView.frame(cameraEx);
+    }
+
     public void open() {
         if (cameraEx != null) {
             return;
@@ -284,6 +291,7 @@ public class CameraSession {
                 invalidateFocusFrames();
                 listener.onParamsChanged();
             }
+            liveView.stopIfIdle();
             handler.postDelayed(this, 1500);
         }
     };
@@ -487,6 +495,7 @@ public class CameraSession {
         }
         Log.info("close camera");
         handler.removeCallbacks(poll);
+        liveView.stop();
         try {
             if (previewRunning) {
                 camera.stopPreview();

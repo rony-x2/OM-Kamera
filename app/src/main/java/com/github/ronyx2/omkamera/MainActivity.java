@@ -123,8 +123,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         });
         debugServer = new DebugServer(new DebugServer.Provider() {
             @Override
-            public String[] get(String path) {
-                return debugContent(path);
+            public DebugServer.Response handle(DebugServer.Request request) {
+                return debugHandle(request);
             }
         });
     }
@@ -347,36 +347,255 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         return debugServer.isRunning() && ip != null ? ip + ":" + DebugServer.PORT : null;
     }
 
-    /** Content of the debug server. Camera data is collected on the main thread. */
-    private String[] debugContent(String path) {
-        if (path.equals("/") || path.startsWith("/?")) {
-            return new String[] {"text/html", DEBUG_PAGE};
+    /** Runs code on the main thread and waits for its result (camera and UI are not thread-safe). */
+    private <T> T onMain(final java.util.concurrent.Callable<T> task) {
+        final Object[] result = new Object[1];
+        final CountDownLatch done = new CountDownLatch(1);
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    result[0] = task.call();
+                } catch (Throwable t) {
+                    Log.error("main task", t);
+                }
+                done.countDown();
+            }
+        });
+        try {
+            done.await(4, TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
         }
-        if (path.startsWith("/log")) {
-            return new String[] {"text/plain", Log.tail(64 * 1024)};
+        @SuppressWarnings("unchecked")
+        T r = (T) result[0];
+        return r;
+    }
+
+    private String asset(String name) {
+        java.io.InputStream in = null;
+        try {
+            in = getAssets().open(name);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+            }
+            return out.toString("UTF-8");
+        } catch (Throwable t) {
+            return "Asset fehlt: " + name;
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (Throwable ignored) {
+                }
+            }
         }
-        if (path.startsWith("/status") || path.startsWith("/params")) {
-            final boolean params = path.startsWith("/params");
-            final String[] result = new String[1];
-            final CountDownLatch done = new CountDownLatch(1);
-            handler.post(new Runnable() {
+    }
+
+    private static DebugServer.Response text(String body) {
+        return DebugServer.Response.text(200, "text/plain", body);
+    }
+
+    private static DebugServer.Response json(String body) {
+        return DebugServer.Response.text(200, "application/json", body);
+    }
+
+    /**
+     * Debug and remote control requests. Reading pages are open while the debug server runs;
+     * live view and every action need remote control switched on and the code shown on the camera.
+     */
+    private DebugServer.Response debugHandle(DebugServer.Request r) {
+        String path = r.path;
+        if (path.equals("/")) {
+            return DebugServer.Response.text(200, "text/html", asset("debug.html"));
+        }
+        if (path.equals("/remote")) {
+            return DebugServer.Response.text(200, "text/html", asset("remote.html"));
+        }
+        if (path.equals("/log")) {
+            return text(Log.tail(64 * 1024));
+        }
+        if (path.equals("/status")) {
+            return text(onMain(new java.util.concurrent.Callable<String>() {
                 @Override
-                public void run() {
-                    try {
-                        result[0] = params ? paramsText() : statusText();
-                    } catch (Throwable t) {
-                        result[0] = "Fehler: " + t;
-                    }
-                    done.countDown();
+                public String call() {
+                    return statusText();
+                }
+            }));
+        }
+        if (path.equals("/params")) {
+            return text(onMain(new java.util.concurrent.Callable<String>() {
+                @Override
+                public String call() {
+                    return paramsText();
+                }
+            }));
+        }
+        if (path.equals("/api/state")) {
+            return json(onMain(new java.util.concurrent.Callable<String>() {
+                @Override
+                public String call() throws Exception {
+                    return stateJson();
+                }
+            }));
+        }
+        if (!path.startsWith("/api/") && !path.equals("/live.jpg") && !path.equals("/overlay.png")) {
+            return null;
+        }
+        // Everything below controls the camera or shows its picture
+        if (!ui.remoteEnabled()) {
+            return DebugServer.Response.text(403, "text/plain", "Fernsteuerung ist an der Kamera ausgeschaltet");
+        }
+        if (ui.remoteCode() == null || !ui.remoteCode().equals(r.param("k"))) {
+            return DebugServer.Response.text(403, "text/plain", "Code fehlt oder falsch");
+        }
+        if (path.equals("/live.jpg")) {
+            byte[] frame = session.liveFrame();
+            return frame != null ? new DebugServer.Response(200, "image/jpeg", frame)
+                    : DebugServer.Response.text(503, "text/plain", "kein Bild");
+        }
+        if (path.equals("/overlay.png")) {
+            byte[] png = onMain(new java.util.concurrent.Callable<byte[]>() {
+                @Override
+                public byte[] call() {
+                    return overlayPng();
                 }
             });
-            try {
-                done.await(3, TimeUnit.SECONDS);
-            } catch (InterruptedException ignored) {
-            }
-            return new String[] {"text/plain", result[0] != null ? result[0] : "keine Antwort"};
+            return png != null ? new DebugServer.Response(200, "image/png", png)
+                    : DebugServer.Response.text(503, "text/plain", "kein Bild");
         }
-        return null;
+        final DebugServer.Request req = r;
+        String result = onMain(new java.util.concurrent.Callable<String>() {
+            @Override
+            public String call() {
+                return remoteAction(req);
+            }
+        });
+        Log.info("remote " + path + " " + req.query + " -> " + result);
+        return json("{\"result\":" + org.json.JSONObject.quote(result != null ? result : "Zeitüberschreitung") + "}");
+    }
+
+    /** Executes a remote action on the main thread. */
+    private String remoteAction(DebugServer.Request r) {
+        String path = r.path;
+        if (path.equals("/api/set")) {
+            Setting s = Settings.get(r.param("id"));
+            if (s == null || r.param("value") == null) {
+                return "unbekannte Einstellung";
+            }
+            CameraSession.Result res = s.write(session, r.param("value"));
+            redraw();
+            return res.ok ? "ok" : "gesperrt" + (res.inhibition != 0 ? " (Grund " + res.inhibition + ")" : "");
+        }
+        if (path.equals("/api/exposure")) {
+            int dir = "-1".equals(r.param("dir")) ? -1 : 1;
+            String what = r.param("what");
+            if ("shutter".equals(what)) {
+                session.adjustShutterSpeed(dir);
+            } else if ("aperture".equals(what)) {
+                session.adjustAperture(dir);
+            } else if ("shift".equals(what)) {
+                session.adjustProgramShift(dir);
+            } else if ("ev".equals(what)) {
+                ui.stepSetting(Settings.get("ev"), dir);
+            } else {
+                return "unbekannt";
+            }
+            redraw();
+            return "ok";
+        }
+        if (path.equals("/api/af")) {
+            if ("1".equals(r.param("on"))) {
+                session.startFocus();
+            } else {
+                session.cancelFocus();
+                ui.onFocusReleased();
+            }
+            return "ok";
+        }
+        if (path.equals("/api/shoot")) {
+            if (session.isDirectShutter()) {
+                return "Auslöser-Steuerung steht auf „Kamera direkt“";
+            }
+            // Focus first, then release like a full press
+            session.startFocus();
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    session.capture(false);
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            session.cancelFocus();
+                            ui.onFocusReleased();
+                        }
+                    }, 1500);
+                }
+            }, 800);
+            return "ok";
+        }
+        return "unbekannte Aktion";
+    }
+
+    private String stateJson() throws org.json.JSONException {
+        org.json.JSONObject o = new org.json.JSONObject();
+        CameraSession.Params p = session.current();
+        o.put("model", DeviceInfo.getInstance().getModel());
+        o.put("mode", ui.modeName());
+        o.put("shutter", session.shutterText());
+        o.put("aperture", session.apertureText());
+        Setting ev = Settings.get("ev");
+        Setting iso = Settings.get("iso");
+        o.put("ev", ev.currentText(p));
+        o.put("iso", iso.currentText(p));
+        o.put("dial1", ui.dial1Role().name());
+        o.put("dial2", ui.dial2Role().name());
+        o.put("battery", ui.batteryLevel());
+        o.put("plugged", ui.batteryPlugged());
+        o.put("writing", ui.writing());
+        o.put("focus", ui.focusResult().name());
+        o.put("remote", ui.remoteEnabled());
+        o.put("directShutter", session.isDirectShutter());
+        org.json.JSONArray list = new org.json.JSONArray();
+        for (Setting s : Settings.all()) {
+            org.json.JSONObject j = new org.json.JSONObject();
+            j.put("id", s.id);
+            j.put("label", s.label);
+            j.put("group", s.category.title);
+            boolean available = s.isAvailable(p);
+            j.put("available", available);
+            if (available) {
+                j.put("value", s.safeGet(p));
+                j.put("display", s.currentText(p));
+                org.json.JSONArray values = new org.json.JSONArray();
+                for (String v : s.safeValues(p)) {
+                    org.json.JSONArray pair = new org.json.JSONArray();
+                    pair.put(v);
+                    pair.put(s.display(p, v));
+                    values.put(pair);
+                }
+                j.put("values", values);
+            }
+            list.put(j);
+        }
+        o.put("settings", list);
+        return o.toString();
+    }
+
+    /** The app's overlay as PNG, as it is drawn on the camera (without the live view). */
+    private byte[] overlayPng() {
+        if (overlay.getWidth() <= 0) {
+            return null;
+        }
+        android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(overlay.getWidth(), overlay.getHeight(),
+                android.graphics.Bitmap.Config.ARGB_8888);
+        overlay.draw(new android.graphics.Canvas(b));
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+        b.recycle();
+        return out.toByteArray();
     }
 
     private String statusText() {
@@ -424,22 +643,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         Arrays.sort(parts);
         return android.text.TextUtils.join("\n", parts) + "\n";
     }
-
-    private static final String DEBUG_PAGE = "<!DOCTYPE html><html lang=\"de\"><head><meta charset=\"utf-8\">"
-            + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>OM Kamera Debug</title>"
-            + "<style>body{background:#101317;color:#e8eaed;font:15px/1.5 system-ui,sans-serif;margin:0;padding:16px}"
-            + "nav a{color:#f0a030;margin-right:16px;text-decoration:none;font-weight:600}"
-            + "pre{background:#181c21;border:1px solid #2a3038;border-radius:8px;padding:12px;white-space:pre-wrap;"
-            + "word-break:break-all;font:13px/1.45 ui-monospace,Consolas,monospace}</style></head><body>"
-            + "<h1 style=\"font-size:20px\">OM Kamera – Debug</h1>"
-            + "<nav><a href=\"#\" onclick=\"show('/status');return false\">Status</a>"
-            + "<a href=\"#\" onclick=\"show('/params');return false\">Parameter</a>"
-            + "<a href=\"#\" onclick=\"show('/log');return false\">Log</a>"
-            + "<label><input type=\"checkbox\" id=\"auto\" checked> automatisch aktualisieren</label></nav>"
-            + "<pre id=\"out\">…</pre><script>var cur='/status';"
-            + "function show(p){cur=p;var x=new XMLHttpRequest();x.onload=function(){var o=document.getElementById('out');"
-            + "o.textContent=x.responseText;if(cur=='/log')window.scrollTo(0,document.body.scrollHeight)};x.open('GET',p);x.send()}"
-            + "setInterval(function(){if(document.getElementById('auto').checked)show(cur)},2000);show(cur)</script></body></html>";
 
     @Override
     public void redraw() {

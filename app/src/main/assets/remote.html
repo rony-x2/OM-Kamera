@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OM Kamera – Fernsteuerung</title>
+<style>
+  :root { --bg:#0e1114; --panel:#161b20; --panel2:#1d232a; --line:#262d35; --text:#e6e9ec; --mute:#8b949e;
+          --accent:#f0a030; --ok:#3bd16f; --warn:#ff6a50; --rec:#e53935; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0 6px 0 0; font-weight: 650; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; font-size: 13.5px; color: var(--mute); white-space: nowrap; }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip.mode { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 700; }
+  .chip.rec { color: #fff; border-color: var(--rec); display: none; }
+  .chip.rec::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rec); margin-right: 6px; animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .spacer { flex: 1; }
+  header a { color: var(--mute); font-size: 13.5px; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; padding: 16px; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; padding: 10px; gap: 12px; } }
+
+  .view { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+  .view img { position: absolute; top: 0; height: 100%; }
+  #live { left: 7.8%; width: 84.4%; object-fit: fill; transition: opacity .25s; visibility: hidden; }
+  #ovl { left: 0; width: 100%; object-fit: fill; display: none; }
+  #ovl:not([src]) { visibility: hidden; }
+  .view .hint { position: absolute; inset: 0; display: grid; place-items: center; color: var(--mute); font-size: 14px; text-align: center; padding: 20px; }
+  .viewbar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 8px; color: var(--mute); font-size: 13.5px; }
+  .viewbar label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card + .card { margin-top: 12px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); margin: 0 0 10px; font-weight: 600; }
+
+  .expo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .tile { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 6px; text-align: center; transition: border-color .2s; }
+  .tile.active { border-color: var(--accent); }
+  .tile .lbl { font-size: 12px; color: var(--mute); }
+  .tile .val { font-size: 18px; font-weight: 650; margin: 2px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .btns { display: flex; gap: 4px; justify-content: center; }
+  button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; touch-action: manipulation; }
+  button:hover:not(:disabled) { border-color: #3a4450; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .35; cursor: default; }
+  .tile button { flex: 1; min-width: 0; max-width: 40px; height: 34px; font-size: 18px; line-height: 1; }
+
+  .shoot { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 12px; }
+  .shoot button { height: 58px; font-size: 17px; font-weight: 650; }
+  #af.focused { border-color: var(--ok); color: var(--ok); }
+  #shot { background: var(--accent); border-color: var(--accent); color: #111; }
+
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  @media (max-width: 420px) { .settings { grid-template-columns: 1fr; } }
+  .settings label { display: block; font-size: 12.5px; color: var(--mute); }
+  .settings select { width: 100%; margin-top: 3px; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: inherit; }
+  .settings select:disabled { opacity: .4; }
+  .group { grid-column: 1 / -1; font-size: 12px; color: var(--accent); margin-top: 6px; text-transform: uppercase; letter-spacing: .05em; }
+
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(20px); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 16px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: 90vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%); }
+  #toast.warn { border-color: var(--warn); color: #ffd0c8; }
+
+  #codebox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; place-items: center; padding: 20px; }
+  #codebox .card { width: min(360px, 100%); }
+  #codebox input { width: 100%; font-size: 26px; letter-spacing: .3em; text-align: center; padding: 10px; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; }
+  #codebox button { width: 100%; height: 44px; background: var(--accent); color: #111; border-color: var(--accent); font-weight: 650; }
+  #codebox p { color: var(--mute); margin: 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="model">OM Kamera</h1>
+  <span class="chip mode" id="mode">–</span>
+  <span class="chip">Akku <b id="bat">–</b></span>
+  <span class="chip rec" id="rec">schreibt</span>
+  <span class="chip" id="conn">verbinde …</span>
+  <span class="spacer"></span>
+  <a href="/">Debug</a>
+</header>
+
+<main>
+  <section>
+    <div class="view" id="view">
+      <img id="live" alt="">
+      <img id="ovl" alt="">
+      <div class="hint" id="hint">Liveview wird geladen …</div>
+    </div>
+    <div class="viewbar">
+      <label><input type="checkbox" id="liveOn" checked> Liveview</label>
+      <label><input type="checkbox" id="ovlOn"> Kamera-Anzeige einblenden</label>
+      <span id="fps"></span>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Belichtung</h2>
+      <div class="expo">
+        <div class="tile" id="t-shutter"><div class="lbl">Zeit</div><div class="val" id="v-shutter">–</div>
+          <div class="btns"><button data-x="shutter" data-d="-1">−</button><button data-x="shutter" data-d="1">+</button></div></div>
+        <div class="tile" id="t-aperture"><div class="lbl">Blende</div><div class="val" id="v-aperture">–</div>
+          <div class="btns"><button data-x="aperture" data-d="-1">−</button><button data-x="aperture" data-d="1">+</button></div></div>
+        <div class="tile" id="t-ev"><div class="lbl">EV</div><div class="val" id="v-ev">–</div>
+          <div class="btns"><button data-x="ev" data-d="-1">−</button><button data-x="ev" data-d="1">+</button></div></div>
+        <div class="tile" id="t-iso"><div class="lbl">ISO</div><div class="val" id="v-iso">–</div>
+          <div class="btns"><button data-iso="-1">−</button><button data-iso="1">+</button></div></div>
+      </div>
+      <div class="shoot">
+        <button id="af">AF</button>
+        <button id="shot">Auslösen</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Einstellungen</h2>
+      <div class="settings" id="settings"></div>
+    </div>
+  </aside>
+</main>
+
+<div id="toast"></div>
+
+<div id="codebox">
+  <div class="card">
+    <h2>Code eingeben</h2>
+    <p>Der Code steht an der Kamera unter Menü → System → Fernsteuerung (Browser).</p>
+    <input id="code" inputmode="numeric" maxlength="4" autocomplete="off">
+    <button id="codeOk">Verbinden</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var code = '';
+  try { code = localStorage.getItem('omk-code') || ''; } catch (e) {}
+  var state = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function toast(msg, warn) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'show' + (warn ? ' warn' : '');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.className = ''; }, 2200);
+  }
+
+  function askCode() {
+    $('codebox').style.display = 'grid';
+    $('code').value = '';
+    $('code').focus();
+  }
+  $('codeOk').onclick = function () {
+    code = $('code').value.trim();
+    try { localStorage.setItem('omk-code', code); } catch (e) {}
+    $('codebox').style.display = 'none';
+  };
+  $('code').onkeydown = function (e) { if (e.key === 'Enter') $('codeOk').onclick(); };
+
+  function api(path) {
+    var sep = path.indexOf('?') >= 0 ? '&' : '?';
+    return fetch(path + sep + 'k=' + encodeURIComponent(code), { method: 'POST' }).then(function (r) {
+      if (r.status === 403) {
+        return r.text().then(function (t) {
+          if (/Code/.test(t)) askCode(); else toast(t, true);
+          throw new Error('403');
+        });
+      }
+      return r.json();
+    }).then(function (j) {
+      if (j.result !== 'ok') toast(j.result, true);
+      setTimeout(loadState, 150);
+      return j;
+    });
+  }
+
+  // ---- state ----
+  function loadState() {
+    fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
+      state = s;
+      $('conn').textContent = 'verbunden';
+      $('model').textContent = s.model || 'OM Kamera';
+      $('mode').textContent = s.mode || '–';
+      $('bat').textContent = (s.battery >= 0 ? s.battery + ' %' : '?') + (s.plugged ? ' ⚡' : '');
+      $('rec').style.display = s.writing ? 'inline-block' : 'none';
+      $('v-shutter').textContent = s.shutter;
+      $('v-aperture').textContent = s.aperture;
+      $('v-ev').textContent = s.ev;
+      $('v-iso').textContent = s.iso;
+      $('af').classList.toggle('focused', s.focus === 'OK');
+      var roles = [s.dial1, s.dial2];
+      var shutterOk = roles.indexOf('SHUTTER') >= 0 || roles.indexOf('SHIFT') >= 0;
+      var apertureOk = roles.indexOf('APERTURE') >= 0 || roles.indexOf('SHIFT') >= 0;
+      $('t-shutter').classList.toggle('active', shutterOk);
+      $('t-aperture').classList.toggle('active', apertureOk);
+      $('t-ev').classList.toggle('active', roles.indexOf('EV') >= 0);
+      document.querySelectorAll('[data-x=shutter]').forEach(function (b) { b.disabled = !shutterOk; });
+      document.querySelectorAll('[data-x=aperture]').forEach(function (b) { b.disabled = !apertureOk; });
+      renderSettings(s.settings || []);
+    }).catch(function () { $('conn').textContent = 'keine Verbindung'; });
+  }
+
+  var built = false;
+  function renderSettings(list) {
+    var box = $('settings');
+    if (!built) {
+      var group = '';
+      list.forEach(function (s) {
+        if (s.group !== group) {
+          group = s.group;
+          var g = document.createElement('div');
+          g.className = 'group';
+          g.textContent = group;
+          box.appendChild(g);
+        }
+        var l = document.createElement('label');
+        l.textContent = s.label;
+        var sel = document.createElement('select');
+        sel.id = 's-' + s.id;
+        sel.onchange = function () { api('/api/set?id=' + s.id + '&value=' + encodeURIComponent(sel.value)); };
+        l.appendChild(sel);
+        box.appendChild(l);
+      });
+      built = true;
+    }
+    list.forEach(function (s) {
+      var sel = $('s-' + s.id);
+      if (!sel || document.activeElement === sel) return;
+      sel.disabled = !s.available;
+      var vals = s.available ? s.values : [['', 'nicht verfügbar']];
+      var key = JSON.stringify(vals);
+      if (sel.dataset.key !== key) {
+        sel.innerHTML = '';
+        vals.forEach(function (v) {
+          var o = document.createElement('option');
+          o.value = v[0];
+          o.textContent = v[1];
+          sel.appendChild(o);
+        });
+        sel.dataset.key = key;
+      }
+      if (s.available) sel.value = s.value;
+    });
+  }
+
+  // ---- controls ----
+  document.querySelectorAll('[data-x]').forEach(function (b) {
+    b.onclick = function () {
+      var what = b.dataset.x;
+      if (state && (state.dial1 === 'SHIFT') && (what === 'shutter' || what === 'aperture')) what = 'shift';
+      api('/api/exposure?what=' + what + '&dir=' + b.dataset.d);
+    };
+  });
+  document.querySelectorAll('[data-iso]').forEach(function (b) {
+    b.onclick = function () {
+      if (!state) return;
+      var iso = state.settings.filter(function (s) { return s.id === 'iso'; })[0];
+      if (!iso || !iso.available) return;
+      var i = iso.values.map(function (v) { return v[0]; }).indexOf(iso.value) + parseInt(b.dataset.iso, 10);
+      if (i >= 0 && i < iso.values.length) api('/api/set?id=iso&value=' + iso.values[i][0]);
+    };
+  });
+  var af = $('af');
+  af.onpointerdown = function (e) { e.preventDefault(); api('/api/af?on=1'); };
+  af.onpointerup = af.onpointerleave = function () { api('/api/af?on=0'); };
+  $('shot').onclick = function () { api('/api/shoot').then(function (j) { if (j.result === 'ok') toast('Ausgelöst'); }); };
+
+  // ---- live view ----
+  var frames = 0, lastFps = Date.now(), url = null;
+  function nextFrame() {
+    if (!$('liveOn').checked || !code) { setTimeout(nextFrame, 500); return; }
+    fetch('/live.jpg?k=' + encodeURIComponent(code) + '&t=' + Date.now()).then(function (r) {
+      if (r.status === 403) { askCode(); throw new Error('403'); }
+      if (!r.ok) throw new Error(r.status);
+      return r.blob();
+    }).then(function (b) {
+      var img = $('live');
+      var u = URL.createObjectURL(b);
+      img.onload = function () {
+        if (url) URL.revokeObjectURL(url);
+        url = u;
+        // Position the picture like on the camera: its aspect ratio inside the 16:9 screen
+        var ratio = img.naturalWidth / img.naturalHeight;
+        var w = Math.min(100, ratio / (16 / 9) * 100);
+        img.style.width = w + '%';
+        img.style.left = ((100 - w) / 2) + '%';
+        $('hint').style.display = 'none';
+        img.style.visibility = 'visible';
+        frames++;
+        setTimeout(nextFrame, 30);
+      };
+      img.src = u;
+    }).catch(function () { setTimeout(nextFrame, 1000); });
+  }
+  setInterval(function () {
+    var now = Date.now();
+    $('fps').textContent = $('liveOn').checked ? (frames * 1000 / (now - lastFps)).toFixed(1) + ' Bilder/s' : '';
+    frames = 0;
+    lastFps = now;
+  }, 2000);
+
+  // ---- overlay ----
+  function loadOverlay() {
+    var on = $('ovlOn').checked;
+    $('ovl').style.display = on ? 'block' : 'none';
+    if (on && code) $('ovl').src = '/overlay.png?k=' + encodeURIComponent(code) + '&t=' + Date.now();
+  }
+  $('ovlOn').onchange = loadOverlay;
+  setInterval(loadOverlay, 1500);
+
+  if (!code) askCode();
+  loadState();
+  setInterval(loadState, 1000);
+  nextFrame();
+})();
+</script>
+</body>
+</html>

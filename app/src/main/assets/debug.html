@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OM Kamera – Debug</title>
+<style>
+  :root { --bg:#0e1114; --panel:#161b20; --line:#262d35; --text:#e6e9ec; --mute:#8b949e; --accent:#f0a030; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 12px; }
+  h1 { font-size: 19px; margin: 0; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav button, nav a { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 14px; font: inherit; cursor: pointer; text-decoration: none; }
+  nav button.on { border-color: var(--accent); color: var(--accent); }
+  nav a.remote { border-color: var(--accent); background: var(--accent); color: #111; font-weight: 600; }
+  label { color: var(--mute); font-size: 14px; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 0;
+    white-space: pre-wrap; word-break: break-all; font: 13px/1.45 ui-monospace, Consolas, monospace; min-height: 60vh; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OM Kamera – Debug</h1>
+  <nav>
+    <button data-p="/status" class="on">Status</button>
+    <button data-p="/params">Parameter</button>
+    <button data-p="/log">Log</button>
+    <a class="remote" href="/remote">Fernsteuerung</a>
+  </nav>
+  <label><input type="checkbox" id="auto" checked> automatisch aktualisieren</label>
+</header>
+<pre id="out">…</pre>
+<script>
+  var cur = '/status';
+  function show(p) {
+    cur = p;
+    document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.p === p); });
+    fetch(p).then(function (r) { return r.text(); }).then(function (t) {
+      var o = document.getElementById('out');
+      o.textContent = t;
+      if (cur === '/log') window.scrollTo(0, document.body.scrollHeight);
+    }).catch(function () {});
+  }
+  document.querySelectorAll('nav button').forEach(function (b) { b.onclick = function () { show(b.dataset.p); }; });
+  setInterval(function () { if (document.getElementById('auto').checked) show(cur); }, 2000);
+  show(cur);
+</script>
+</body>
+</html>

@@ -84,6 +84,8 @@ public class Ui {
     private boolean wifiEnabled;
     private boolean debugEnabled;
     private boolean appShutter;
+    private boolean remoteEnabled;
+    private String remoteCode;
     /** Standby while the app runs: -1 camera setting, 0 never, otherwise minutes without use */
     private int standbyMinutes;
     private static final int[] STANDBY_STEPS = {-1, 5, 10, 30, 0};
@@ -122,10 +124,17 @@ public class Ui {
         wifiEnabled = prefs.getBoolean("wifi", false);
         debugEnabled = prefs.getBoolean("debug", false);
         appShutter = prefs.getBoolean("appshutter", true);
+        remoteEnabled = prefs.getBoolean("remote", false);
+        remoteCode = prefs.getString("remotecode", null);
         standbyMinutes = prefs.getInt("standby", -1);
     }
 
     public int standbyMinutes() { return standbyMinutes; }
+
+    /** Remote control in the browser: live view, settings, shutter. Protected by a code shown on the camera. */
+    public boolean remoteEnabled() { return remoteEnabled; }
+
+    public String remoteCode() { return remoteCode; }
 
     private static String standbyText(int m) {
         return m < 0 ? "wie Kamera" : m == 0 ? "nie" : "nach " + m + " min";
@@ -364,20 +373,40 @@ public class Ui {
                         wifiEnabled = !wifiEnabled;
                         if (!wifiEnabled) {
                             debugEnabled = false;
+                            remoteEnabled = false;
                         }
-                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
+                                .putBoolean("remote", remoteEnabled).apply();
                         host.applyNetwork();
                     }
                 }, wifiEnabled ? "Ein" : "Aus", -1));
                 out.add(new Row("WLAN-Status", null, null, host.wifiStatus(), -1));
+                out.add(new Row("Fernsteuerung (Browser)", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        remoteEnabled = !remoteEnabled;
+                        if (remoteEnabled) {
+                            // New code every time remote control is switched on
+                            remoteCode = String.valueOf(1000 + new java.util.Random().nextInt(9000));
+                            wifiEnabled = true;
+                            debugEnabled = true;
+                        }
+                        prefs.edit().putBoolean("remote", remoteEnabled).putString("remotecode", remoteCode)
+                                .putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                        host.applyNetwork();
+                    }
+                }, remoteEnabled ? "Ein · Code " + remoteCode : "Aus", -1));
                 out.add(new Row("Debug-Server", null, new Runnable() {
                     @Override
                     public void run() {
                         debugEnabled = !debugEnabled;
                         if (debugEnabled) {
                             wifiEnabled = true;
+                        } else {
+                            remoteEnabled = false;
                         }
-                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
+                                .putBoolean("remote", remoteEnabled).apply();
                         host.applyNetwork();
                     }
                 }, debugEnabled ? (host.debugAddress() != null ? host.debugAddress() : "Ein, wartet auf WLAN") : "Aus", -1));
@@ -588,7 +617,7 @@ public class Ui {
     }
 
     /** Moves a setting one value forward or back and reports a refusal by the camera. */
-    private void stepSetting(Setting s, int direction) {
+    public void stepSetting(Setting s, int direction) {
         if (s == null || direction == 0) {
             return;
         }
