@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -43,6 +44,44 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             ui.setBattery(level, plugged);
         }
     };
+
+    private long lastActivity;
+    /** Last auto power off state sent to the camera, null = not sent yet */
+    private Boolean apoState;
+
+    /** Checks the own standby timer of the app. */
+    private final Runnable standbyTick = new Runnable() {
+        @Override
+        public void run() {
+            applyStandby();
+            handler.postDelayed(this, 15000);
+        }
+    };
+
+    /**
+     * The app suspends the camera's power saving while it is used and hands it back after
+     * the chosen idle time; then the camera's own power save time applies.
+     */
+    @Override
+    public void applyStandby() {
+        int minutes = ui.standbyMinutes();
+        boolean apo;
+        if (minutes < 0) {
+            apo = true;
+        } else if (minutes == 0) {
+            apo = false;
+        } else {
+            apo = SystemClock.uptimeMillis() - lastActivity > minutes * 60000L;
+        }
+        if (apoState == null || apoState != apo) {
+            SonySystem.setAutoPowerOff(this, apo);
+            apoState = apo;
+        }
+        handler.removeCallbacks(standbyTick);
+        if (minutes > 0) {
+            handler.postDelayed(standbyTick, 15000);
+        }
+    }
 
     /** Redraws regularly while WLAN is on, so its status in the menu stays current. */
     private final Runnable networkTick = new Runnable() {
@@ -88,7 +127,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         super.onResume();
         Log.info("onResume");
         SonySystem.notifyAppInfo(this);
-        SonySystem.setNormalAutoPowerOff(this);
+        lastActivity = SystemClock.uptimeMillis();
+        apoState = null;
+        applyStandby();
         SonySystem.useOverlayFrameBuffer();
         focusBeep.prepare(Beep.FOCUS_LOCK);
         try {
@@ -119,6 +160,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         } catch (Throwable ignored) {
         }
         handler.removeCallbacks(networkTick);
+        handler.removeCallbacks(standbyTick);
+        SonySystem.setAutoPowerOff(this, true);
         debugServer.stop();
         if (ui.wifiEnabled()) {
             // The camera's own interface expects WLAN to be off
@@ -154,6 +197,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         Keys.Key key = Keys.map(event);
+        lastActivity = SystemClock.uptimeMillis();
+        if (apoState != null && apoState && ui.standbyMinutes() > 0) {
+            applyStandby();
+        }
         // Every key with its codes, to learn the layout of each camera model
         Log.info("key " + key + " scan=" + event.getScanCode() + " code=" + keyCode
                 + (event.getRepeatCount() > 0 ? " repeat=" + event.getRepeatCount() : ""));
@@ -175,7 +222,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
             if (key == Keys.Key.SHUTTER_FULL) {
                 ui.onKey(key);
-                session.capture();
+                session.capture(isBurst());
                 return true;
             }
         }
@@ -199,10 +246,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (!session.isDirectShutter()) {
             if (key == Keys.Key.SHUTTER_HALF) {
                 session.cancelFocus();
+                ui.onFocusReleased();
                 return true;
             }
             if (key == Keys.Key.SHUTTER_FULL) {
-                session.stopCapture(isBurst());
+                session.stopCapture();
                 return true;
             }
         }
@@ -230,10 +278,22 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         redraw();
     }
 
+    private String lastFocusLog;
+
     @Override
     public void onFocus(int status, int[] indices) {
-        Log.info("focus status=" + status + " frames=" + java.util.Arrays.toString(indices));
+        // AF-C reports continuously; only changes are logged
+        String line = "focus status=" + status + " frames=" + Arrays.toString(indices);
+        if (!line.equals(lastFocusLog)) {
+            Log.info(line);
+            lastFocusLog = line;
+        }
         ui.onFocus(status, indices);
+    }
+
+    @Override
+    public void onFocusResult(boolean success) {
+        ui.onFocusResult(success);
     }
 
     @Override

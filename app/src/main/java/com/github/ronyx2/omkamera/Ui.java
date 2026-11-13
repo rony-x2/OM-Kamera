@@ -35,6 +35,9 @@ public class Ui {
 
         void playFocusBeep();
 
+        /** Applies the standby setting. */
+        void applyStandby();
+
         /** Switches WLAN and debug server according to the settings. */
         void applyNetwork();
 
@@ -43,6 +46,8 @@ public class Ui {
         /** Address of the debug server, or null if it does not run */
         String debugAddress();
     }
+
+    public enum FocusResult { NONE, OK, FAILED }
 
     /** What a dial changes in the current exposure mode */
     public enum DialRole { SHUTTER, APERTURE, EV, SHIFT, NONE }
@@ -78,6 +83,9 @@ public class Ui {
     private boolean wifiEnabled;
     private boolean debugEnabled;
     private boolean appShutter;
+    /** Standby while the app runs: -1 camera setting, 0 never, otherwise minutes without use */
+    private int standbyMinutes;
+    private static final int[] STANDBY_STEPS = {-1, 5, 10, 30, 0};
 
     // Battery as reported by the system, -1 if unknown
     private int batteryLevel = -1;
@@ -86,6 +94,7 @@ public class Ui {
     // Autofocus result
     private int focusStatus;
     private int[] focusIndices = new int[0];
+    private FocusResult focusResult = FocusResult.NONE;
 
     private State state = State.LIVE;
     private int fnIndex = 0;
@@ -112,6 +121,13 @@ public class Ui {
         wifiEnabled = prefs.getBoolean("wifi", false);
         debugEnabled = prefs.getBoolean("debug", false);
         appShutter = prefs.getBoolean("appshutter", true);
+        standbyMinutes = prefs.getInt("standby", -1);
+    }
+
+    public int standbyMinutes() { return standbyMinutes; }
+
+    private static String standbyText(int m) {
+        return m < 0 ? "wie Kamera" : m == 0 ? "nie" : "nach " + m + " min";
     }
 
     /** true: the app controls AF and capture (AF frames and beep work); false: the camera does it directly */
@@ -135,15 +151,44 @@ public class Ui {
         boolean newLock = status == 1 && focusStatus != 1;
         focusStatus = status;
         focusIndices = indices;
-        if (newLock && beepEnabled) {
-            host.playFocusBeep();
+        if (newLock) {
+            confirmFocus();
         }
         if (status == 0) {
+            focusResult = FocusResult.NONE;
             // The AF area may have moved (flexible spot), read it again next time
             session.invalidateFocusFrames();
         }
         host.redraw();
     }
+
+    /** Result of the AF run of the current half press. */
+    public void onFocusResult(boolean success) {
+        if (success) {
+            confirmFocus();
+        } else if (focusResult == FocusResult.NONE) {
+            focusResult = FocusResult.FAILED;
+        }
+        host.redraw();
+    }
+
+    /** First successful focus of a half press: green frames and one beep. */
+    private void confirmFocus() {
+        if (focusResult != FocusResult.OK && beepEnabled) {
+            host.playFocusBeep();
+        }
+        focusResult = FocusResult.OK;
+    }
+
+    /** Half press released */
+    public void onFocusReleased() {
+        focusResult = FocusResult.NONE;
+        focusStatus = 0;
+        focusIndices = new int[0];
+        host.redraw();
+    }
+
+    public FocusResult focusResult() { return focusResult; }
 
     public int focusStatus() { return focusStatus; }
     public int[] focusIndices() { return focusIndices; }
@@ -290,6 +335,18 @@ public class Ui {
                         showMessage("Wirkt nach dem nächsten Start der App", false);
                     }
                 }, appShutter ? "App (mit Fokusanzeige)" : "Kamera direkt", -1));
+                out.add(new Row("Standby in der App", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        int i = 0;
+                        while (i < STANDBY_STEPS.length && STANDBY_STEPS[i] != standbyMinutes) {
+                            i++;
+                        }
+                        standbyMinutes = STANDBY_STEPS[(i + 1) % STANDBY_STEPS.length];
+                        prefs.edit().putInt("standby", standbyMinutes).apply();
+                        host.applyStandby();
+                    }
+                }, standbyText(standbyMinutes), -1));
                 out.add(new Row("WLAN in der App", null, new Runnable() {
                     @Override
                     public void run() {

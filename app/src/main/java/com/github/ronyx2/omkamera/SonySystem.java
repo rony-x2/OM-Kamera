@@ -35,12 +35,16 @@ public final class SonySystem {
         }
     }
 
-    /** Normal auto power off, as in the camera's own shooting mode. */
-    public static void setNormalAutoPowerOff(Context context) {
+    /**
+     * Auto power off while the app runs: true = the camera's own power save time applies,
+     * false = the camera does not go to standby.
+     */
+    public static void setAutoPowerOff(Context context, boolean enabled) {
         try {
-            context.sendBroadcast(new Intent(ACTION_APO).putExtra("apo_info", "APO/NORMAL"));
+            context.sendBroadcast(new Intent(ACTION_APO).putExtra("apo_info", enabled ? "APO/NORMAL" : "APO/NO"));
+            Log.info("auto power off " + (enabled ? "normal" : "off"));
         } catch (Throwable t) {
-            Log.error("setNormalAutoPowerOff", t);
+            Log.error("setAutoPowerOff", t);
         }
     }
 

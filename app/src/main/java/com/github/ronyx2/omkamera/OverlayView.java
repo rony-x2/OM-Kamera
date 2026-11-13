@@ -41,7 +41,7 @@ public class OverlayView extends View {
             return;
         }
         u = Theme.unit(getHeight());
-        pixelAspect = ui.session().pixelAspect();
+        pixelAspect = ui.session().pixelAspect(getWidth(), getHeight());
         vw = getWidth() * pixelAspect;
         c.save();
         c.scale(1f / pixelAspect, 1f);
@@ -160,8 +160,11 @@ public class OverlayView extends View {
         }
         int status = ui.focusStatus();
         int[] focused = ui.focusIndices();
-        boolean locked = status == 1 || status == 4;
-        boolean warn = status == 2;
+        boolean warn = status == 2 || ui.focusResult() == Ui.FocusResult.FAILED;
+        boolean succeeded = ui.focusResult() == Ui.FocusResult.OK;
+        // AF-S reports the focused frames; AF-C (status 4) reports none, then the active frames turn green
+        boolean byIndex = (status == 1 || status == 4) && focused.length > 0;
+        boolean locked = byIndex || succeeded;
 
         // Single frames (index > 0) that are active. With many of them (wide, zone) only the area is shown.
         int enabled = 0;
@@ -171,7 +174,8 @@ public class OverlayView extends View {
             }
         }
         for (CameraSession.FocusFrame f : frames) {
-            boolean isFocused = locked && contains(focused, f.index);
+            boolean active = f.index != 0 ? f.enabled && enabled == 1 : enabled != 1;
+            boolean isFocused = byIndex ? contains(focused, f.index) : succeeded && active;
             if (isFocused) {
                 frame(c, f, Theme.AF_OK, 3 * u, f.index == 0 ? 0.18f : 0.5f);
             } else if (!locked) {

@@ -56,6 +56,9 @@ public class CameraSession {
          * @param indices indices of the focused frames (see {@link FocusFrame#index})
          */
         void onFocus(int status, int[] indices);
+
+        /** Result of an AF run started by a half press (also in AF-C, where no frames are reported). */
+        void onFocusResult(boolean success);
     }
 
     /** An AF frame in screen coordinates of the overlay. */
@@ -92,7 +95,7 @@ public class CameraSession {
     private volatile boolean internalFlash;
     private volatile boolean externalFlash;
     /** Width of a screen pixel relative to its height (1.33 on a 16:9 panel driven with 640x480) */
-    private float pixelAspect = 1f;
+    private float panelRatio = 0f;
     private boolean directShutter;
     private List<FocusFrame> focusFrames = new ArrayList<FocusFrame>();
     private String focusFramesKey;
@@ -289,8 +292,8 @@ public class CameraSession {
     }
 
     /**
-     * The panel's aspect ratio compared with its pixel grid. The ILCE-6000 drives a 16:9 panel
-     * with 640x480 pixels, so every pixel is a third wider than high.
+     * The panel's aspect ratio. The ILCE-6000 has a 16:9 panel, while Android draws 640x480 pixels,
+     * so every overlay pixel is a third wider than high.
      */
     private void readPixelAspect() {
         try {
@@ -305,18 +308,23 @@ public class CameraSession {
                     case 5: panel = 11f / 9f; break;  // ASPECT_RATIO_11_9
                     default: panel = 0;
                 }
-                if (panel > 0) {
-                    pixelAspect = panel / ((float) info.res_w / info.res_h);
-                }
-                Log.info("display " + info.res_w + "x" + info.res_h + " aspect=" + info.aspect + " pixelAspect=" + pixelAspect);
+                panelRatio = panel;
+                Log.info("display " + info.res_w + "x" + info.res_h + " aspect=" + info.aspect + " panel=" + panel);
             }
         } catch (Throwable t) {
             Log.error("display info", t);
         }
     }
 
-    public float pixelAspect() {
-        return pixelAspect;
+    /**
+     * Width of an overlay pixel relative to its height. The panel's aspect ratio is reported by
+     * the camera, the overlay is drawn with the size of the Android view (640x480 on the ILCE-6000).
+     */
+    public float pixelAspect(int viewWidth, int viewHeight) {
+        if (panelRatio <= 0 || viewWidth <= 0 || viewHeight <= 0) {
+            return 1f;
+        }
+        return panelRatio / ((float) viewWidth / viewHeight);
     }
 
     public boolean flashReady() {
@@ -370,8 +378,14 @@ public class CameraSession {
         try {
             camera.autoFocus(new Camera.AutoFocusCallback() {
                 @Override
-                public void onAutoFocus(boolean success, Camera c) {
+                public void onAutoFocus(final boolean success, Camera c) {
                     Log.info("autoFocus done success=" + success);
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.onFocusResult(success);
+                        }
+                    });
                 }
             });
         } catch (Throwable t) {
@@ -393,12 +407,13 @@ public class CameraSession {
         }
     }
 
-    /** Full press: take a picture. The live view is started again when the camera reports the shot. */
-    public void capture() {
+    /** Full press: take a picture (or start a burst while the button is held). */
+    public void capture(boolean burst) {
         if (cameraEx == null || capturing) {
             return;
         }
         capturing = true;
+        burstCapture = burst;
         try {
             cameraEx.burstableTakePicture();
             Log.info("burstableTakePicture");
@@ -409,28 +424,35 @@ public class CameraSession {
     }
 
     /** Full press released: ends a burst */
-    public void stopCapture(boolean burst) {
-        if (cameraEx == null || !capturing || !burst) {
+    public void stopCapture() {
+        if (cameraEx == null || !capturing || !burstCapture) {
             return;
         }
+        endCapture();
+    }
+
+    private boolean burstCapture;
+
+    /**
+     * Called by the camera after each exposure. burstableTakePicture keeps the capture
+     * session open; for a single shot it has to be ended with cancelTakePicture, otherwise
+     * the next burstableTakePicture fails (as the camera's own apps do it).
+     */
+    private void onShutter(int status) {
+        Log.info("shutter status=" + status + (burstCapture ? " (burst)" : ""));
+        if (!burstCapture) {
+            endCapture();
+        }
+    }
+
+    private void endCapture() {
         try {
             cameraEx.cancelTakePicture();
         } catch (Throwable t) {
             Log.error("cancelTakePicture", t);
         }
-    }
-
-    private void onShutter(int status) {
-        Log.info("shutter status=" + status);
         capturing = false;
         focusing = false;
-        // After a shot the camera stops the live view; the camera's own apps start it again
-        try {
-            camera.startPreview();
-        } catch (Throwable t) {
-            Log.error("startPreview after shot", t);
-        }
-        listener.onFocus(0, new int[0]);
     }
 
     public void close() {
