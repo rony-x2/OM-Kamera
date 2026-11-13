@@ -393,10 +393,17 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private android.hardware.SensorManager sensors;
     private final float[] gravity = new float[3];
     private boolean gravityValid;
+    private int levelEvents;
 
     private final android.hardware.SensorEventListener levelListener = new android.hardware.SensorEventListener() {
         @Override
         public void onSensorChanged(android.hardware.SensorEvent e) {
+            if (e.sensor.getType() != android.hardware.Sensor.TYPE_ACCELEROMETER) {
+                return;
+            }
+            if (levelEvents++ == 0) {
+                Log.info("level first values " + e.values[0] + " " + e.values[1] + " " + e.values[2]);
+            }
             // Low-pass filter, so the line does not shake
             float k = gravityValid ? 0.2f : 1f;
             for (int i = 0; i < 3; i++) {
@@ -425,8 +432,15 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         android.hardware.Sensor s = sensors.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
         if (s != null) {
             gravityValid = false;
-            sensors.registerListener(levelListener, s, android.hardware.SensorManager.SENSOR_DELAY_UI);
-            Log.info("level sensor " + s.getName());
+            levelEvents = 0;
+            // The camera's sensor driver only delivers at the GAME rate, like Sony's own level does it;
+            // Sony also registers the (dummy) magnetic sensor at the same time
+            boolean ok = sensors.registerListener(levelListener, s, android.hardware.SensorManager.SENSOR_DELAY_GAME);
+            android.hardware.Sensor m = sensors.getDefaultSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD);
+            if (m != null) {
+                sensors.registerListener(levelListener, m, android.hardware.SensorManager.SENSOR_DELAY_GAME);
+            }
+            Log.info("level sensor " + s.getName() + " registered=" + ok);
         } else {
             Log.info("no acceleration sensor");
         }
