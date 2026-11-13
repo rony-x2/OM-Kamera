@@ -30,8 +30,11 @@ public class MjpegAvi {
     public MjpegAvi(File file, int fps) throws IOException {
         this.fps = fps;
         file.getParentFile().mkdirs();
+        // The camera's card file system cannot truncate files: always start with a new file
+        if (file.exists() && !file.delete()) {
+            throw new IOException("Datei " + file.getName() + " lässt sich nicht ersetzen");
+        }
         f = new RandomAccessFile(file, "rw");
-        f.setLength(0);
     }
 
     public int frames() {

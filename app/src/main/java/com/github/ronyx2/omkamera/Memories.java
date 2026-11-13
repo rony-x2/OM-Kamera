@@ -131,6 +131,8 @@ public class Memories {
             o.put("options", app);
             File f = file();
             f.getParentFile().mkdirs();
+            // The camera's card file system cannot truncate files: delete before writing
+            f.delete();
             FileOutputStream out = new FileOutputStream(f);
             try {
                 out.write(o.toString(1).getBytes("UTF-8"));
