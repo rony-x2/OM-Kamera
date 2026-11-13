@@ -152,7 +152,8 @@ public class Sequencer {
                         + (film != null ? " · Film " + film.frames() + " Bilder" : "");
             }
             case FOCUS:
-                return "Fokusreihe " + done + "/" + total;
+                return "Fokusreihe " + done + "/" + total
+                    + (session.focusMaxPosition() > 0 ? " · Fokus " + session.focusPosition() + "/" + session.focusMaxPosition() : "");
             case BRACKET:
                 return "Belichtungsreihe " + done + "/" + total;
             case BULB: {
@@ -350,7 +351,21 @@ public class Sequencer {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    byte[] jpeg = session.liveFrame();
+                    // Right after a picture the camera has no live view for a moment: ask again
+                    byte[] jpeg = null;
+                    for (int i = 0; i < 12 && jpeg == null && film == f; i++) {
+                        jpeg = session.liveFrame();
+                        if (jpeg == null) {
+                            try {
+                                Thread.sleep(250);
+                            } catch (InterruptedException e) {
+                                return;
+                            }
+                        }
+                    }
+                    if (jpeg == null) {
+                        Log.info("film: no live view frame");
+                    }
                     synchronized (Sequencer.this) {
                         try {
                             if (film == f && jpeg != null) {
@@ -450,7 +465,7 @@ public class Sequencer {
                 stop("fertig");
                 return;
             }
-            session.shiftFocus(get("fb.step", 3), new CameraSession.ShiftResult() {
+            session.driveFocus(get("fb.step", 3), true, new CameraSession.ShiftResult() {
                 @Override
                 public void done(Boolean ok) {
                     if (running != Mode.FOCUS) {

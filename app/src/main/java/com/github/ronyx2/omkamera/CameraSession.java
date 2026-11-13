@@ -422,59 +422,73 @@ public class CameraSession {
     }
 
     /**
-     * Moves the focus by a number of steps (positive towards infinity). The camera answers through
-     * the main thread, so the call must not run there (it would wait for itself): it runs on a
-     * worker thread and the result arrives on the main thread. ok is null when it took too long.
+     * Drives the focus by one small step towards infinity (far) or the near limit, like the MF
+     * control of Sony's Smart Remote app (startOneShotFocusDrive with speed 4). The position is
+     * reported through the FocusDriveListener. shiftFocusPosition blocks the a6000 and is not used.
      */
     public interface ShiftResult {
         void done(Boolean ok);
     }
 
-    public void shiftFocus(final int steps, final ShiftResult result) {
-        final Boolean[] answer = new Boolean[1];
-        final boolean[] finished = new boolean[1];
-        final Runnable timeout = new Runnable() {
+    /** Last focus position reported by the camera, -1 while unknown */
+    private volatile int focusPos = -1;
+    private volatile int focusMax = -1;
+
+    public int focusPosition() {
+        return focusPos;
+    }
+
+    public int focusMaxPosition() {
+        return focusMax;
+    }
+
+    public void driveFocus(final int steps, final boolean far, final ShiftResult result) {
+        final int[] left = {steps};
+        final int before = focusPos;
+        final Runnable[] step = new Runnable[1];
+        step[0] = new Runnable() {
             @Override
             public void run() {
-                synchronized (finished) {
-                    if (finished[0]) {
-                        return;
-                    }
-                    finished[0] = true;
+                if (left[0] <= 0) {
+                    // Give the lens a moment, then report whether the position moved
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.info("focus drive " + steps + (far ? " far" : " near") + ": " + before + " -> " + focusPos + " / " + focusMax);
+                            boolean atEnd = focusMax > 0 && focusPos >= focusMax;
+                            result.done(!atEnd);
+                        }
+                    }, 150);
+                    return;
                 }
-                Log.info("shiftFocusPosition " + steps + " -> no answer after 5 s");
-                result.done(null);
+                left[0]--;
+                try {
+                    cameraEx.startOneShotFocusDrive(far ? CameraEx.FOCUS_DRIVE_DIRECTION_FAR : CameraEx.FOCUS_DRIVE_DIRECTION_NEAR, 4);
+                } catch (Throwable t) {
+                    Log.error("startOneShotFocusDrive", t);
+                    result.done(null);
+                    return;
+                }
+                handler.postDelayed(this, 80);
             }
         };
-        handler.postDelayed(timeout, 5000);
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    answer[0] = cameraEx.shiftFocusPosition(steps);
-                } catch (Throwable t) {
-                    Log.error("shiftFocusPosition", t);
-                    answer[0] = Boolean.FALSE;
-                }
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        synchronized (finished) {
-                            if (finished[0]) {
-                                return;
-                            }
-                            finished[0] = true;
-                        }
-                        handler.removeCallbacks(timeout);
-                        Log.info("shiftFocusPosition " + steps + " -> " + answer[0]);
-                        result.done(answer[0]);
-                    }
-                });
-            }
-        }, "focus-shift").start();
+        handler.post(step[0]);
     }
 
     private void registerListeners() {
+        try {
+            cameraEx.setFocusDriveListener(new CameraEx.FocusDriveListener() {
+                @Override
+                public void onChanged(CameraEx.FocusPosition p, CameraEx ex) {
+                    if (p != null) {
+                        focusPos = p.currentPosition;
+                        focusMax = p.maxPosition;
+                    }
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setFocusDriveListener", t);
+        }
         try {
             // Reports the magnifier state and the turning of the focus ring (Sony's MF assist uses it)
             cameraEx.setPreviewMagnificationListener(new CameraEx.PreviewMagnificationListener() {
