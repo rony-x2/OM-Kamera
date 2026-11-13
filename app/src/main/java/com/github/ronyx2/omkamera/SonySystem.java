@@ -1,0 +1,58 @@
+package com.github.ronyx2.omkamera;
+
+import android.content.Context;
+import android.content.Intent;
+
+import com.sony.scalar.sysutil.didep.Gpelibrary;
+
+/**
+ * Integration with the camera system outside of Android.
+ * All calls are optional: if the camera does not know them, the app keeps running.
+ */
+public final class SonySystem {
+    private static final String ACTION_APP_INFO = "com.android.server.DAConnectionManagerService.AppInfoReceive";
+    private static final String ACTION_APO = "com.android.server.DAConnectionManagerService.apo";
+
+    private SonySystem() {
+    }
+
+    /**
+     * Tells the camera that a shooting app is in the foreground.
+     * Keys listed in pullingBackKeys end the app and are then handled by the camera itself.
+     */
+    public static void notifyAppInfo(Context context) {
+        try {
+            Intent intent = new Intent(ACTION_APP_INFO);
+            intent.putExtra("package_name", context.getPackageName());
+            intent.putExtra("class_name", MainActivity.class.getName());
+            intent.putExtra("large_category", "CATEGORY_REC");
+            intent.putExtra("small_category", "STILL");
+            intent.putExtra("pullingback_key", new String[] {"KEY_PLAY", "KEY_MOVREC"});
+            intent.putExtra("resume_key", new String[0]);
+            context.sendBroadcast(intent);
+        } catch (Throwable t) {
+            Log.error("notifyAppInfo", t);
+        }
+    }
+
+    /** Normal auto power off, as in the camera's own shooting mode. */
+    public static void setNormalAutoPowerOff(Context context) {
+        try {
+            context.sendBroadcast(new Intent(ACTION_APO).putExtra("apo_info", "APO/NORMAL"));
+        } catch (Throwable t) {
+            Log.error("setNormalAutoPowerOff", t);
+        }
+    }
+
+    /**
+     * Uses a frame buffer format with alpha channel, so the live view shows through the overlay.
+     * The camera's own shooting apps use RGBA4444.
+     */
+    public static void useOverlayFrameBuffer() {
+        try {
+            Gpelibrary.changeFrameBufferPixel(Gpelibrary.GS_FRAMEBUFFER_TYPE.RGBA4444);
+        } catch (Throwable t) {
+            Log.error("changeFrameBufferPixel", t);
+        }
+    }
+}

@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace = 'com.github.ronyx2.omkamera'
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = 'com.github.ronyx2.omkamera'
+        // Cameras run Android 2.3.7 (API 10, e.g. ILCE-6000) or Android 4.1.2 (API 16, e.g. ILCE-7M2)
+        minSdk = 10
+        //noinspection ExpiredTargetSdkVersion
+        targetSdk = 10
+        versionCode = 1
+        versionName = '0.1.0'
+    }
+
+    buildFeatures {
+        // Version shown in the system tab
+        buildConfig = true
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        // The app is installed on cameras, not distributed through Google Play
+        disable += ['ExpiredTargetSdkVersion', 'OldTargetApi', 'GradleDependency']
+        // Logs and status texts are not localized resources
+        disable += ['SetTextI18n', 'DefaultLocale']
+    }
+}
+
+dependencies {
+    // Sony camera APIs (com.sony.scalar.*), provided by the camera at runtime.
+    // Built from OpenMemories-Framework (stubs module).
+    compileOnly files('libs/openmemories-stubs.jar')
+    // DeviceInfo and other wrappers from OpenMemories-Framework
+    implementation files('libs/openmemories-framework.jar')
+}
