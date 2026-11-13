@@ -66,6 +66,9 @@ public class CameraSession {
         /** A second of the self-timer counted by the app has passed; remaining seconds */
         void onTimerTick(int remaining);
 
+        /** New live view histogram (at most a few times per second) */
+        void onHistogram();
+
         /** The camera reports a stored picture file (platform V6 and newer only) */
         void onStored(String file);
     }
@@ -145,7 +148,80 @@ public class CameraSession {
         }
         refresh();
         registerListeners();
+        if (histogramWanted) {
+            setHistogramEnabled(true);
+        }
         handler.postDelayed(poll, 1500);
+    }
+
+    // ---- live view histogram (computed by the camera's image processor) ----
+
+    private boolean histogramWanted;
+    private volatile short[] histY;
+    private volatile short[] histR;
+    private volatile short[] histG;
+    private volatile short[] histB;
+    private long histShown;
+    private int histCount;
+
+    public void setHistogramEnabled(boolean on) {
+        histogramWanted = on;
+        if (cameraEx == null) {
+            return;
+        }
+        try {
+            if (on) {
+                cameraEx.setPreviewAnalizeListener(new CameraEx.PreviewAnalizeListener() {
+                    @Override
+                    public void onAnalizedData(CameraEx.AnalizedData data, CameraEx c) {
+                        if (data == null || data.hist == null) {
+                            return;
+                        }
+                        histY = data.hist.Y;
+                        histR = data.hist.R;
+                        histG = data.hist.G;
+                        histB = data.hist.B;
+                        if (histCount++ == 0) {
+                            Log.info("histogram: " + (histY != null ? histY.length : 0) + " bins");
+                        }
+                        long now = android.os.SystemClock.uptimeMillis();
+                        if (now - histShown >= 250) {
+                            histShown = now;
+                            listener.onHistogram();
+                        }
+                    }
+                });
+                Log.info("histogram on");
+            } else {
+                cameraEx.setPreviewAnalizeListener(null);
+                histY = histR = histG = histB = null;
+            }
+        } catch (Throwable t) {
+            Log.error("setPreviewAnalizeListener", t);
+        }
+    }
+
+    /** Y, R, G, B bins of the live view, or null while none arrived */
+    public short[][] histogram() {
+        short[] y = histY;
+        if (y == null) {
+            return null;
+        }
+        return new short[][]{y, histR, histG, histB};
+    }
+
+    /** Focal length of the lens in mm, 0 if unknown */
+    public float focalLength() {
+        try {
+            return current != null ? current.params.getFocalLength() : 0;
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /** Shutter speed in seconds, 0 if unknown */
+    public double shutterSeconds() {
+        return shutterN > 0 && shutterD > 0 ? (double) shutterN / shutterD : 0;
     }
 
     private void registerListeners() {
@@ -920,6 +996,11 @@ public class CameraSession {
     /** Invalidates the cached AF frames, e.g. after the AF area moved. */
     public void invalidateFocusFrames() {
         focusFramesKey = null;
+    }
+
+    /** Area of the overlay that shows the picture (without black borders) */
+    public Rect videoArea(int viewWidth, int viewHeight) {
+        return videoRect(viewWidth, viewHeight);
     }
 
     private Rect videoRect(int viewWidth, int viewHeight) {

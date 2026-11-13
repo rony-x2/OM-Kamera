@@ -158,6 +158,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         }
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         applyNetwork();
+        applyDisplay();
+        handler.post(cardTick);
         redraw();
     }
 
@@ -170,6 +172,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         }
         handler.removeCallbacks(networkTick);
         handler.removeCallbacks(standbyTick);
+        handler.removeCallbacks(cardTick);
+        stopLevel();
         SonySystem.setAutoPowerOff(this, true);
         debugServer.stop();
         if (ui.wifiEnabled()) {
@@ -365,6 +369,114 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public String wifiStatus() {
         return ui.wifiEnabled() ? network.status() : "aus";
+    }
+
+    // ---- display helpers: histogram, level sensor, free space ----
+
+    @Override
+    public void applyDisplay() {
+        session.setHistogramEnabled(ui.histo() != Ui.Histo.OFF);
+        if (ui.levelEnabled()) {
+            startLevel();
+        } else {
+            stopLevel();
+        }
+    }
+
+    @Override
+    public void onHistogram() {
+        if (ui.state() == Ui.State.LIVE) {
+            redraw();
+        }
+    }
+
+    private android.hardware.SensorManager sensors;
+    private final float[] gravity = new float[3];
+    private boolean gravityValid;
+
+    private final android.hardware.SensorEventListener levelListener = new android.hardware.SensorEventListener() {
+        @Override
+        public void onSensorChanged(android.hardware.SensorEvent e) {
+            // Low-pass filter, so the line does not shake
+            float k = gravityValid ? 0.2f : 1f;
+            for (int i = 0; i < 3; i++) {
+                gravity[i] += k * (e.values[i] - gravity[i]);
+            }
+            gravityValid = true;
+            float x = gravity[0], y = gravity[1], z = gravity[2];
+            // Roll: rotation around the lens axis; pitch: lens up or down
+            float roll = (float) Math.toDegrees(Math.atan2(x, y));
+            float pitch = (float) Math.toDegrees(Math.atan2(z, Math.sqrt(x * x + y * y)));
+            ui.setTilt(roll, pitch);
+        }
+
+        @Override
+        public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {
+        }
+    };
+
+    private void startLevel() {
+        if (sensors == null) {
+            sensors = (android.hardware.SensorManager) getSystemService(SENSOR_SERVICE);
+        }
+        if (sensors == null) {
+            return;
+        }
+        android.hardware.Sensor s = sensors.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
+        if (s != null) {
+            gravityValid = false;
+            sensors.registerListener(levelListener, s, android.hardware.SensorManager.SENSOR_DELAY_UI);
+            Log.info("level sensor " + s.getName());
+        } else {
+            Log.info("no acceleration sensor");
+        }
+    }
+
+    private void stopLevel() {
+        if (sensors != null) {
+            sensors.unregisterListener(levelListener);
+        }
+    }
+
+    @Override
+    public java.util.List<String> warnings() {
+        return overlay.warnings();
+    }
+
+    /** Raw filtered acceleration values, for calibrating the level over MCP */
+    @Override
+    public float[] gravity() {
+        return gravityValid ? gravity.clone() : null;
+    }
+
+    /** Remaining pictures on the card, estimated from free space and the current quality */
+    private final Runnable cardTick = new Runnable() {
+        @Override
+        public void run() {
+            ui.setRemainingShots(remainingShots());
+            handler.postDelayed(this, 5000);
+        }
+    };
+
+    private int remainingShots() {
+        try {
+            android.os.StatFs fs = new android.os.StatFs(android.os.Environment.getExternalStorageDirectory().getPath());
+            long free = (long) fs.getAvailableBlocks() * fs.getBlockSize();
+            String q = Settings.get("quality").safeGet(session.current());
+            // Typical sizes of the a6000 (24 MP) in KB, measured with OM Kamera
+            long kb = 5600;
+            if ("raw".equals(q)) {
+                kb = 24300;
+            } else if ("rawjpeg".equals(q)) {
+                kb = 31000;
+            } else if (q != null && q.startsWith("jpeg-")) {
+                int level = Integer.parseInt(q.substring(5));
+                kb = level >= 90 ? 7500 : level >= 50 ? 5600 : 3500;
+            }
+            return (int) Math.min(99999, free / 1024 / kb);
+        } catch (Throwable t) {
+            return -1;
+        }
     }
 
     @Override

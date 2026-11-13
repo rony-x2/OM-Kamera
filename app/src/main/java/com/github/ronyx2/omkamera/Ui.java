@@ -48,6 +48,9 @@ public class Ui {
         /** WLAN has an address */
         boolean wifiConnected();
 
+        /** Starts or stops histogram and level sensor according to the settings */
+        void applyDisplay();
+
         /** Address of the debug server, or null if it does not run */
         String debugAddress();
     }
@@ -75,10 +78,30 @@ public class Ui {
     }
 
     /** Setting tabs first (one per category, in its order), then the app's own tabs */
-    public static final String[] TABS = {"Aufnahme", "Belichtung", "Bild", "Fokus", "Blitz", "Fn-Raster", "App", "Info"};
-    private static final int TAB_FN = 5;
-    private static final int TAB_SYSTEM = 6;
-    private static final int TAB_INFO = 7;
+    public static final String[] TABS = {"Aufnahme", "Belichtung", "Bild", "Fokus", "Blitz", "Anzeige", "Fn-Raster", "App", "Info"};
+    private static final int TAB_DISPLAY = 5;
+    private static final int TAB_FN = 6;
+    private static final int TAB_SYSTEM = 7;
+    private static final int TAB_INFO = 8;
+
+    /** Grid lines like the camera: off, rule of thirds 3x3, square grid 6x4, diagonal + square */
+    public enum Grid {
+        OFF("Aus"), THIRDS("3×3 Raster"), SQUARE("Quadratraster"), DIAGONAL("Diagonal + Quadrat");
+        public final String label;
+
+        Grid(String label) {
+            this.label = label;
+        }
+    }
+
+    public enum Histo {
+        OFF("Aus"), LUMA("Helligkeit"), RGB("RGB");
+        public final String label;
+
+        Histo(String label) {
+            this.label = label;
+        }
+    }
 
     private final CameraSession session;
     private final FnLayout fn;
@@ -94,6 +117,14 @@ public class Ui {
     private boolean remoteEnabled;
     private String remoteCode;
     private boolean mcpEnabled;
+    private Grid grid;
+    private Histo histo;
+    private boolean levelEnabled;
+    private boolean warningsEnabled;
+    private boolean shotsEnabled;
+    /** Tilt from the acceleration sensor in degrees; NaN while unknown */
+    private volatile float roll = Float.NaN;
+    private volatile float pitch = Float.NaN;
     private String mcpToken;
     /** Standby while the app runs: -1 camera setting, 0 never, otherwise minutes without use */
     private int standbyMinutes;
@@ -138,6 +169,11 @@ public class Ui {
         remoteEnabled = prefs.getBoolean("remote", false);
         remoteCode = prefs.getString("remotecode", null);
         mcpEnabled = prefs.getBoolean("mcp", false);
+        grid = Grid.values()[Math.max(0, Math.min(Grid.values().length - 1, prefs.getInt("grid", 0)))];
+        histo = Histo.values()[Math.max(0, Math.min(Histo.values().length - 1, prefs.getInt("histo", 0)))];
+        levelEnabled = prefs.getBoolean("level", false);
+        warningsEnabled = prefs.getBoolean("warnings", true);
+        shotsEnabled = prefs.getBoolean("shots", true);
         mcpToken = prefs.getString("mcptoken", null);
         standbyMinutes = prefs.getInt("standby", -1);
     }
@@ -176,6 +212,35 @@ public class Ui {
     public boolean appShutter() { return appShutter; }
 
     public boolean wifiEnabled() { return wifiEnabled; }
+
+    public Grid grid() { return grid; }
+    public Histo histo() { return histo; }
+    public boolean levelEnabled() { return levelEnabled; }
+    public boolean warningsEnabled() { return warningsEnabled; }
+    public boolean shotsEnabled() { return shotsEnabled; }
+    public float roll() { return roll; }
+
+    private int remainingShots = -1;
+
+    public int remainingShots() { return remainingShots; }
+
+    public void setRemainingShots(int n) {
+        if (n != remainingShots) {
+            remainingShots = n;
+            host.redraw();
+        }
+    }
+    public float pitch() { return pitch; }
+
+    /** New tilt values; redraws only when the change is visible */
+    public void setTilt(float r, float p) {
+        boolean visible = Float.isNaN(roll) || Math.abs(r - roll) >= 0.3f || Math.abs(p - pitch) >= 0.5f;
+        roll = r;
+        pitch = p;
+        if (visible && levelEnabled && state == State.LIVE) {
+            host.redraw();
+        }
+    }
 
     public boolean wifiConnected() { return host.wifiConnected(); }
     public boolean debugEnabled() { return debugEnabled; }
@@ -367,6 +432,52 @@ public class Ui {
                 }
                 addSettings(out, Setting.Category.FLASH);
                 break;
+            case TAB_DISPLAY:
+                out.add(new Row("Gitterlinien", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        grid = Grid.values()[(grid.ordinal() + 1) % Grid.values().length];
+                        prefs.edit().putInt("grid", grid.ordinal()).apply();
+                    }
+                }, grid.label, -1));
+                out.add(new Row("Histogramm", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        histo = Histo.values()[(histo.ordinal() + 1) % Histo.values().length];
+                        prefs.edit().putInt("histo", histo.ordinal()).apply();
+                        host.applyDisplay();
+                    }
+                }, histo.label, -1));
+                out.add(new Row("Wasserwaage", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        levelEnabled = !levelEnabled;
+                        prefs.edit().putBoolean("level", levelEnabled).apply();
+                        host.applyDisplay();
+                    }
+                }, levelEnabled ? "Ein" : "Aus", -1));
+                out.add(new Row("Fokusfelder anzeigen", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        framesEnabled = !framesEnabled;
+                        prefs.edit().putBoolean("frames", framesEnabled).apply();
+                    }
+                }, framesEnabled ? "Ein" : "Aus", -1));
+                out.add(new Row("Warnhinweise", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        warningsEnabled = !warningsEnabled;
+                        prefs.edit().putBoolean("warnings", warningsEnabled).apply();
+                    }
+                }, warningsEnabled ? "Ein" : "Aus", -1));
+                out.add(new Row("Restaufnahmen anzeigen", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        shotsEnabled = !shotsEnabled;
+                        prefs.edit().putBoolean("shots", shotsEnabled).apply();
+                    }
+                }, shotsEnabled ? "Ein" : "Aus", -1));
+                break;
             case TAB_FN:
                 for (int i = 0; i < FnLayout.SIZE; i++) {
                     Setting s = fn.get(i);
@@ -408,13 +519,6 @@ public class Ui {
                         }
                     }
                 }, beepMode == Beep.Mode.OFF ? "Aus" : beepMode == Beep.Mode.CAMERA ? "Kamera-Ton" : "Piepton", -1));
-                out.add(new Row("Fokusfelder anzeigen", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        framesEnabled = !framesEnabled;
-                        prefs.edit().putBoolean("frames", framesEnabled).apply();
-                    }
-                }, framesEnabled ? "Ein" : "Aus", -1));
                 out.add(new Row("Auslöser-Steuerung", null, new Runnable() {
                     @Override
                     public void run() {

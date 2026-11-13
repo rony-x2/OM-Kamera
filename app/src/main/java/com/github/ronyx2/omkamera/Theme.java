@@ -34,10 +34,19 @@ public final class Theme {
         0xFFB37AE0, // Bild
         0xFF4CB782, // Fokus
         0xFFE8CF4A, // Blitz
+        0xFF3FC1C9, // Anzeige
         0xFF4D8FE0, // Fn-Raster
         0xFF9AA0A8, // App
         0xFF6E7681, // Info
     };
+
+    /** Colour of the Fn grid and network markers */
+    public static final int FN_BLUE = 0xFF4D8FE0;
+    /** Histogram and level */
+    public static final int GUIDE = 0x99FFFFFF;
+    public static final int HIST_R = 0xCCFF5A5A;
+    public static final int HIST_G = 0xCC5AE07A;
+    public static final int HIST_B = 0xCC5A9AFF;
 
     public static float unit(int viewHeight) {
         return viewHeight / 480f;

@@ -33,6 +33,12 @@ public class McpServer {
         String version();
 
         void redraw();
+
+        /** Warnings as shown above the exposure bar */
+        java.util.List<String> warnings();
+
+        /** Filtered acceleration x, y, z or null */
+        float[] gravity();
     }
 
     private static final String PROTOCOL = "2025-06-18";
@@ -389,6 +395,18 @@ public class McpServer {
         if (fp != null) {
             o.put("spot", fp[0] + "," + fp[1]);
         }
+        o.put("restaufnahmen", ui.remainingShots());
+        o.put("warnungen", new JSONArray(host.warnings()));
+        if (!Float.isNaN(ui.roll())) {
+            o.put("neigung", String.format(java.util.Locale.US, "roll %.1f° pitch %.1f°", ui.roll(), ui.pitch()));
+        }
+        float[] g = host.gravity();
+        if (g != null) {
+            o.put("beschleunigung", String.format(java.util.Locale.US, "x %.2f y %.2f z %.2f", g[0], g[1], g[2]));
+        }
+        short[][] h = s.histogram();
+        o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
+        o.put("brennweite", s.focalLength());
         JSONObject values = new JSONObject();
         for (Setting st : Settings.all()) {
             if (st.isShown(p)) {

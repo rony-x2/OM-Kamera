@@ -49,11 +49,17 @@ public class OverlayView extends View {
         CameraSession.Params p = ui.session().current();
         switch (ui.state()) {
             case LIVE:
+                drawGrid(c);
                 drawFocusFrames(c);
+                if (ui.levelEnabled()) {
+                    drawLevel(c);
+                }
                 if (ui.infoVisible()) {
-                    drawStatusChips(c, p);
                     drawBattery(c);
+                    drawStatusChips(c, p);
                     drawExposureBar(c, p);
+                    drawHistogram(c);
+                    drawWarnings(c, p);
                 }
                 drawSelfTimer(c);
                 break;
@@ -95,7 +101,7 @@ public class OverlayView extends View {
             String value = s.safeGet(p);
             String t = s.currentText(p);
             float w = hasIcon(id, value) ? h : text.measureText(t) + 2 * Theme.PAD * u;
-            if (x + w > vw - 230 * u) {
+            if (x + w > statusLeft - 6 * u) {
                 break;
             }
             roundRect(c, x, y, x + w, y + h, Theme.PANEL);
@@ -156,6 +162,32 @@ public class OverlayView extends View {
         }
 
         float leftEdge = l;
+        if (ui.shotsEnabled() && ui.remainingShots() >= 0) {
+            // Remaining pictures with a small memory card symbol
+            String n = String.valueOf(ui.remainingShots());
+            textSize(Theme.TEXT_SMALL);
+            text.setTypeface(Typeface.DEFAULT_BOLD);
+            float cw = 13 * u;
+            float ww = cw + 6 * u + text.measureText(n) + 2 * pad;
+            float cl = leftEdge - 6 * u - ww;
+            roundRect(c, cl, y, leftEdge - 6 * u, y + h, Theme.PANEL);
+            int shotsColor = ui.remainingShots() < 30 ? Theme.WARN : Theme.TEXT;
+            android.graphics.Path card = new android.graphics.Path();
+            float ct = y + h / 2 - 9 * u, cb = y + h / 2 + 9 * u, cx0 = cl + pad;
+            card.moveTo(cx0, ct + 4 * u);
+            card.lineTo(cx0 + 4 * u, ct);
+            card.lineTo(cx0 + cw, ct);
+            card.lineTo(cx0 + cw, cb);
+            card.lineTo(cx0, cb);
+            card.close();
+            stroke.setColor(shotsColor);
+            stroke.setStrokeWidth(2 * u);
+            c.drawPath(card, stroke);
+            drawText(c, n, cx0 + cw + 6 * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, shotsColor);
+            text.setTypeface(Typeface.DEFAULT);
+            leftEdge = cl;
+            l = cl;
+        }
         if (ui.wifiEnabled()) {
             String wl = "WLAN" + (ui.debugEnabled() ? "·DBG" : "") + (ui.mcpEnabled() ? "·MCP" : "");
             // Red while WLAN is switched on but has no connection (yet)
@@ -163,7 +195,7 @@ public class OverlayView extends View {
             textSize(Theme.TEXT_SMALL);
             float ww = text.measureText(wl) + 2 * pad;
             roundRect(c, l - 6 * u - ww, y, l - 6 * u, y + h, Theme.PANEL);
-            drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, connected ? Theme.TAB_COLORS[5] : Theme.WARN);
+            drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, connected ? Theme.FN_BLUE : Theme.WARN);
             leftEdge = l - 6 * u - ww;
         }
         if (ui.writing()) {
@@ -175,7 +207,239 @@ public class OverlayView extends View {
             fill.setColor((alpha << 24) | 0xE53935);
             c.drawCircle(cx, y + h / 2, dotR, fill);
             postInvalidateDelayed(80);
+            leftEdge = cx - dotR - 6 * u;
         }
+        statusLeft = leftEdge;
+    }
+
+    /** Left edge of the status block at the top right; the setting chips stop before it */
+    private float statusLeft;
+
+    // ---- guides: grid, level, histogram, warnings ----
+
+    private void drawGrid(Canvas c) {
+        Ui.Grid g = ui.grid();
+        if (g == Ui.Grid.OFF) {
+            return;
+        }
+        android.graphics.Rect v = ui.session().videoArea(getWidth(), getHeight());
+        float l = v.left * pixelAspect, r = v.right * pixelAspect, t = v.top, b = v.bottom;
+        stroke.setColor(Theme.GUIDE);
+        stroke.setStrokeWidth(Math.max(1, 1.2f * u));
+        int cols = g == Ui.Grid.THIRDS ? 3 : 6;
+        int rows = g == Ui.Grid.THIRDS ? 3 : 4;
+        for (int i = 1; i < cols; i++) {
+            float x = l + (r - l) * i / cols;
+            c.drawLine(x, t, x, b, stroke);
+        }
+        for (int i = 1; i < rows; i++) {
+            float y = t + (b - t) * i / rows;
+            c.drawLine(l, y, r, y, stroke);
+        }
+        if (g == Ui.Grid.DIAGONAL) {
+            c.drawLine(l, t, r, b, stroke);
+            c.drawLine(r, t, l, b, stroke);
+        }
+    }
+
+    /**
+     * Level from the acceleration sensor: a line through the middle that tilts with the camera,
+     * green within 1 degree. Also shows when the camera is held upright (portrait).
+     */
+    private void drawLevel(Canvas c) {
+        float roll = ui.roll();
+        if (Float.isNaN(roll)) {
+            return;
+        }
+        // Deviation from the nearest of 0, 90, 180, 270 degrees; the quadrant is the orientation
+        int quadrant = Math.round(roll / 90f);
+        float dev = roll - quadrant * 90f;
+        boolean level = Math.abs(dev) < 1f;
+        float cx = vw / 2, cy = getHeight() / 2f;
+        float len = 150 * u;
+        double a = Math.toRadians(-dev);
+        float dx = (float) Math.cos(a) * len, dy = (float) Math.sin(a) * len;
+        int color = level ? Theme.AF_OK : Theme.TEXT;
+        // Fixed reference marks left and right
+        stroke.setColor(Theme.GUIDE);
+        stroke.setStrokeWidth(2 * u);
+        c.drawLine(cx - len - 24 * u, cy, cx - len - 8 * u, cy, stroke);
+        c.drawLine(cx + len + 8 * u, cy, cx + len + 24 * u, cy, stroke);
+        // Moving line with a gap for the AF frame
+        stroke.setColor(color);
+        stroke.setStrokeWidth((level ? 3 : 2) * u);
+        float gap = 0.32f;
+        c.drawLine(cx - dx, cy - dy, cx - dx * gap, cy - dy * gap, stroke);
+        c.drawLine(cx + dx * gap, cy + dy * gap, cx + dx, cy + dy, stroke);
+        // Pitch: small marker above or below the right end, 1 px per 0.25 degree, limited
+        float pitch = ui.pitch();
+        if (!Float.isNaN(pitch)) {
+            float py = Math.max(-40 * u, Math.min(40 * u, -pitch * 4 * u));
+            boolean flat = Math.abs(pitch) < 1f;
+            fill.setColor(flat ? Theme.AF_OK : Theme.TEXT);
+            c.drawCircle(cx + len + 16 * u, cy + py, 4 * u, fill);
+        }
+        textSize(Theme.TEXT_SMALL);
+        String t = String.format(java.util.Locale.US, "%.1f°", dev).replace('.', ',')
+                + (quadrant % 2 != 0 ? "  Hochformat" : "");
+        drawText(c, t, cx - text.measureText(t) / 2, cy + 34 * u, color);
+    }
+
+    private void drawHistogram(Canvas c) {
+        if (ui.histo() == Ui.Histo.OFF) {
+            return;
+        }
+        short[][] h = ui.session().histogram();
+        float w = 150 * u, hh = 76 * u;
+        float r = vw - Theme.PAD * u;
+        float b = getHeight() - Theme.BAR * u - Theme.PAD * u;
+        float l = r - w, t = b - hh;
+        roundRect(c, l, t, r, b, Theme.PANEL);
+        if (h == null) {
+            textSize(Theme.TEXT_SMALL);
+            drawText(c, "Histogramm …", l + 10 * u, t + hh / 2 + 6 * u, Theme.TEXT_DIM);
+            return;
+        }
+        float pl = l + 6 * u, pr = r - 6 * u, pt = t + 6 * u, pb = b - 6 * u;
+        if (ui.histo() == Ui.Histo.RGB && h[1] != null && h[2] != null && h[3] != null) {
+            histLine(c, h[1], pl, pt, pr, pb, Theme.HIST_R);
+            histLine(c, h[2], pl, pt, pr, pb, Theme.HIST_G);
+            histLine(c, h[3], pl, pt, pr, pb, Theme.HIST_B);
+        } else {
+            histArea(c, h[0], pl, pt, pr, pb);
+        }
+        // Clipping markers: red bar at the edge when much is lost in the highlights or shadows
+        float hi = share(h[0], false), lo = share(h[0], true);
+        fill.setColor(Theme.WARN);
+        if (hi > 0.01f) {
+            c.drawRect(pr - 3 * u, pt, pr, pb, fill);
+        }
+        if (lo > 0.05f) {
+            c.drawRect(pl, pt, pl + 3 * u, pb, fill);
+        }
+    }
+
+    /** Share of pixels in the outermost 2 % of the bins (dark or bright end) */
+    private static float share(short[] bins, boolean dark) {
+        if (bins == null || bins.length == 0) {
+            return 0;
+        }
+        long total = 0, edge = 0;
+        int n = Math.max(1, bins.length / 50);
+        for (int i = 0; i < bins.length; i++) {
+            int v = bins[i] & 0xFFFF;
+            total += v;
+            if (dark ? i < n : i >= bins.length - n) {
+                edge += v;
+            }
+        }
+        return total > 0 ? (float) edge / total : 0;
+    }
+
+    private static int histMax(short[] bins) {
+        // Scale to the second highest value so a single spike does not flatten everything
+        int m1 = 1, m2 = 1;
+        for (short s : bins) {
+            int v = s & 0xFFFF;
+            if (v > m1) {
+                m2 = m1;
+                m1 = v;
+            } else if (v > m2) {
+                m2 = v;
+            }
+        }
+        return Math.max(1, m2);
+    }
+
+    private void histArea(Canvas c, short[] bins, float l, float t, float r, float b) {
+        if (bins == null || bins.length == 0) {
+            return;
+        }
+        int max = histMax(bins);
+        android.graphics.Path path = new android.graphics.Path();
+        path.moveTo(l, b);
+        for (int i = 0; i < bins.length; i++) {
+            float x = l + (r - l) * i / (bins.length - 1);
+            float y = b - (b - t) * Math.min(1f, (bins[i] & 0xFFFF) / (float) max);
+            path.lineTo(x, y);
+        }
+        path.lineTo(r, b);
+        path.close();
+        fill.setColor(0xCCDDE2E8);
+        c.drawPath(path, fill);
+    }
+
+    private void histLine(Canvas c, short[] bins, float l, float t, float r, float b, int color) {
+        if (bins == null || bins.length == 0) {
+            return;
+        }
+        int max = histMax(bins);
+        android.graphics.Path path = new android.graphics.Path();
+        for (int i = 0; i < bins.length; i++) {
+            float x = l + (r - l) * i / (bins.length - 1);
+            float y = b - (b - t) * Math.min(1f, (bins[i] & 0xFFFF) / (float) max);
+            if (i == 0) {
+                path.moveTo(x, y);
+            } else {
+                path.lineTo(x, y);
+            }
+        }
+        stroke.setColor(color);
+        stroke.setStrokeWidth(1.5f * u);
+        c.drawPath(path, stroke);
+    }
+
+    /** Short hints above the exposure bar, like the camera's caution messages */
+    private void drawWarnings(Canvas c, CameraSession.Params p) {
+        if (!ui.warningsEnabled()) {
+            return;
+        }
+        java.util.List<String> w = warnings();
+        if (w.isEmpty()) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String s : w) {
+            if (sb.length() > 0) {
+                sb.append("  ·  ");
+            }
+            sb.append(s);
+        }
+        String t = sb.toString();
+        textSize(Theme.TEXT_SMALL);
+        float tw = text.measureText(t);
+        float l = Theme.PAD * u;
+        float b = getHeight() - Theme.BAR * u - Theme.PAD * u;
+        roundRect(c, l, b - 30 * u, l + tw + 20 * u, b, Theme.PANEL);
+        fill.setColor(Theme.ACCENT);
+        c.drawRect(l, b - 30 * u, l + 3 * u, b, fill);
+        drawText(c, t, l + 12 * u, b - 10 * u, Theme.ACCENT);
+    }
+
+    /** Active warnings; also used by the MCP status */
+    java.util.List<String> warnings() {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        CameraSession s = ui.session();
+        double sec = s.shutterSeconds();
+        float focal = s.focalLength();
+        // Rule of thumb for APS-C: 1 / (1.5 × focal length), at least 1/30 s without lens data
+        double limit = focal > 0 ? 1.0 / (1.5 * focal) : 1.0 / 30;
+        if (sec > 0 && sec > limit * 1.01) {
+            out.add("Verwacklungsgefahr");
+        }
+        short[][] h = s.histogram();
+        if (h != null && share(h[0], false) > 0.01f) {
+            out.add("Lichter überbelichtet");
+        }
+        int bat = ui.batteryLevel();
+        if (bat >= 0 && bat <= 10 && !ui.batteryPlugged()) {
+            out.add("Akku fast leer");
+        }
+        int shots = ui.remainingShots();
+        if (shots >= 0 && shots < 30) {
+            out.add(shots == 0 ? "Karte voll" : "Karte fast voll");
+        }
+        return out;
     }
 
     /** Checks on a scratch canvas whether an icon exists, without drawing it. */
@@ -575,7 +839,7 @@ public class OverlayView extends View {
 
     private void drawPickList(Canvas c, float l, float t, float r, float b, float rowH) {
         roundRect(c, l, t, r, b, 0xF0181C21);
-        outline(c, l, t, r, b, Theme.TAB_COLORS[5], 2 * u);
+        outline(c, l, t, r, b, Theme.FN_BLUE, 2 * u);
         List<Setting> list = ui.pickList();
         int count = list.size() + 1;
         int visible = (int) ((b - t - 10 * u) / rowH);
