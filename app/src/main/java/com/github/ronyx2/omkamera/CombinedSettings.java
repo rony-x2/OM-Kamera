@@ -225,16 +225,20 @@ final class DroHdrSetting extends Setting {
 
     @Override
     protected String get(CameraSession.Params p) {
-        String hdr = null;
-        try {
-            hdr = p.mod.getHDRMode();
-        } catch (Throwable ignored) {
+        // getHDRMode() does not report the value on the a6000, the raw parameter does
+        String hdr = p.params.get("hdr-mode");
+        if (hdr == null) {
+            try {
+                hdr = p.mod.getHDRMode();
+            } catch (Throwable ignored) {
+            }
         }
         if ("auto".equals(hdr)) {
             return "hdr-auto";
         }
         if ("on".equals(hdr)) {
-            return "hdr-" + p.mod.getHDRExposureDifferenceLevel();
+            String level = p.params.get("hdr-exposure-difference-level");
+            return "hdr-" + (level != null ? level : String.valueOf(p.mod.getHDRExposureDifferenceLevel()));
         }
         String dro = p.mod.getDROMode();
         if ("auto".equals(dro)) {
@@ -284,7 +288,7 @@ final class DroHdrSetting extends Setting {
         if (v.startsWith("dro-")) return "DRO Lv" + v.substring(4);
         if ("hdr-auto".equals(v)) return "HDR Auto";
         if (v.startsWith("hdr-")) {
-            return String.format(Locale.GERMANY, "HDR %.1f EV", Float.parseFloat(v.substring(4)));
+            return String.format(Locale.US, "HDR %.1f EV", Float.parseFloat(v.substring(4))).replace('.', ',');
         }
         return Labels.of(v);
     }

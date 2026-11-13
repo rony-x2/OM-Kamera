@@ -657,13 +657,15 @@ public class CameraSession {
         }
         String mode = null;
         String aspect = null;
+        String spotSize = null;
         try {
             mode = current.mod.getFocusAreaMode();
             aspect = current.mod.getImageAspectRatio();
+            spotSize = current.mod.getFocusAreaFlexibleSpotSize();
         } catch (Throwable ignored) {
         }
         int[] point = focusPoint();
-        String key = mode + "|" + aspect + "|" + viewWidth + "x" + viewHeight
+        String key = mode + "|" + aspect + "|" + spotSize + "|" + viewWidth + "x" + viewHeight
                 + (point != null ? "|" + point[0] + "," + point[1] : "");
         if (key.equals(focusFramesKey)) {
             return focusFrames;
@@ -696,6 +698,7 @@ public class CameraSession {
                             // The spot follows the focus point; the reported rect gives its size
                             int hw = scalar.width() / 2;
                             int hh = scalar.height() / 2;
+                            spotHalf = new int[]{hw, hh};
                             scalar = new Rect(point[0] - hw, point[1] - hh, point[0] + hw, point[1] + hh);
                         }
                         out.add(new FocusFrame(r.index, toView(video, scalar), r.enable));
@@ -713,6 +716,8 @@ public class CameraSession {
 
     /** Range the flexible spot can move in, in the camera's -1000..1000 system; known after focusFrames() */
     private Rect flexRange;
+    /** Half width and height of the spot in the same system */
+    private int[] spotHalf;
 
     /** Centre of the flexible spot in the -1000..1000 system, or null */
     public int[] focusPoint() {
@@ -739,9 +744,16 @@ public class CameraSession {
         if (p == null) {
             return new Result(false, 0, "no focus point");
         }
-        Rect range = flexRange != null ? flexRange : new Rect(-1000, -1000, 1000, 1000);
-        int stepX = Math.max(1, range.width() / 16);
-        int stepY = Math.max(1, range.height() / 10);
+        Rect outer = flexRange != null ? flexRange : new Rect(-1000, -1000, 1000, 1000);
+        // The whole spot stays inside the range, so its centre moves in a smaller area
+        int hw = spotHalf != null ? spotHalf[0] : 0;
+        int hh = spotHalf != null ? spotHalf[1] : 0;
+        Rect range = new Rect(outer.left + hw, outer.top + hh, outer.right - hw, outer.bottom - hh);
+        if (range.width() <= 0 || range.height() <= 0) {
+            range = outer;
+        }
+        int stepX = Math.max(1, outer.width() / 16);
+        int stepY = Math.max(1, outer.height() / 10);
         int x = Math.max(range.left, Math.min(range.right, p[0] + dx * stepX));
         int y = Math.max(range.top, Math.min(range.bottom, p[1] + dy * stepY));
         if (x == p[0] && y == p[1]) {
@@ -754,7 +766,7 @@ public class CameraSession {
         return setFocusPoint(0, 0);
     }
 
-    private Result setFocusPoint(int x, int y) {
+    public Result setFocusPoint(int x, int y) {
         try {
             Params edit = createEdit();
             edit.mod.setFocusPoint(x, y);

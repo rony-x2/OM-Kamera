@@ -97,7 +97,7 @@ public final class Settings {
             @Override
             public String display(String v) {
                 // The camera counts in tenths of an EV step
-                return String.format(Locale.GERMANY, "%.1f EV", Integer.parseInt(v) / 10f);
+                return String.format(Locale.US, "%.1f EV", Integer.parseInt(v) / 10f).replace('.', ',');
             }
         });
 
@@ -721,7 +721,8 @@ public final class Settings {
         if (Math.abs(ev) < 0.05f) {
             return "±0,0";
         }
-        return String.format(Locale.GERMANY, "%+.1f", ev);
+        // The camera's locale data has no German number format, so the comma is set by hand
+        return String.format(Locale.US, "%+.1f", ev).replace('.', ',');
     }
 
     private static void add(Setting s) {

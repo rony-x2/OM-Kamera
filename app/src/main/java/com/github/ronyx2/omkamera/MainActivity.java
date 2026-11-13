@@ -541,6 +541,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             CameraSession.Result res;
             if ("1".equals(r.param("center"))) {
                 res = session.centerFocusPoint();
+            } else if (r.param("x") != null && r.param("y") != null) {
+                res = session.setFocusPoint(parseInt(r.param("x")), parseInt(r.param("y")));
             } else {
                 int dx = parseInt(r.param("dx"));
                 int dy = parseInt(r.param("dy"));
