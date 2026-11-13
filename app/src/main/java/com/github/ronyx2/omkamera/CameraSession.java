@@ -454,11 +454,18 @@ public class CameraSession {
         if (l.MinFValue != null && l.MinFValue.wide > 0) {
             out.add(new String[]{"Lichtstärke", fRange(l.MinFValue)});
         }
-        if (l.MaxFValue != null && l.MaxFValue.wide > 0) {
-            out.add(new String[]{"Kleinste Blende", fRange(l.MaxFValue)});
+        try {
+            if (l.MaxFValue != null && l.MaxFValue.wide > 0) {
+                out.add(new String[]{"Kleinste Blende", fRange(l.MaxFValue)});
+            }
+        } catch (Throwable ignored) {
         }
-        if (l.FixedAperture) {
-            out.add(new String[]{"Blende", "fest"});
+        // Fields below are not known by every firmware (NoSuchFieldError on the ILCE-6000)
+        try {
+            if (l.FixedAperture) {
+                out.add(new String[]{"Blende", "fest"});
+            }
+        } catch (Throwable ignored) {
         }
         String n = " " + name.toUpperCase(java.util.Locale.US) + " ";
         out.add(new String[]{"Bildstabilisator", n.contains("OSS") ? "Ja (OSS im Objektiv)" : "nicht angegeben"});
@@ -467,10 +474,16 @@ public class CameraSession {
         if (series != null) {
             out.add(new String[]{"Baureihe", series});
         }
-        if (l.PhaseShiftSensor != null) {
-            out.add(new String[]{"Phasen-AF", l.PhaseShiftSensor});
+        try {
+            if (l.PhaseShiftSensor != null) {
+                out.add(new String[]{"Phasen-AF", String.valueOf(l.PhaseShiftSensor)});
+            }
+        } catch (Throwable ignored) {
         }
-        out.add(new String[]{"Objektiv-Firmware", String.valueOf(l.LensVersion)});
+        try {
+            out.add(new String[]{"Objektiv-Firmware", String.valueOf(l.LensVersion)});
+        } catch (Throwable ignored) {
+        }
         out.add(new String[]{"Tasten am Objektiv", lensKeysSeen.isEmpty() ? "noch keine Taste gemeldet" : android.text.TextUtils.join(", ", lensKeysSeen)});
         return out;
     }

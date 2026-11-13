@@ -348,6 +348,8 @@ public final class Settings {
             }
         });
 
+        add(new LookSetting());
+
         add(new Setting("style", "Kreativmodus", "Stil", Setting.Category.IMAGE) {
             @Override
             protected List<String> values(CameraSession.Params p) {

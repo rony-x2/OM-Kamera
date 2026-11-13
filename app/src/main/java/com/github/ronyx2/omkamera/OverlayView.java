@@ -36,6 +36,13 @@ public class OverlayView extends View {
         this.ui = ui;
     }
 
+    private LiveAnalysis analysis;
+    private final Paint maskPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+
+    public void setAnalysis(LiveAnalysis a) {
+        this.analysis = a;
+    }
+
     @Override
     protected void onDraw(Canvas c) {
         if (ui == null) {
@@ -49,7 +56,9 @@ public class OverlayView extends View {
         CameraSession.Params p = ui.session().current();
         switch (ui.state()) {
             case LIVE:
+                drawAnalysis(c);
                 drawGrid(c);
+                drawMarkers(c);
                 drawFocusFrames(c);
                 if (ui.levelEnabled()) {
                     drawLevel(c);
@@ -74,11 +83,14 @@ public class OverlayView extends View {
                 drawMenu(c, p);
                 break;
             case AF_MOVE:
+                drawAnalysis(c);
                 drawFocusMove(c);
                 drawExposureBar(c, p);
                 break;
             case QUICK: {
+                drawAnalysis(c);
                 drawGrid(c);
+                drawMarkers(c);
                 drawFocusFrames(c);
                 drawBattery(c);
                 drawExposureBar(c, p);
@@ -278,6 +290,65 @@ public class OverlayView extends View {
         if (g == Ui.Grid.DIAGONAL) {
             c.drawLine(l, t, r, b, stroke);
             c.drawLine(r, t, l, b, stroke);
+        }
+    }
+
+    /** Zebra and peaking mask from {@link LiveAnalysis}, stretched over the picture */
+    private void drawAnalysis(Canvas c) {
+        android.graphics.Bitmap m = analysis != null ? analysis.mask() : null;
+        if (m == null || m.isRecycled()) {
+            return;
+        }
+        android.graphics.Rect v = ui.session().videoArea(getWidth(), getHeight());
+        rect.set(v.left * pixelAspect, v.top, v.right * pixelAspect, v.bottom);
+        c.drawBitmap(m, null, rect, maskPaint);
+    }
+
+    /** Centre cross, aspect frame for a later crop and safe zone */
+    private void drawMarkers(Canvas c) {
+        Ui.Frame fr = ui.frame();
+        int safe = ui.safeZone();
+        if (!ui.centerMark() && fr == Ui.Frame.OFF && safe == 0) {
+            return;
+        }
+        android.graphics.Rect v = ui.session().videoArea(getWidth(), getHeight());
+        float l = v.left * pixelAspect, r = v.right * pixelAspect, t = v.top, b = v.bottom;
+        float w = r - l, h = b - t;
+        stroke.setStrokeWidth(Math.max(1, 1.5f * u));
+        if (fr != Ui.Frame.OFF && w > 0 && h > 0) {
+            float fw = w, fh = h;
+            if (fr.ratio < w / h) {
+                fw = h * fr.ratio;
+            } else {
+                fh = w / fr.ratio;
+            }
+            float fl = l + (w - fw) / 2, ft = t + (h - fh) / 2;
+            // Shade what the crop removes, then outline the frame
+            fill.setColor(0x73000000);
+            if (fl > l + 0.5f) {
+                c.drawRect(l, t, fl, b, fill);
+                c.drawRect(fl + fw, t, r, b, fill);
+            }
+            if (ft > t + 0.5f) {
+                c.drawRect(l, t, r, ft, fill);
+                c.drawRect(l, ft + fh, r, b, fill);
+            }
+            stroke.setColor(0xCCFFFFFF);
+            c.drawRect(fl, ft, fl + fw, ft + fh, stroke);
+        }
+        if (safe > 0) {
+            float sw = w * safe / 100f, sh = h * safe / 100f;
+            float sl = l + (w - sw) / 2, st = t + (h - sh) / 2;
+            stroke.setColor(0x99FFD60A);
+            stroke.setPathEffect(new android.graphics.DashPathEffect(new float[]{8 * u, 6 * u}, 0));
+            c.drawRect(sl, st, sl + sw, st + sh, stroke);
+            stroke.setPathEffect(null);
+        }
+        if (ui.centerMark()) {
+            float cx = l + w / 2, cy = t + h / 2, a = 14 * u;
+            stroke.setColor(0xE6FFFFFF);
+            c.drawLine(cx - a, cy, cx + a, cy, stroke);
+            c.drawLine(cx, cy - a, cx, cy + a, stroke);
         }
     }
 

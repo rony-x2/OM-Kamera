@@ -36,6 +36,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private Network network;
     private DebugServer debugServer;
     private Sequencer sequencer;
+    private LiveAnalysis liveAnalysis;
     private final McpServer mcp = new McpServer(this);
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
@@ -145,6 +146,33 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         });
         ui.setSequencer(sequencer);
         overlay.setUi(ui);
+        liveAnalysis = new LiveAnalysis(session, new LiveAnalysis.Host() {
+            @Override
+            public int zebraLevel() {
+                return ui.zebraLevel();
+            }
+
+            @Override
+            public int peakingLevel() {
+                return ui.peakingLevel();
+            }
+
+            @Override
+            public int peakingColor() {
+                return ui.peakingColor();
+            }
+
+            @Override
+            public boolean liveVisible() {
+                return ui.liveAnalysisVisible() && !sequencer.isRunning();
+            }
+
+            @Override
+            public void maskReady() {
+                overlay.postInvalidate();
+            }
+        });
+        overlay.setAnalysis(liveAnalysis);
         network = new Network(this);
         writeMonitor = new WriteMonitor(new WriteMonitor.Listener() {
             @Override
@@ -203,6 +231,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         handler.removeCallbacks(standbyTick);
         handler.removeCallbacks(cardTick);
         stopLevel();
+        liveAnalysis.stop();
         sequencer.stop("abgebrochen (App beendet)");
         SonySystem.setAutoPowerOff(this, true);
         debugServer.stop();
@@ -420,6 +449,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public void applyDisplay() {
         session.setHistogramEnabled(ui.histo() != Ui.Histo.OFF);
+        liveAnalysis.update();
         if (ui.levelEnabled()) {
             startLevel();
         } else {

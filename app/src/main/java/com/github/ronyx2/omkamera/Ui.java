@@ -162,6 +162,27 @@ public class Ui {
         }
     }
 
+    /** Aspect frame markers for cropping later */
+    public enum Frame {
+        OFF("Aus", 0f), R1_1("1:1", 1f), R4_5("4:5", 0.8f), R4_3("4:3", 4f / 3), R16_9("16:9", 16f / 9), R239("2,39:1", 2.39f);
+        public final String label;
+        public final float ratio;
+
+        Frame(String label, float ratio) {
+            this.label = label;
+            this.ratio = ratio;
+        }
+    }
+
+    /** Zebra levels in IRE, 0 = off, 101 = only clipped highlights ("100+") */
+    public static final int[] ZEBRA_IRE = {0, 70, 75, 80, 85, 90, 95, 100, 101};
+    public static final String[] PEAK_LABELS = {"Aus", "Niedrig", "Mittel", "Hoch"};
+    /** Edge strength needed per sensitivity level: higher sensitivity, lower threshold */
+    private static final int[] PEAK_THRESHOLDS = {0, 120, 85, 60};
+    public static final String[] PEAK_COLOR_LABELS = {"Rot", "Gelb", "Weiß", "Blau"};
+    private static final int[] PEAK_COLORS = {0xFFFF3B30, 0xFFFFD60A, 0xFFFFFFFF, 0xFF4DA3FF};
+    public static final int[] SAFE_ZONES = {0, 90, 80};
+
     private final CameraSession session;
     private final FnLayout fn;
     private final Host host;
@@ -181,6 +202,12 @@ public class Ui {
     private boolean levelEnabled;
     private boolean warningsEnabled;
     private boolean shotsEnabled;
+    private int zebraIdx;
+    private int peakIdx;
+    private int peakColorIdx;
+    private boolean centerMark;
+    private Frame frame;
+    private int safeIdx;
     /** Tilt from the acceleration sensor in degrees; NaN while unknown */
     private volatile float roll = Float.NaN;
     private volatile float pitch = Float.NaN;
@@ -256,6 +283,12 @@ public class Ui {
         levelEnabled = prefs.getBoolean("level", false);
         warningsEnabled = prefs.getBoolean("warnings", true);
         shotsEnabled = prefs.getBoolean("shots", true);
+        zebraIdx = clamp(prefs.getInt("zebra", 0), ZEBRA_IRE.length);
+        peakIdx = clamp(prefs.getInt("peak", 0), PEAK_LABELS.length);
+        peakColorIdx = clamp(prefs.getInt("peakcolor", 0), PEAK_COLOR_LABELS.length);
+        centerMark = prefs.getBoolean("center", false);
+        frame = Frame.values()[clamp(prefs.getInt("frame", 0), Frame.values().length)];
+        safeIdx = clamp(prefs.getInt("safe", 0), SAFE_ZONES.length);
         mcpToken = prefs.getString("mcptoken", null);
         standbyMinutes = prefs.getInt("standby", -1);
     }
@@ -296,6 +329,67 @@ public class Ui {
     public boolean wifiEnabled() { return wifiEnabled; }
 
     public Grid grid() { return grid; }
+
+    private static int clamp(int i, int n) {
+        return Math.max(0, Math.min(n - 1, i));
+    }
+
+    /** Zebra threshold as luma 0..255 of the full range live frames, 0 = off */
+    public int zebraLevel() {
+        int ire = ZEBRA_IRE[zebraIdx];
+        return ire == 0 ? 0 : ire > 100 ? 254 : Math.min(250, Math.round(ire * 2.55f));
+    }
+
+    public String zebraLabel() {
+        int ire = ZEBRA_IRE[zebraIdx];
+        return ire == 0 ? "Aus" : ire > 100 ? "100+ IRE" : ire + " IRE";
+    }
+
+    public int peakingLevel() { return PEAK_THRESHOLDS[peakIdx]; }
+
+    public int peakingColor() { return PEAK_COLORS[peakColorIdx]; }
+
+    public boolean centerMark() { return centerMark; }
+
+    public Frame frame() { return frame; }
+
+    /** Safe zone in percent of the picture, 0 = off */
+    public int safeZone() { return SAFE_ZONES[safeIdx]; }
+
+    /** Zebra and peaking are drawn over the live picture only */
+    public boolean liveAnalysisVisible() {
+        return state == State.LIVE || state == State.QUICK || state == State.AF_MOVE;
+    }
+
+    private void toggleZebra() {
+        if (zebraIdx == 0) {
+            zebraIdx = clamp(prefs.getInt("zebralast", 7), ZEBRA_IRE.length);
+            if (zebraIdx == 0) {
+                zebraIdx = 7;
+            }
+        } else {
+            prefs.edit().putInt("zebralast", zebraIdx).apply();
+            zebraIdx = 0;
+        }
+        prefs.edit().putInt("zebra", zebraIdx).apply();
+        showMessage("Zebra: " + zebraLabel(), false);
+        host.applyDisplay();
+    }
+
+    private void togglePeaking() {
+        if (peakIdx == 0) {
+            peakIdx = clamp(prefs.getInt("peaklast", 2), PEAK_LABELS.length);
+            if (peakIdx == 0) {
+                peakIdx = 2;
+            }
+        } else {
+            prefs.edit().putInt("peaklast", peakIdx).apply();
+            peakIdx = 0;
+        }
+        prefs.edit().putInt("peak", peakIdx).apply();
+        showMessage("Fokus-Peaking: " + PEAK_LABELS[peakIdx], false);
+        host.applyDisplay();
+    }
     public Histo histo() { return histo; }
     public boolean levelEnabled() { return levelEnabled; }
     public boolean warningsEnabled() { return warningsEnabled; }
@@ -521,7 +615,7 @@ public class Ui {
                     group(out, "Blitz", "flash", "flashcomp", "redeye");
                 }
                 group(out, "Weißabgleich", "wb", "wbtemp", "wbab", "wbgm");
-                group(out, "Farbe/Farbton", "dro", "style", "contrast", "saturation", "sharpness", "effect", "softskin", "colorspace");
+                group(out, "Farbe/Farbton", "dro", "look", "style", "contrast", "saturation", "sharpness", "effect", "softskin", "colorspace");
                 break;
             case TAB_FOCUS:
                 group(out, "AF/MF", "afmf", "afmode");
@@ -613,13 +707,18 @@ public class Ui {
             @Override
             public List<Row> rows() {
                 List<Row> r = new ArrayList<Row>();
-                for (String[] d : session.lensDetails()) {
-                    r.add(Row.info(d[0], d[1]));
+                try {
+                    for (String[] d : session.lensDetails()) {
+                        r.add(Row.info(d[0], d[1]));
+                    }
+                } catch (Throwable t) {
+                    Log.error("lens details", t);
+                    r.add(Row.info("Objektiv", "Daten nicht lesbar"));
                 }
                 return r;
             }
         }));
-        groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "style",
+        groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "look", "style",
                 "afmf", "afmode", "afarea");
     }
 
@@ -737,6 +836,27 @@ public class Ui {
                 host.applyDisplay();
             }
         }));
+        out.add(Row.action("Mittelmarkierung", centerMark ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                centerMark = !centerMark;
+                prefs.edit().putBoolean("center", centerMark).apply();
+            }
+        }));
+        out.add(Row.action("Formatmarkierung", frame.label, new Runnable() {
+            @Override
+            public void run() {
+                frame = Frame.values()[(frame.ordinal() + 1) % Frame.values().length];
+                prefs.edit().putInt("frame", frame.ordinal()).apply();
+            }
+        }));
+        out.add(Row.action("Sichere Zone", safeIdx == 0 ? "Aus" : SAFE_ZONES[safeIdx] + " %", new Runnable() {
+            @Override
+            public void run() {
+                safeIdx = (safeIdx + 1) % SAFE_ZONES.length;
+                prefs.edit().putInt("safe", safeIdx).apply();
+            }
+        }));
         out.add(Row.action("Wasserwaage", levelEnabled ? "Ein" : "Aus", new Runnable() {
             @Override
             public void run() {
@@ -766,6 +886,32 @@ public class Ui {
                 prefs.edit().putBoolean("shots", shotsEnabled).apply();
             }
         }));
+        out.add(Row.header("Belichtungs- und Fokushilfen"));
+        out.add(Row.action("Zebra", zebraLabel(), new Runnable() {
+            @Override
+            public void run() {
+                zebraIdx = (zebraIdx + 1) % ZEBRA_IRE.length;
+                prefs.edit().putInt("zebra", zebraIdx).apply();
+                host.applyDisplay();
+            }
+        }));
+        out.add(Row.action("Fokus-Peaking", PEAK_LABELS[peakIdx], new Runnable() {
+            @Override
+            public void run() {
+                peakIdx = (peakIdx + 1) % PEAK_LABELS.length;
+                prefs.edit().putInt("peak", peakIdx).apply();
+                host.applyDisplay();
+            }
+        }));
+        if (peakIdx > 0) {
+            out.add(Row.action("Peaking-Farbe", PEAK_COLOR_LABELS[peakColorIdx], new Runnable() {
+                @Override
+                public void run() {
+                    peakColorIdx = (peakColorIdx + 1) % PEAK_COLOR_LABELS.length;
+                    prefs.edit().putInt("peakcolor", peakColorIdx).apply();
+                }
+            }));
+        }
     }
 
     private void networkRows(List<Row> out) {
@@ -1010,8 +1156,13 @@ public class Ui {
             @Override
             public List<Row> rows() {
                 List<Row> r = new ArrayList<Row>();
-                for (String[] d : session.lensDetails()) {
-                    r.add(Row.info(d[0], d[1]));
+                try {
+                    for (String[] d : session.lensDetails()) {
+                        r.add(Row.info(d[0], d[1]));
+                    }
+                } catch (Throwable t) {
+                    Log.error("lens details", t);
+                    r.add(Row.info("Objektiv", "Daten nicht lesbar"));
                 }
                 return r;
             }
@@ -1289,6 +1440,12 @@ public class Ui {
                     grid = Grid.OFF;
                 }
                 prefs.edit().putInt("grid", grid.ordinal()).apply();
+                return true;
+            case ZEBRA:
+                toggleZebra();
+                return true;
+            case PEAKING:
+                togglePeaking();
                 return true;
             case HISTO:
                 if (histo == Histo.OFF) {
