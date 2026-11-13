@@ -186,7 +186,11 @@ public class McpServer {
                     return null;
                 }
             });
-            Thread.sleep(1200);
+            Thread.sleep(400);
+            if (session.selfTimerRunning()) {
+                return text("Selbstauslöser läuft, Aufnahme in " + session.selfTimerRemaining() + " s (Fokus vorher: " + res + ")");
+            }
+            Thread.sleep(800);
             release();
             return text("ausgelöst, Fokus vorher: " + res);
         }

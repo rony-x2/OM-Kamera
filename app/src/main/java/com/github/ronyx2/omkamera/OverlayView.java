@@ -55,6 +55,7 @@ public class OverlayView extends View {
                     drawBattery(c);
                     drawExposureBar(c, p);
                 }
+                drawSelfTimer(c);
                 break;
             case FN:
             case FN_EDIT:
@@ -156,7 +157,7 @@ public class OverlayView extends View {
 
         float leftEdge = l;
         if (ui.wifiEnabled()) {
-            String wl = ui.debugEnabled() ? "WLAN·DBG" : "WLAN";
+            String wl = "WLAN" + (ui.debugEnabled() ? "·DBG" : "") + (ui.mcpEnabled() ? "·MCP" : "");
             textSize(Theme.TEXT_SMALL);
             float ww = text.measureText(wl) + 2 * pad;
             roundRect(c, l - 6 * u - ww, y, l - 6 * u, y + h, Theme.PANEL);
@@ -183,6 +184,31 @@ public class OverlayView extends View {
     private final Canvas scratch = new Canvas(android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888));
 
     // ---- AF frames ----
+
+    /** Countdown of the running self-timer, large in the middle with a ring that runs down */
+    private void drawSelfTimer(Canvas c) {
+        int left = ui.session().selfTimerRemaining();
+        if (left <= 0) {
+            return;
+        }
+        float cx = vw / 2;
+        float cy = getHeight() / 2f;
+        float r = 52 * u;
+        fill.setColor(Theme.PANEL);
+        c.drawCircle(cx, cy, r, fill);
+        // The ring shows the part of the current second that is left
+        float frac = (System.currentTimeMillis() % 1000) / 1000f;
+        stroke.setColor(Theme.ACCENT);
+        stroke.setStrokeWidth(4 * u);
+        android.graphics.RectF arc = new android.graphics.RectF(cx - r + 4 * u, cy - r + 4 * u, cx + r - 4 * u, cy + r - 4 * u);
+        c.drawArc(arc, -90, 360 * (1 - frac), false, stroke);
+        textSize(Theme.TEXT_LARGE * 2);
+        text.setTypeface(Typeface.DEFAULT_BOLD);
+        String t = String.valueOf(left);
+        drawText(c, t, cx - text.measureText(t) / 2, cy + Theme.TEXT_LARGE * 2 * u * 0.36f, Theme.TEXT);
+        text.setTypeface(Typeface.DEFAULT);
+        postInvalidateDelayed(100);
+    }
 
     /** Moving the flexible spot: range, spot and a short hint */
     private void drawFocusMove(Canvas c) {

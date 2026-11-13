@@ -445,6 +445,21 @@ public class CameraSession {
         }
         capturing = true;
         burstCapture = burst;
+        int timer = selfTimerSeconds();
+        if (timer > 0) {
+            // The camera counts down itself (lamp and beeps) and reports the exposure via onShutter
+            burstCapture = false;
+            try {
+                cameraEx.startSelfTimerShutter();
+                selfTimerEnd = android.os.SystemClock.uptimeMillis() + timer * 1000L;
+                Log.info("startSelfTimerShutter " + timer + " s");
+            } catch (Throwable t) {
+                capturing = false;
+                selfTimerEnd = 0;
+                Log.error("startSelfTimerShutter", t);
+            }
+            return;
+        }
         try {
             cameraEx.burstableTakePicture();
             Log.info("burstableTakePicture");
@@ -463,6 +478,48 @@ public class CameraSession {
     }
 
     private boolean burstCapture;
+    /** Uptime when the running self-timer fires, 0 if none runs */
+    private long selfTimerEnd;
+
+    private int selfTimerSeconds() {
+        try {
+            if (current != null && "single".equals(current.mod.getDriveMode())) {
+                return current.mod.getSelfTimer();
+            }
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
+
+    public boolean selfTimerRunning() {
+        return selfTimerEnd != 0;
+    }
+
+    /** Seconds until the self-timer fires (rounded up), 0 if none runs */
+    public int selfTimerRemaining() {
+        if (selfTimerEnd == 0) {
+            return 0;
+        }
+        long ms = selfTimerEnd - android.os.SystemClock.uptimeMillis();
+        return ms <= 0 ? 0 : (int) ((ms + 999) / 1000);
+    }
+
+    /** Stops a running self-timer, like pressing a key during the countdown on the camera */
+    public void cancelSelfTimer() {
+        if (selfTimerEnd == 0) {
+            return;
+        }
+        selfTimerEnd = 0;
+        try {
+            cameraEx.cancelTakePicture();
+            cameraEx.cancelSelfTimerShutter();
+        } catch (Throwable t) {
+            Log.error("cancelSelfTimerShutter", t);
+        }
+        capturing = false;
+        focusing = false;
+        Log.info("self-timer cancelled");
+    }
 
     /**
      * Called by the camera after each exposure. burstableTakePicture keeps the capture
@@ -470,7 +527,8 @@ public class CameraSession {
      * the next burstableTakePicture fails (as the camera's own apps do it).
      */
     private void onShutter(int status) {
-        Log.info("shutter status=" + status + (burstCapture ? " (burst)" : ""));
+        Log.info("shutter status=" + status + (burstCapture ? " (burst)" : "") + (selfTimerEnd != 0 ? " (self-timer)" : ""));
+        selfTimerEnd = 0;
         if (status == 0) {
             listener.onShot();
         }

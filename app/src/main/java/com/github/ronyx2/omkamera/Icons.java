@@ -87,13 +87,12 @@ public final class Icons {
             return true;
         }
         if (v.startsWith("bracket")) {
-            // Three frames of falling brightness, the kind as a small label
-            for (int i = 2; i >= 0; i--) {
-                float o = (i - 1) * s * 0.1f;
-                rect(c, cx - w / 2 + o, cy - h / 2 - o, cx + w / 2 + o, cy + h / 2 - o);
-            }
+            // Like the camera: "BRK" with the kind below (C continuous, S single, WB, DRO)
             String k = v.equals("bracket-wb") ? "WB" : v.equals("bracket-dro") ? "DRO" : v.equals("bracket-c") ? "C" : "S";
-            text(c, k, cx, cy + s * 0.04f, s * (k.length() > 2 ? 0.2f : 0.24f));
+            R.set(cx - s * 0.42f, cy - s * 0.4f, cx + s * 0.42f, cy + s * 0.4f);
+            c.drawRoundRect(R, s * 0.06f, s * 0.06f, LINE);
+            text(c, "BRK", cx, cy - s * 0.15f, s * 0.26f);
+            text(c, k, cx, cy + s * 0.17f, s * (k.length() > 2 ? 0.26f : 0.3f));
             return true;
         }
         rect(c, cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);

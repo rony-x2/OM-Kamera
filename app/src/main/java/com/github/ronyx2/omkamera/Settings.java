@@ -469,6 +469,12 @@ public final class Settings {
             protected void set(CameraSession.Params e, String v) {
                 e.mod.setPictureEffect(v);
             }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                // Like on the camera: picture effects only work with JPEG
+                return !isRaw(p);
+            }
         });
 
         add(new Setting("softskin", "Soft Skin-Effekt", "Soft Skin", Setting.Category.IMAGE) {
@@ -678,6 +684,16 @@ public final class Settings {
     }
 
     private static final List<String> ON_OFF = java.util.Arrays.asList("off", "on");
+
+    /** RAW or RAW+JPEG */
+    static boolean isRaw(CameraSession.Params p) {
+        try {
+            String q = p.mod.getPictureStorageFormat();
+            return q != null && q.startsWith("raw");
+        } catch (Throwable t) {
+            return false;
+        }
+    }
 
     static boolean isExposureBracket(CameraSession.Params p) {
         return "bracket".equals(p.mod.getDriveMode()) && "exposure".equals(p.mod.getBracketMode());

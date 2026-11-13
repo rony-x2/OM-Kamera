@@ -235,6 +235,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                 return true;
             }
         }
+        if (session.selfTimerRunning() && key != Keys.Key.SHUTTER_HALF && key != Keys.Key.SHUTTER_FULL) {
+            // Any other key stops the countdown, like on the camera
+            session.cancelSelfTimer();
+            ui.showMessage("Selbstauslöser abgebrochen", false);
+            return true;
+        }
         if (key == Keys.Key.AEL) {
             if (event.getRepeatCount() == 0 && ui.state() == Ui.State.LIVE) {
                 ui.onAel(true);

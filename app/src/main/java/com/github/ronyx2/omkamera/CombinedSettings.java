@@ -199,7 +199,8 @@ final class DroHdrSetting extends Setting {
                 out.add("dro-" + i);
             }
         }
-        List<String> hdr = DriveSetting.safe(new DriveSetting.Source() {
+        // Auto HDR is not available for RAW pictures (manual, chapter Auto HDR)
+        List<String> hdr = Settings.isRaw(p) ? new ArrayList<String>() : DriveSetting.safe(new DriveSetting.Source() {
             @Override
             public List<?> get(CameraSession.Params q) {
                 return q.mod.getSupportedHDRModes();
