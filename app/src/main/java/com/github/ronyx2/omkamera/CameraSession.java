@@ -434,6 +434,15 @@ public class CameraSession {
     private volatile int focusPos = -1;
     private volatile int focusMax = -1;
 
+    /** The camera can drive the focus for apps (not the a6000: focus-drive-supported=false) */
+    public boolean focusDriveSupported() {
+        try {
+            return current != null && current.mod.isFocusDriveSupported() && current.mod.getMaxFocusDriveSpeed() > 0;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public int focusPosition() {
         return focusPos;
     }

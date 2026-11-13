@@ -644,6 +644,10 @@ public class Ui {
                 }));
                 break;
             case FOCUS:
+                if (!session.focusDriveSupported()) {
+                    out.add(Row.info("An dieser Kamera nicht möglich", "kein Fokusantrieb für Apps"));
+                    break;
+                }
                 out.add(cycle("Schrittweite", "fb.step", Sequencer.FOCUS_STEPS, 3, new Fmt() {
                     public String f(int v) { return String.valueOf(v); }
                 }));

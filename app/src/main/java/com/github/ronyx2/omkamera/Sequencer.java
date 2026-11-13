@@ -415,6 +415,11 @@ public class Sequencer {
     // ---- focus bracket ----
 
     private String startFocusBracket() {
+        if (!session.focusDriveSupported()) {
+            // The a6000 has no focus drive for apps; shiftFocusPosition freezes it completely
+            host.message("Fokusreihe: Diese Kamera kann den Fokus für Apps nicht verschieben", true);
+            return "Fokusreihe an dieser Kamera nicht möglich (kein Fokusantrieb)";
+        }
         total = get("fb.count", 10);
         running = Mode.FOCUS;
         // Focus once, then hold the focus by switching to MF while the steps run
