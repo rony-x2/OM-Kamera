@@ -420,6 +420,29 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     }
 
     @Override
+    public void later(Runnable r, long delayMs) {
+        handler.postDelayed(r, delayMs);
+    }
+
+    @Override
+    public void cancel(Runnable r) {
+        handler.removeCallbacks(r);
+    }
+
+    @Override
+    public void onFocusRing(boolean turning) {
+        if (turning) {
+            lastActivity = SystemClock.uptimeMillis();
+        }
+        ui.onFocusRing(turning);
+    }
+
+    @Override
+    public void onMagnificationChanged(boolean on) {
+        ui.onMagnificationChanged(on);
+    }
+
+    @Override
     public void onHistogram() {
         if (ui.state() == Ui.State.LIVE) {
             redraw();

@@ -61,6 +61,10 @@ public class Ui {
         /** Saved settings (memories 1-3, file on the card) */
         Memories memories();
 
+        void later(Runnable r, long delayMs);
+
+        void cancel(Runnable r);
+
         /** Address of the debug server, or null if it does not run */
         String debugAddress();
     }
@@ -539,7 +543,17 @@ public class Ui {
                 }
                 group(out, "Motiverkennung", "face");
                 out.add(Row.header("Fokus-Assistent"));
-                out.add(Row.info("Fokuslupe", "über Benutzertaste (Standard: C1)"));
+                out.add(Row.info("Fokuslupe", "Benutzertaste (Standard: C1)"));
+                out.add(Row.action("MF-Hilfe (Lupe am Fokusring)", mfAssistText(mfAssist()), new Runnable() {
+                    @Override
+                    public void run() {
+                        int i = 0;
+                        while (i < MF_ASSIST_TIMES.length && MF_ASSIST_TIMES[i] != mfAssist()) {
+                            i++;
+                        }
+                        prefs.edit().putInt("mfassist", MF_ASSIST_TIMES[(i + 1) % MF_ASSIST_TIMES.length]).apply();
+                    }
+                }));
                 break;
             case TAB_NETWORK:
                 networkRows(out);
@@ -660,6 +674,10 @@ public class Ui {
         if (q.mode() != Sequencer.Mode.OFF) {
             out.add(Row.info("Auslöser startet, erneut drücken bricht ab", ""));
         }
+    }
+
+    private static String mfAssistText(int v) {
+        return v == 0 ? "Aus" : v < 0 ? "Ein, bleibt bis Tastendruck" : "Ein, " + v + " s nach dem Drehen";
     }
 
     interface Fmt {
@@ -1070,7 +1088,7 @@ public class Ui {
         if (key == Keys.Key.SHUTTER_HALF || key == Keys.Key.SHUTTER_FULL) {
             // Half press always returns to shooting, like on the camera itself
             if (state == State.MAGNIFY) {
-                session.stopMagnification();
+                endMagnify();
             }
             if (state != State.LIVE) {
                 state = State.LIVE;
@@ -1289,13 +1307,96 @@ public class Ui {
     // ---- focus magnifier ----
 
     private Keys.Key magnifyKey;
+    /** Focus mode before the magnifier switched to MF, null if it was MF already */
+    private String focusBeforeMagnify;
+    /** Magnifier was started by turning the focus ring (MF assist) */
+    private boolean magnifyAuto;
 
     private void startMagnify(Keys.Key key) {
         magnifyKey = key;
+        magnifyAuto = false;
+        // The camera magnifies only in manual focus, like Sony's own MF assist: switch for a moment
+        Setting afmf = Settings.get("afmf");
+        String cur = afmf.safeGet(session.current());
+        focusBeforeMagnify = null;
+        if (cur != null && !"manual".equals(cur) && !"dmf".equals(cur)) {
+            if (afmf.write(session, "manual").ok) {
+                focusBeforeMagnify = cur;
+            }
+        }
         if (session.nextMagnification()) {
             state = State.MAGNIFY;
         } else {
+            restoreFocusMode();
             showMessage("Fokuslupe an dieser Kamera nicht verfügbar", true);
+        }
+    }
+
+    /** Ends the magnifier and switches back to AF if it was switched to MF for it */
+    public void endMagnify() {
+        session.stopMagnification();
+        restoreFocusMode();
+        magnifyAuto = false;
+        if (state == State.MAGNIFY) {
+            state = State.LIVE;
+        }
+        host.redraw();
+    }
+
+    private void restoreFocusMode() {
+        if (focusBeforeMagnify != null) {
+            Settings.get("afmf").write(session, focusBeforeMagnify);
+            focusBeforeMagnify = null;
+        }
+    }
+
+    // ---- MF assist: magnifier while the focus ring turns ----
+
+    public static final int[] MF_ASSIST_TIMES = {0, 2, 5, -1};
+
+    public int mfAssist() { return prefs.getInt("mfassist", 0); }
+
+    private final Runnable mfAssistOff = new Runnable() {
+        @Override
+        public void run() {
+            if (state == State.MAGNIFY && magnifyAuto) {
+                endMagnify();
+            }
+        }
+    };
+
+    public void onFocusRing(boolean turning) {
+        int mode = mfAssist();
+        if (mode == 0) {
+            return;
+        }
+        String f = Settings.get("afmf").safeGet(session.current());
+        if (!"manual".equals(f) && !"dmf".equals(f)) {
+            return;
+        }
+        host.cancel(mfAssistOff);
+        if (turning) {
+            if (state == State.LIVE) {
+                magnifyKey = null;
+                focusBeforeMagnify = null;
+                if (session.nextMagnification()) {
+                    magnifyAuto = true;
+                    state = State.MAGNIFY;
+                    host.redraw();
+                }
+            }
+        } else if (state == State.MAGNIFY && magnifyAuto && mode > 0) {
+            host.later(mfAssistOff, mode * 1000L);
+        }
+    }
+
+    /** The camera ended the magnifier itself */
+    public void onMagnificationChanged(boolean on) {
+        if (!on && state == State.MAGNIFY) {
+            restoreFocusMode();
+            magnifyAuto = false;
+            state = State.LIVE;
+            host.redraw();
         }
     }
 
@@ -1311,14 +1412,14 @@ public class Ui {
         }
         if (key == magnifyKey || key == Keys.Key.ENTER) {
             // Next level, after the last one back to the live view
+            magnifyAuto = false;
             if (!session.nextMagnification()) {
-                state = State.LIVE;
+                endMagnify();
             }
             return true;
         }
         if (key == Keys.Key.MENU || key == Keys.Key.BACK || key == Keys.Key.FN || key == Keys.Key.DISP) {
-            session.stopMagnification();
-            state = State.LIVE;
+            endMagnify();
             return true;
         }
         return false;

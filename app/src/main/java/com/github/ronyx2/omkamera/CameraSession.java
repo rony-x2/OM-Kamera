@@ -69,6 +69,12 @@ public class CameraSession {
         /** New live view histogram (at most a few times per second) */
         void onHistogram();
 
+        /** The focus ring started (true) or stopped (false) turning */
+        void onFocusRing(boolean turning);
+
+        /** The camera switched the magnifier off (or changed its level) by itself */
+        void onMagnificationChanged(boolean on);
+
         /** The camera reports a stored picture file (platform V6 and newer only) */
         void onStored(String file);
     }
@@ -237,8 +243,31 @@ public class CameraSession {
         return out;
     }
 
+    private boolean magProbed;
+
+    /** Asks the camera once which levels give which magnification, to find more steps (e.g. x3) */
+    private void probeMagnification() {
+        if (magProbed || cameraEx == null) {
+            return;
+        }
+        magProbed = true;
+        StringBuilder b = new StringBuilder("magnifier probe:");
+        for (int level = 10; level <= 400; level += 10) {
+            try {
+                int r = cameraEx.getPreviewMagnificationRatio(level);
+                if (r > 0) {
+                    b.append(' ').append(level).append('=').append(r);
+                }
+            } catch (Throwable t) {
+                b.append(' ').append(level).append("=err");
+            }
+        }
+        Log.info(b.toString());
+    }
+
     /** Next magnification level; false when the magnifier is off afterwards (or not available) */
     public boolean nextMagnification() {
+        probeMagnification();
         java.util.List<Integer> levels = magnifications();
         if (cameraEx == null || levels.isEmpty()) {
             Log.info("magnifier: no levels");
@@ -309,6 +338,10 @@ public class CameraSession {
         } catch (Throwable t) {
             Log.error("stopPreviewMagnification", t);
         }
+    }
+
+    public boolean isMagnifying() {
+        return magIndex >= 0;
     }
 
     /** "×5,9" while the magnifier is on, otherwise null */
@@ -401,6 +434,36 @@ public class CameraSession {
     }
 
     private void registerListeners() {
+        try {
+            // Reports the magnifier state and the turning of the focus ring (Sony's MF assist uses it)
+            cameraEx.setPreviewMagnificationListener(new CameraEx.PreviewMagnificationListener() {
+                @Override
+                public void onChanged(final boolean on, int mag, int level, android.util.Pair coordinates, CameraEx ex) {
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.info("magnifier changed on=" + on);
+                            if (!on) {
+                                magIndex = -1;
+                            }
+                            listener.onMagnificationChanged(on);
+                        }
+                    });
+                }
+
+                @Override
+                public void onInfoUpdated(final boolean focusRing, android.util.Pair focusPos, CameraEx ex) {
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.onFocusRing(focusRing);
+                        }
+                    });
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setPreviewMagnificationListener", t);
+        }
         try {
             cameraEx.setSettingChangedListener(new CameraEx.SettingChangedListener() {
                 @Override
