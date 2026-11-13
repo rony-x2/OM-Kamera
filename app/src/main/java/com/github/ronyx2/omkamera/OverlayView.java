@@ -276,15 +276,6 @@ public class OverlayView extends View {
     private void drawLevel(Canvas c) {
         float roll = ui.roll();
         if (Float.isNaN(roll)) {
-            if (ui.levelSilent()) {
-                // Some models (a6000) have a sensor that apps cannot read
-                String t = "Wasserwaage: Kamera liefert keine Sensordaten";
-                textSize(Theme.TEXT_SMALL);
-                float tw = text.measureText(t);
-                float cx = vw / 2, y = getHeight() / 2f + 44 * u;
-                roundRect(c, cx - tw / 2 - 12 * u, y - 22 * u, cx + tw / 2 + 12 * u, y + 8 * u, Theme.PANEL);
-                drawText(c, t, cx - tw / 2, y, Theme.TEXT_DIM);
-            }
             return;
         }
         // Deviation from the nearest of 0, 90, 180, 270 degrees; the quadrant is the orientation
@@ -507,7 +498,17 @@ public class OverlayView extends View {
             outline(c, ml, mt, ml + mw, mt + mh, Theme.GUIDE, 1.5f * u);
             float cx = ml + mw * (pt[0] + 1000) / 2000f;
             float cy = mt + mh * (pt[1] + 1000) / 2000f;
-            outline(c, cx - mw / 12, cy - mh / 12, cx + mw / 12, cy + mh / 12, Theme.ACCENT, 2 * u);
+            float factor = 6f;
+            if (label != null) {
+                try {
+                    factor = Float.parseFloat(label.substring(1).replace(',', '.'));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            float hw = Math.max(3 * u, mw / factor / 2), hh = Math.max(3 * u, mh / factor / 2);
+            fill.setColor(0x55F0A030);
+            c.drawRect(cx - hw, cy - hh, cx + hw, cy + hh, fill);
+            outline(c, cx - hw, cy - hh, cx + hw, cy + hh, Theme.ACCENT, 1.5f * u);
         }
         String hint = "Pfeile: Ausschnitt  ·  Löschen: Mitte  ·  Mitte: nächste Stufe  ·  MENU: Ende";
         textSize(Theme.TEXT_SMALL);
@@ -879,8 +880,14 @@ public class OverlayView extends View {
             }
             fill.setColor(color);
             c.drawRect(pad, t + 6 * u, pad + 5 * u, t + tabH - 10 * u, fill);
-            textSize(Theme.TEXT_NORMAL);
             text.setTypeface(sel ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            // Long names like "Belichtung/Farbe" get a slightly smaller font instead of "…"
+            float size = Theme.TEXT_NORMAL;
+            textSize(size);
+            while (size > 15 && text.measureText(Ui.TABS[i]) > tabW - pad - 20 * u) {
+                size -= 1;
+                textSize(size);
+            }
             drawFitted(c, Ui.TABS[i], pad + 14 * u, t + tabH - 17 * u, tabW - pad - 18 * u, sel ? Theme.TEXT : Theme.TEXT_DIM);
         }
         text.setTypeface(Typeface.DEFAULT);

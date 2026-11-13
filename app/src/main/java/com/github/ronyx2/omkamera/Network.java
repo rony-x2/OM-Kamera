@@ -52,10 +52,18 @@ public class Network {
                 return null;
             }
             int mbit = info.getLinkSpeed();
-            String standard = mbit <= 0 ? "unbekannt"
-                    : mbit <= 11 ? "802.11b (Wi-Fi 1)"
-                    : mbit <= 54 ? "802.11g (Wi-Fi 3) oder n bei schwachem Signal"
-                    : "802.11n (Wi-Fi 4)";
+            // b and g have fixed rates; every other rate (e.g. 52, 58, 65, 72) is 802.11n
+            String standard;
+            if (mbit <= 0) {
+                standard = "unbekannt";
+            } else if (mbit == 1 || mbit == 2 || mbit == 5 || mbit == 11) {
+                standard = "802.11b (Wi-Fi 1)";
+            } else if (mbit == 6 || mbit == 9 || mbit == 12 || mbit == 18 || mbit == 24
+                    || mbit == 36 || mbit == 48 || mbit == 54) {
+                standard = "802.11g (Wi-Fi 3)";
+            } else {
+                standard = "802.11n (Wi-Fi 4)";
+            }
             int rssi = info.getRssi();
             int bars = WifiManager.calculateSignalLevel(rssi, 5);
             String ssid = info.getSSID();

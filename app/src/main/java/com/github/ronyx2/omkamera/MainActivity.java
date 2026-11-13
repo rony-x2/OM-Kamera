@@ -429,6 +429,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private android.hardware.SensorManager sensors;
     private final float[] gravity = new float[3];
     private boolean gravityValid;
+    private boolean levelHintShown;
     private int levelEvents;
 
     private final android.hardware.SensorEventListener levelListener = new android.hardware.SensorEventListener() {
@@ -470,7 +471,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                redraw();
+                // Some models (a6000) have a sensor that apps cannot read: say so once, briefly
+                if (ui.levelSilent() && !levelHintShown) {
+                    levelHintShown = true;
+                    ui.showMessage("Wasserwaage: Kamera liefert keine Sensordaten", true);
+                }
             }
         }, 3200);
         if (s != null) {
