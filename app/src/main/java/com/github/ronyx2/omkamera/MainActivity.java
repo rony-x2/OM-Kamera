@@ -31,6 +31,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private SurfaceHolder holder;
     private boolean surfaceReady;
     private final Beep focusBeep = new Beep();
+    private WriteMonitor writeMonitor;
     private final Handler handler = new Handler();
     private Network network;
     private DebugServer debugServer;
@@ -114,6 +115,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         ui = new Ui(session, new FnLayout(this), this, getSharedPreferences("ui", MODE_PRIVATE));
         overlay.setUi(ui);
         network = new Network(this);
+        writeMonitor = new WriteMonitor(new WriteMonitor.Listener() {
+            @Override
+            public void onWritingChanged(boolean writing) {
+                ui.setWriting(writing);
+            }
+        });
         debugServer = new DebugServer(new DebugServer.Provider() {
             @Override
             public String[] get(String path) {
@@ -167,6 +174,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             // The camera's own interface expects WLAN to be off
             network.setEnabled(false);
         }
+        writeMonitor.reset();
         session.close();
         focusBeep.release();
         super.onPause();
@@ -297,8 +305,19 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     }
 
     @Override
-    public void playFocusBeep() {
-        focusBeep.play();
+    public void playFocusBeep(Beep.Mode mode) {
+        focusBeep.play(mode);
+    }
+
+    @Override
+    public void onShot() {
+        writeMonitor.onShot();
+    }
+
+    @Override
+    public void onStored(String file) {
+        Log.info("stored " + file);
+        writeMonitor.onStored();
     }
 
     // ---- network and debug server ----
@@ -375,6 +394,18 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         sb.append("Fokus: Status ").append(ui.focusStatus()).append(" Felder ").append(Arrays.toString(ui.focusIndices())).append('\n');
         sb.append("Fokusfelder: ").append(session.focusFrames(overlay.getWidth(), overlay.getHeight()).size()).append('\n');
         sb.append("Oberfläche: ").append(overlay.getWidth()).append('x').append(overlay.getHeight()).append('\n');
+        // Which sensors Android exposes on this camera (e.g. for a level or orientation display)
+        try {
+            android.hardware.SensorManager sm = (android.hardware.SensorManager) getSystemService(SENSOR_SERVICE);
+            java.util.List<android.hardware.Sensor> sensors = sm.getSensorList(android.hardware.Sensor.TYPE_ALL);
+            sb.append("Sensoren: ").append(sensors.isEmpty() ? "keine" : "");
+            for (android.hardware.Sensor sensor : sensors) {
+                sb.append(sensor.getName()).append(" (Typ ").append(sensor.getType()).append("); ");
+            }
+            sb.append('\n');
+        } catch (Throwable t) {
+            sb.append("Sensoren: Fehler ").append(t).append('\n');
+        }
         sb.append('\n');
         CameraSession.Params p = session.current();
         for (Setting s : Settings.all()) {

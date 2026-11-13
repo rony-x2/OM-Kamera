@@ -59,6 +59,12 @@ public class CameraSession {
 
         /** Result of an AF run started by a half press (also in AF-C, where no frames are reported). */
         void onFocusResult(boolean success);
+
+        /** An exposure was made (status 0) */
+        void onShot();
+
+        /** The camera reports a stored picture file (platform V6 and newer only) */
+        void onStored(String file);
     }
 
     /** An AF frame in screen coordinates of the overlay. */
@@ -163,6 +169,23 @@ public class CameraSession {
             });
         } catch (Throwable t) {
             Log.error("setShutterListener", t);
+        }
+        try {
+            cameraEx.setStoreImageCompleteListener(new CameraEx.StoreImageCompleteListener() {
+                @Override
+                public void onDone(int status, final CameraEx.StoreImageInfo info, CameraEx ex) {
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.onStored(info != null ? info.DirectoryName + "/" + info.FileName : "?");
+                        }
+                    });
+                }
+            });
+            Log.info("store image listener available");
+        } catch (Throwable t) {
+            // Not available before platform V6 (e.g. ILCE-6000); the write monitor watches the card instead
+            Log.info("store image listener not available: " + t.getClass().getSimpleName());
         }
         try {
             cameraEx.setEquipmentCallback(new CameraEx.EquipmentCallback() {
@@ -440,6 +463,9 @@ public class CameraSession {
      */
     private void onShutter(int status) {
         Log.info("shutter status=" + status + (burstCapture ? " (burst)" : ""));
+        if (status == 0) {
+            listener.onShot();
+        }
         if (!burstCapture) {
             endCapture();
         }

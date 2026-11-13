@@ -33,7 +33,7 @@ public class Ui {
 
         void exitApp();
 
-        void playFocusBeep();
+        void playFocusBeep(Beep.Mode mode);
 
         /** Applies the standby setting. */
         void applyStandby();
@@ -78,7 +78,8 @@ public class Ui {
     private final Host host;
     private final SharedPreferences prefs;
 
-    private boolean beepEnabled;
+    private Beep.Mode beepMode;
+    private boolean writing;
     private boolean framesEnabled;
     private boolean wifiEnabled;
     private boolean debugEnabled;
@@ -116,7 +117,7 @@ public class Ui {
         this.fn = fn;
         this.host = host;
         this.prefs = prefs;
-        beepEnabled = prefs.getBoolean("beep", true);
+        beepMode = Beep.Mode.values()[Math.max(0, Math.min(2, prefs.getInt("beepmode", 1)))];
         framesEnabled = prefs.getBoolean("frames", true);
         wifiEnabled = prefs.getBoolean("wifi", false);
         debugEnabled = prefs.getBoolean("debug", false);
@@ -143,6 +144,13 @@ public class Ui {
     }
 
     public int batteryLevel() { return batteryLevel; }
+
+    public void setWriting(boolean w) {
+        writing = w;
+        host.redraw();
+    }
+
+    public boolean writing() { return writing; }
     public boolean batteryPlugged() { return batteryPlugged; }
 
     // ---- autofocus ----
@@ -174,8 +182,8 @@ public class Ui {
 
     /** First successful focus of a half press: green frames and one beep. */
     private void confirmFocus() {
-        if (focusResult != FocusResult.OK && beepEnabled) {
-            host.playFocusBeep();
+        if (focusResult != FocusResult.OK && beepMode != Beep.Mode.OFF) {
+            host.playFocusBeep(beepMode);
         }
         focusResult = FocusResult.OK;
     }
@@ -316,10 +324,13 @@ public class Ui {
                 out.add(new Row("Signalton bei Fokus", null, new Runnable() {
                     @Override
                     public void run() {
-                        beepEnabled = !beepEnabled;
-                        prefs.edit().putBoolean("beep", beepEnabled).apply();
+                        beepMode = Beep.Mode.values()[(beepMode.ordinal() + 1) % 3];
+                        prefs.edit().putInt("beepmode", beepMode.ordinal()).apply();
+                        if (beepMode != Beep.Mode.OFF) {
+                            host.playFocusBeep(beepMode);
+                        }
                     }
-                }, beepEnabled ? "Ein" : "Aus", -1));
+                }, beepMode == Beep.Mode.OFF ? "Aus" : beepMode == Beep.Mode.CAMERA ? "Kamera-Ton" : "Piepton", -1));
                 out.add(new Row("Fokusfelder anzeigen", null, new Runnable() {
                     @Override
                     public void run() {

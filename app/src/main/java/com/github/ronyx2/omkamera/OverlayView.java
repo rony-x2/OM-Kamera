@@ -24,6 +24,7 @@ public class OverlayView extends View {
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
+    private final android.graphics.Path bolt = new android.graphics.Path();
 
     public OverlayView(Context context) {
         super(context);
@@ -131,13 +132,43 @@ public class OverlayView extends View {
         }
         drawText(c, t, bl + bodyW + 6 * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, color);
         text.setTypeface(Typeface.DEFAULT);
+        if (ui.batteryPlugged()) {
+            // Charging: lightning bolt over the battery body
+            bolt.reset();
+            float cx = bl + (bodyW - 4 * u) / 2, cy = y + h / 2;
+            bolt.moveTo(cx + 2 * u, cy - 9 * u);
+            bolt.lineTo(cx - 5 * u, cy + 1 * u);
+            bolt.lineTo(cx, cy + 1 * u);
+            bolt.lineTo(cx - 2 * u, cy + 9 * u);
+            bolt.lineTo(cx + 5 * u, cy - 1 * u);
+            bolt.lineTo(cx, cy - 1 * u);
+            bolt.close();
+            fill.setColor(Theme.PANEL_SOLID);
+            stroke.setColor(Theme.PANEL_SOLID);
+            stroke.setStrokeWidth(3 * u);
+            c.drawPath(bolt, stroke);
+            fill.setColor(0xFFFFD040);
+            c.drawPath(bolt, fill);
+        }
 
+        float leftEdge = l;
         if (ui.wifiEnabled()) {
             String wl = ui.debugEnabled() ? "WLAN·DBG" : "WLAN";
             textSize(Theme.TEXT_SMALL);
             float ww = text.measureText(wl) + 2 * pad;
             roundRect(c, l - 6 * u - ww, y, l - 6 * u, y + h, Theme.PANEL);
             drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TAB_COLORS[3]);
+            leftEdge = l - 6 * u - ww;
+        }
+        if (ui.writing()) {
+            // Red dot while pictures are written to the card, gently pulsing
+            float dotR = 9 * u;
+            float cx = leftEdge - 6 * u - dotR - 4 * u;
+            int alpha = 160 + (int) (95 * Math.abs(Math.sin(android.os.SystemClock.uptimeMillis() / 300.0)));
+            roundRect(c, cx - dotR - 6 * u, y, cx + dotR + 6 * u, y + h, Theme.PANEL);
+            fill.setColor((alpha << 24) | 0xE53935);
+            c.drawCircle(cx, y + h / 2, dotR, fill);
+            postInvalidateDelayed(80);
         }
     }
 

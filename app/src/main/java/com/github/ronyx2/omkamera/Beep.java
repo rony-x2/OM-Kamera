@@ -1,17 +1,21 @@
 package com.github.ronyx2.omkamera;
 
+import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.ToneGenerator;
 
 /**
- * Plays the camera's own system sounds. The camera provides them as media URIs
- * ("SCALAR_A://" followed by the sound id, e.g. BEEP_ID_FOCUSLOCK), so they sound like the camera's own beeps.
+ * Focus confirmation sound. Either the camera's own system sound, which the camera provides as
+ * media URI ("SCALAR_A://" followed by the sound id, e.g. BEEP_ID_FOCUSLOCK), or a generated tone.
  */
 public class Beep {
-    /** Sound names as the camera knows them */
     public static final String FOCUS_LOCK = "BEEP_ID_FOCUSLOCK";
+
+    public enum Mode { OFF, CAMERA, TONE }
 
     private MediaPlayer player;
     private boolean prepared;
+    private ToneGenerator tone;
 
     public void prepare(String sound) {
         release();
@@ -22,6 +26,14 @@ public class Beep {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
                     prepared = true;
+                    Log.info("beep prepared");
+                }
+            });
+            player.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                @Override
+                public boolean onError(MediaPlayer mp, int what, int extra) {
+                    Log.info("beep error what=" + what + " extra=" + extra);
+                    return true;
                 }
             });
             player.prepareAsync();
@@ -29,20 +41,39 @@ public class Beep {
             Log.error("beep prepare " + sound, t);
             player = null;
         }
+        try {
+            tone = new ToneGenerator(AudioManager.STREAM_SYSTEM, 80);
+        } catch (Throwable t) {
+            Log.error("tone generator", t);
+            tone = null;
+        }
     }
 
-    public void play() {
-        if (player == null || !prepared) {
+    public void play(Mode mode) {
+        if (mode == Mode.OFF) {
             return;
         }
-        try {
-            if (player.isPlaying()) {
-                player.seekTo(0);
-            } else {
-                player.start();
+        if (mode == Mode.CAMERA && player != null && prepared) {
+            try {
+                if (player.isPlaying()) {
+                    player.seekTo(0);
+                } else {
+                    player.start();
+                }
+                Log.info("beep camera");
+                return;
+            } catch (Throwable t) {
+                Log.error("beep play", t);
             }
-        } catch (Throwable t) {
-            Log.error("beep play", t);
+        }
+        // Generated tone, also as fallback if the camera sound is not ready
+        if (tone != null) {
+            try {
+                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
+                Log.info("beep tone" + (mode == Mode.CAMERA ? " (camera sound not ready)" : ""));
+            } catch (Throwable t) {
+                Log.error("tone", t);
+            }
         }
     }
 
@@ -54,6 +85,13 @@ public class Beep {
             } catch (Throwable ignored) {
             }
             player = null;
+        }
+        if (tone != null) {
+            try {
+                tone.release();
+            } catch (Throwable ignored) {
+            }
+            tone = null;
         }
     }
 }
