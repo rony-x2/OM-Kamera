@@ -10,6 +10,7 @@ public final class Labels {
     static {
         // White balance
         put("auto", "Auto");
+        put("af-auto", "Auto");
         put("daylight", "Tageslicht");
         put("cloudy-daylight", "Wolkig");
         put("shade", "Schatten");
@@ -22,6 +23,7 @@ public final class Labels {
         put("flash", "Blitz");
         put("twilight", "Dämmerung");
         put("color-temperature", "Farbtemp.");
+        put("color-temp", "Farbtemp.");
         put("custom", "Benutzer");
         put("custom1", "Benutzer 1");
         put("custom2", "Benutzer 2");
@@ -42,6 +44,8 @@ public final class Labels {
         // Metering
         put("multi", "Multi");
         put("spot", "Spot");
+        put("center-weighted", "Mittenbetont");
+        put("center-spot", "Spot");
         // DRO
         put("off", "Aus");
         put("on", "Ein");

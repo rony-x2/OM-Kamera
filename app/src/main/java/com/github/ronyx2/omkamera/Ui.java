@@ -69,9 +69,10 @@ public class Ui {
         }
     }
 
-    public static final String[] TABS = {"Aufnahme", "Belichtung", "Fokus", "Fn-Raster", "System"};
+    public static final String[] TABS = {"Aufnahme", "Belichtung", "Fokus", "Fn-Raster", "App", "Info"};
     private static final int TAB_FN = 3;
     private static final int TAB_SYSTEM = 4;
+    private static final int TAB_INFO = 5;
 
     private final CameraSession session;
     private final FnLayout fn;
@@ -323,13 +324,23 @@ public class Ui {
                     }
                 }, "", -1));
                 break;
-            case TAB_SYSTEM:
+            case TAB_INFO: {
                 DeviceInfo d = DeviceInfo.getInstance();
                 out.add(new Row("Modell", null, null, safe(d.getModel()), -1));
                 out.add(new Row("Firmware", null, null, safe(d.getFirmwareVersion()), -1));
-                out.add(new Row("API-Version", null, null, String.valueOf(d.getApiVersion()), -1));
+                out.add(new Row("Plattform (API)", null, null, String.valueOf(d.getApiVersion()), -1));
                 out.add(new Row("Android", null, null, Build.VERSION.RELEASE, -1));
                 out.add(new Row("App-Version", null, null, BuildConfig.VERSION_NAME, -1));
+                out.add(new Row("WLAN-Status", null, null, host.wifiStatus(), -1));
+                out.add(new Row("App beenden", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        host.exitApp();
+                    }
+                }, "", -1));
+                break;
+            }
+            case TAB_SYSTEM:
                 out.add(new Row("Signalton bei Fokus", null, new Runnable() {
                     @Override
                     public void run() {
@@ -380,7 +391,6 @@ public class Ui {
                         host.applyNetwork();
                     }
                 }, wifiEnabled ? "Ein" : "Aus", -1));
-                out.add(new Row("WLAN-Status", null, null, host.wifiStatus(), -1));
                 out.add(new Row("Fernsteuerung (Browser)", null, new Runnable() {
                     @Override
                     public void run() {
@@ -410,12 +420,7 @@ public class Ui {
                         host.applyNetwork();
                     }
                 }, debugEnabled ? (host.debugAddress() != null ? host.debugAddress() : "Ein, wartet auf WLAN") : "Aus", -1));
-                out.add(new Row("App beenden", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        host.exitApp();
-                    }
-                }, "", -1));
+                
                 break;
             default:
                 break;

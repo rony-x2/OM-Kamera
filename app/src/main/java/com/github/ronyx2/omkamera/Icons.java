@@ -52,11 +52,8 @@ public final class Icons {
             corners(c, cx, cy, s * 0.8f, s * 0.6f, s * 0.18f);
             text(c, "manual".equals(v) ? "MF" : "AF", cx, cy, s * 0.36f);
             return true;
-        } else if ("quality".equals(id)) {
-            String t = v.contains("raw") && v.contains("jpeg") ? "R+J" : v.contains("raw") ? "RAW" : "JPG";
-            badge(c, t, cx, cy, s);
-            return true;
         }
+        // Quality and other text-like values are shown as text by the caller, which reads better
         return false;
     }
 
@@ -81,9 +78,7 @@ public final class Icons {
             return true;
         }
         if (v.contains("bracket")) {
-            rect(c, cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
-            text(c, "BRK", cx, cy, s * 0.22f);
-            return true;
+            return false;
         }
         rect(c, cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
         return true;
@@ -122,8 +117,7 @@ public final class Icons {
 
     private static boolean whiteBalance(Canvas c, String v, float cx, float cy, float s) {
         if (v.equals("auto")) {
-            text(c, "AWB", cx, cy, s * 0.34f);
-            return true;
+            return false;
         }
         if (v.equals("daylight")) {
             sun(c, cx, cy, s);
@@ -161,14 +155,8 @@ public final class Icons {
             bolt(c, cx, cy, s);
             return true;
         }
-        if (v.contains("temperature")) {
-            text(c, "K", cx, cy, s * 0.5f);
-            return true;
-        }
-        if (v.startsWith("custom")) {
-            rect(c, cx - s * 0.3f, cy - s * 0.22f, cx + s * 0.3f, cy + s * 0.22f);
-            text(c, "C" + v.substring(6), cx, cy, s * 0.3f);
-            return true;
+        if (v.contains("temp") || v.startsWith("custom")) {
+            return false;
         }
         return false;
     }

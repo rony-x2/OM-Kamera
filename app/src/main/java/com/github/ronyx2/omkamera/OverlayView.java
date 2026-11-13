@@ -58,7 +58,6 @@ public class OverlayView extends View {
                 break;
             case FN:
             case FN_EDIT:
-                drawFocusFrames(c);
                 drawBattery(c);
                 drawExposureBar(c, p);
                 drawFnGrid(c, p);
@@ -346,7 +345,7 @@ public class OverlayView extends View {
             textSize(Theme.TEXT_SMALL);
             drawFitted(c, s.shortLabel, l + 6 * u, t + 22 * u, cellW - 12 * u, labelColor);
             String value = available ? s.safeGet(p) : null;
-            float iconSize = Theme.ICON * u;
+            float iconSize = Theme.ICON * 1.15f * u;
             if (available && Icons.draw(c, s.id, value, l + cellW / 2, t + cellH - iconSize / 2 - 6 * u, iconSize, valueColor)) {
                 // Icon replaces the value text
             } else {
@@ -366,23 +365,46 @@ public class OverlayView extends View {
         }
     }
 
+    /** All values of a setting in one line, the current one highlighted, scrolled to stay visible. */
     private void drawValueStrip(Canvas c, Setting s, CameraSession.Params p, float l, float t, float r, float b) {
         roundRect(c, l, t, r, b, Theme.PANEL_SOLID);
         List<String> values = s.safeValues(p);
         String current = s.safeGet(p);
-        int i = values.indexOf(current);
+        int cur = Math.max(0, values.indexOf(current));
         textSize(Theme.TEXT_SMALL);
         drawText(c, s.label, l + 10 * u, t + 20 * u, Theme.TEXT_DIM);
-        String prev = i > 0 ? "‹ " + s.display(p, values.get(i - 1)) : "";
-        String next = i >= 0 && i < values.size() - 1 ? s.display(p, values.get(i + 1)) + " ›" : "";
-        float mid = (l + r) / 2;
+        String pos = (cur + 1) + "/" + values.size();
+        drawText(c, pos, r - 10 * u - text.measureText(pos), t + 20 * u, Theme.TEXT_DIM);
+
         textSize(Theme.TEXT_NORMAL);
-        drawText(c, prev, mid - 130 * u - text.measureText(prev), b - 12 * u, Theme.TEXT_DIM);
-        drawText(c, next, mid + 130 * u, b - 12 * u, Theme.TEXT_DIM);
-        textSize(Theme.TEXT_LARGE);
-        text.setTypeface(Typeface.DEFAULT_BOLD);
-        String cur = s.currentText(p);
-        drawText(c, cur, mid - text.measureText(cur) / 2, b - 12 * u, Theme.ACCENT);
+        float gap = 18 * u;
+        float base = b - 12 * u;
+        float[] widths = new float[values.size()];
+        for (int i = 0; i < values.size(); i++) {
+            text.setTypeface(i == cur ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            widths[i] = text.measureText(s.display(p, values.get(i)));
+        }
+        // Start so that the current value sits in the middle of the strip
+        float mid = (l + r) / 2;
+        float x = mid - widths[cur] / 2;
+        for (int i = cur - 1; i >= 0; i--) {
+            x -= widths[i] + gap;
+        }
+        c.save();
+        c.clipRect(l + 6 * u, t, r - 6 * u, b);
+        for (int i = 0; i < values.size(); i++) {
+            String v = s.display(p, values.get(i));
+            if (i == cur) {
+                roundRect(c, x - 8 * u, base - Theme.TEXT_NORMAL * u - 2 * u, x + widths[i] + 8 * u, base + 7 * u, Theme.ACCENT);
+                text.setTypeface(Typeface.DEFAULT_BOLD);
+                drawText(c, v, x, base, Theme.ACCENT_TEXT);
+            } else {
+                text.setTypeface(Typeface.DEFAULT);
+                drawText(c, v, x, base, Theme.TEXT_DIM);
+            }
+            x += widths[i] + gap;
+        }
+        c.restore();
         text.setTypeface(Typeface.DEFAULT);
     }
 
@@ -417,7 +439,7 @@ public class OverlayView extends View {
 
         // Rows
         float left = tabW + 2 * pad;
-        float right = vw - pad;
+        float right = vw - pad - 6 * u;
         List<Ui.Row> rows = ui.rows();
         int visible = (int) ((getHeight() - 2 * pad) / rowH);
         int first = Math.max(0, Math.min(ui.row() - visible / 2, rows.size() - visible));
@@ -444,6 +466,17 @@ public class OverlayView extends View {
                         editing ? Theme.ACCENT : available ? Theme.TEXT_DIM : Theme.TEXT_DISABLED);
                 text.setTypeface(Typeface.DEFAULT);
             }
+        }
+
+        // Scroll indicator when the list is longer than the screen
+        if (rows.size() > visible) {
+            float trackT = pad, trackB = getHeight() - pad;
+            float th = (trackB - trackT) * visible / rows.size();
+            float ty = trackT + (trackB - trackT - th) * first / Math.max(1, rows.size() - visible);
+            fill.setColor(0x33FFFFFF);
+            c.drawRect(vw - 4 * u, trackT, vw - 1 * u, trackB, fill);
+            fill.setColor(Theme.ACCENT);
+            c.drawRect(vw - 4 * u, ty, vw - 1 * u, ty + th, fill);
         }
 
         if (ui.focus() == Ui.MenuFocus.PICK) {

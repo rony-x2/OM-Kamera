@@ -16,8 +16,8 @@ public final class Theme {
     public static final int TEXT_DISABLED = 0x80FFFFFF;
     public static final int PANEL = 0xCC101317;
     public static final int PANEL_SOLID = 0xEE101317;
-    public static final int CELL = 0xAA20252B;
-    public static final int CELL_DISABLED = 0x6620252B;
+    public static final int CELL = 0xDD20252B;
+    public static final int CELL_DISABLED = 0x9920252B;
     public static final int ACCENT = 0xFFF0A030;
     public static final int ACCENT_TEXT = 0xFF101317;
     public static final int LINE = 0x55FFFFFF;
@@ -33,7 +33,8 @@ public final class Theme {
         0xFFF0A030, // Belichtung
         0xFF4CB782, // Fokus
         0xFF4D8FE0, // Fn-Raster
-        0xFF9AA0A8, // System
+        0xFF9AA0A8, // App
+        0xFF6E7681, // Info
     };
 
     public static float unit(int viewHeight) {

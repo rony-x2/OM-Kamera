@@ -80,6 +80,11 @@ public final class Settings {
             protected void set(CameraSession.Params e, String v) {
                 e.params.setWhiteBalance(v);
             }
+
+            @Override
+            public String display(String v) {
+                return "auto".equals(v) ? "AWB" : Labels.of(v);
+            }
         });
 
         add(new Setting("metering", "Messmethode", "Messung", Setting.Category.EXPOSURE) {
