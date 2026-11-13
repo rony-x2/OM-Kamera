@@ -506,6 +506,20 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             redraw();
             return "ok";
         }
+        if (path.equals("/api/key")) {
+            // Camera keys from the browser, e.g. to open the Fn grid or the menu remotely
+            Keys.Key key;
+            try {
+                key = Keys.Key.valueOf(String.valueOf(r.param("name")));
+            } catch (IllegalArgumentException e) {
+                return "unbekannte Taste";
+            }
+            if (key == Keys.Key.SHUTTER_HALF || key == Keys.Key.SHUTTER_FULL) {
+                return "Auslöser über /api/af und /api/shoot";
+            }
+            ui.onKey(key);
+            return "ok";
+        }
         if (path.equals("/api/af")) {
             if ("1".equals(r.param("on"))) {
                 session.startFocus();
@@ -558,6 +572,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         o.put("focus", ui.focusResult().name());
         o.put("remote", ui.remoteEnabled());
         o.put("directShutter", session.isDirectShutter());
+        o.put("ui", ui.state().name());
+        org.json.JSONArray ff = new org.json.JSONArray();
+        for (CameraSession.FocusFrame f : session.focusFrames(overlay.getWidth(), overlay.getHeight())) {
+            ff.put(f.index + (f.enabled ? "*" : "") + ":" + f.rect.toShortString());
+        }
+        o.put("frames", ff);
         org.json.JSONArray list = new org.json.JSONArray();
         for (Setting s : Settings.all()) {
             org.json.JSONObject j = new org.json.JSONObject();

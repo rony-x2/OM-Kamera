@@ -48,7 +48,7 @@ public final class Theme {
     /** Height of an Fn cell */
     public static final float CELL_H = 74;
     /** Size of icons in the Fn grid and in the status line */
-    public static final float ICON = 34;
+    public static final float ICON = 38;
     public static final float PAD = 8;
     public static final float RADIUS = 6;
 }

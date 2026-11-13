@@ -204,13 +204,29 @@ public class OverlayView extends View {
                 enabled++;
             }
         }
+        // Flexible spot: index 1 is the range the spot can move in, the last frame is the spot itself
+        String mode = ui.session().focusAreaMode();
+        boolean spotMode = mode != null && (mode.contains("flex") || mode.equals("spot") || mode.equals("local"));
+        int spotIndex = -1;
+        if (spotMode) {
+            for (CameraSession.FocusFrame f : frames) {
+                if (f.enabled && f.index > spotIndex) {
+                    spotIndex = f.index;
+                }
+            }
+            enabled = 1;
+        }
         for (CameraSession.FocusFrame f : frames) {
-            boolean active = f.index != 0 ? f.enabled && enabled == 1 : enabled != 1;
+            boolean active = spotMode ? f.index == spotIndex : f.index != 0 ? f.enabled && enabled == 1 : enabled != 1;
             boolean isFocused = byIndex ? contains(focused, f.index) : succeeded && active;
             if (isFocused) {
                 frame(c, f, Theme.AF_OK, 3 * u, f.index == 0 ? 0.18f : 0.5f);
             } else if (!locked) {
-                if (f.index == 0 && enabled != 1) {
+                if (spotMode) {
+                    if (f.index == spotIndex) {
+                        frame(c, f, warn ? Theme.AF_WARN : Theme.AF_IDLE, 2.5f * u, 0.5f);
+                    }
+                } else if (f.index == 0 && enabled != 1) {
                     frame(c, f, warn ? Theme.AF_WARN : 0x88FFFFFF, 2 * u, 0.12f);
                 } else if (f.index != 0 && f.enabled && enabled == 1) {
                     frame(c, f, warn ? Theme.AF_WARN : Theme.AF_IDLE, 2.5f * u, 0.5f);

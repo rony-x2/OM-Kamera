@@ -690,6 +690,14 @@ public class CameraSession {
         return out;
     }
 
+    public String focusAreaMode() {
+        try {
+            return current != null ? current.mod.getFocusAreaMode() : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /** Invalidates the cached AF frames, e.g. after the AF area moved. */
     public void invalidateFocusFrames() {
         focusFramesKey = null;
