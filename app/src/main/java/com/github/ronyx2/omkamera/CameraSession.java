@@ -420,6 +420,68 @@ public class CameraSession {
         return 1f;
     }
 
+    /** Lens keys that sent events since the lens was attached (focus hold, zoom lever, aperture ring) */
+    private final java.util.Set<String> lensKeysSeen = new java.util.LinkedHashSet<String>();
+
+    public void lensKeySeen(String name) {
+        if (lensKeysSeen.add(name)) {
+            Log.info("lens key " + name);
+        }
+    }
+
+    /** Rows for the lens page: label and value */
+    public java.util.List<String[]> lensDetails() {
+        java.util.List<String[]> out = new java.util.ArrayList<String[]>();
+        CameraEx.LensInfo l = lens();
+        if (l == null || l.LensName == null || l.LensName.trim().length() == 0) {
+            out.add(new String[]{"Objektiv", "keine Daten (Adapter oder manuelles Objektiv)"});
+            return out;
+        }
+        String name = l.LensName.trim();
+        float scale = focalScale();
+        out.add(new String[]{"Name", name});
+        out.add(new String[]{"Anschluss", "E-mount".equals(l.LensType) ? "E-Mount" : "A-mount".equals(l.LensType) ? "A-Mount (Adapter)" : String.valueOf(l.LensType)});
+        if (l.FocalLength != null && l.FocalLength.wide > 0) {
+            int w = Math.round(l.FocalLength.wide / scale), t = Math.round(l.FocalLength.tele / scale);
+            out.add(new String[]{"Brennweite", w == t ? w + " mm (Festbrennweite)" : w + "–" + t + " mm"});
+            // APS-C: equivalent focal length on full frame
+            out.add(new String[]{"Kleinbild-Äquivalent", w == t ? Math.round(w * 1.5f) + " mm" : Math.round(w * 1.5f) + "–" + Math.round(t * 1.5f) + " mm"});
+        }
+        float f = focalLength();
+        if (f > 0) {
+            out.add(new String[]{"Aktuelle Brennweite", Math.round(f) + " mm"});
+        }
+        if (l.MinFValue != null && l.MinFValue.wide > 0) {
+            out.add(new String[]{"Lichtstärke", fRange(l.MinFValue)});
+        }
+        if (l.MaxFValue != null && l.MaxFValue.wide > 0) {
+            out.add(new String[]{"Kleinste Blende", fRange(l.MaxFValue)});
+        }
+        if (l.FixedAperture) {
+            out.add(new String[]{"Blende", "fest"});
+        }
+        String n = " " + name.toUpperCase(java.util.Locale.US) + " ";
+        out.add(new String[]{"Bildstabilisator", n.contains("OSS") ? "Ja (OSS im Objektiv)" : "nicht angegeben"});
+        out.add(new String[]{"Motorzoom", n.contains(" PZ ") ? "Ja (Power Zoom)" : "Nein"});
+        String series = n.contains(" GM ") ? "G Master" : n.contains(" ZA ") ? "Zeiss" : n.contains(" G ") ? "G" : null;
+        if (series != null) {
+            out.add(new String[]{"Baureihe", series});
+        }
+        if (l.PhaseShiftSensor != null) {
+            out.add(new String[]{"Phasen-AF", l.PhaseShiftSensor});
+        }
+        out.add(new String[]{"Objektiv-Firmware", String.valueOf(l.LensVersion)});
+        out.add(new String[]{"Tasten am Objektiv", lensKeysSeen.isEmpty() ? "noch keine Taste gemeldet" : android.text.TextUtils.join(", ", lensKeysSeen)});
+        return out;
+    }
+
+    private String fRange(CameraEx.WideTele v) {
+        // Aperture values come as f-number × 10
+        String w = String.format(java.util.Locale.US, "F%.1f", v.wide / 10.0).replace('.', ',');
+        String t = String.format(java.util.Locale.US, "F%.1f", v.tele / 10.0).replace('.', ',');
+        return v.wide == v.tele ? w : w + "–" + t.substring(1);
+    }
+
     /** "FE 24-105mm F4 G OSS · 50 mm" or null without lens data */
     public String lensText() {
         CameraEx.LensInfo l = lens();
@@ -673,6 +735,7 @@ public class CameraSession {
                             // A lens change also arrives here: read the lens data again
                             lensRead = false;
                             focalRaw = -1;
+                            lensKeysSeen.clear();
                             if (type == CameraEx.EquipmentCallback.DEVICE_TYPE_INTERNAL_FLASH) {
                                 internalFlash = status == CameraEx.EquipmentCallback.DEVICE_AVAILABLE;
                             } else if (type == CameraEx.EquipmentCallback.DEVICE_TYPE_EXTERNAL_FLASH) {

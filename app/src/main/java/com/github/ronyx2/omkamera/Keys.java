@@ -11,6 +11,10 @@ public final class Keys {
         C1, C2, C3,
         /** AEL key (a6000, a7II) */
         AEL,
+        /** Focus hold button on the lens (G and GM lenses) */
+        LENS_HOLD,
+        /** Zoom lever (power zoom lenses, zoom lever of the camera) */
+        ZOOM_TELE, ZOOM_WIDE,
         /** Control wheel on the back (a6000, a7II) */
         WHEEL_CW, WHEEL_CCW,
         /** Upper / front dial */
@@ -42,6 +46,9 @@ public final class Keys {
             case 623: return Key.C2;
             case 588: return Key.C3;
             case 532: return Key.AEL;
+            case 653: return Key.LENS_HOLD;
+            case 610: return Key.ZOOM_TELE;
+            case 611: return Key.ZOOM_WIDE;
             case 522: return Key.WHEEL_CW;
             case 523: return Key.WHEEL_CCW;
             case 525: return Key.DIAL1_CW;

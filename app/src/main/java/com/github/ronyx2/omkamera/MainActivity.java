@@ -249,6 +249,14 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         Log.info("key " + key + " scan=" + event.getScanCode() + " code=" + keyCode
                 + (event.getRepeatCount() > 0 ? " repeat=" + event.getRepeatCount() : ""));
         int scan = event.getScanCode();
+        // Buttons on the lens: remember them for the lens page
+        if (scan == 653) {
+            session.lensKeySeen("Fokus-Haltetaste");
+        } else if (scan == 610 || scan == 611) {
+            session.lensKeySeen("Zoomwippe");
+        } else if (scan >= 650 && scan <= 652) {
+            session.lensKeySeen("Blendenring");
+        }
         if (scan == ModeDial.CHANGED) {
             // The dial reports a change; the position is read from the key status
             ui.onModeDial(ModeDial.position());

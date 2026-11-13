@@ -45,7 +45,7 @@ public final class KeyFunctions {
     /** Keys that can get a function, with their names in the menu and the defaults */
     public static final Keys.Key[] KEYS = {
         Keys.Key.C1, Keys.Key.C2, Keys.Key.DELETE, Keys.Key.AEL, Keys.Key.ENTER,
-        Keys.Key.LEFT, Keys.Key.RIGHT, Keys.Key.DOWN
+        Keys.Key.LEFT, Keys.Key.RIGHT, Keys.Key.DOWN, Keys.Key.LENS_HOLD
     };
 
     public static String keyName(Keys.Key k) {
@@ -58,6 +58,7 @@ public final class KeyFunctions {
             case LEFT: return "Rad links";
             case RIGHT: return "Rad rechts";
             case DOWN: return "Rad unten";
+            case LENS_HOLD: return "Fokus-Haltetaste (Objektiv)";
             default: return k.name();
         }
     }
@@ -72,6 +73,7 @@ public final class KeyFunctions {
             case LEFT: return Function.DRIVE;
             case RIGHT: return Function.ISO;
             case DOWN: return Function.EV;
+            case LENS_HOLD: return Function.AEL_HOLD;
             default: return Function.NONE;
         }
     }

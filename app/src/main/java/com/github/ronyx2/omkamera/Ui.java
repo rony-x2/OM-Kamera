@@ -604,8 +604,21 @@ public class Ui {
     private void mainRows(List<Row> out) {
         out.add(Row.info("Modus · Zeit · Blende", modeName() + "  ·  " + session.shutterText() + "  ·  " + session.apertureText()));
         out.add(Row.info("Restaufnahmen", remainingShots >= 0 ? String.valueOf(remainingShots) : "–"));
-        String lens = session.lensText();
-        out.add(Row.info("Objektiv", lens != null ? lens : "keine Daten (Adapter oder manuelles Objektiv)"));
+        out.add(Row.sub("Objektiv", lensSummary(), new Sub() {
+            @Override
+            public String title() {
+                return "Objektiv";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                for (String[] d : session.lensDetails()) {
+                    r.add(Row.info(d[0], d[1]));
+                }
+                return r;
+            }
+        }));
         groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "style",
                 "afmf", "afmode", "afarea");
     }
@@ -687,6 +700,11 @@ public class Ui {
 
     private static String mfAssistText(int v) {
         return v == 0 ? "Aus" : v < 0 ? "Ein, bleibt bis Tastendruck" : "Ein, " + v + " s nach dem Drehen";
+    }
+
+    private String lensSummary() {
+        String t = session.lensText();
+        return t != null ? t : "keine Daten";
     }
 
     interface Fmt {
@@ -983,8 +1001,21 @@ public class Ui {
         out.add(Row.header("Info"));
         DeviceInfo d = DeviceInfo.getInstance();
         out.add(Row.info("Modell", safe(d.getModel())));
-        String lensInfo = session.lensText();
-        out.add(Row.info("Objektiv", lensInfo != null ? lensInfo : "keine Daten"));
+        out.add(Row.sub("Objektiv", lensSummary(), new Sub() {
+            @Override
+            public String title() {
+                return "Objektiv";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                for (String[] d : session.lensDetails()) {
+                    r.add(Row.info(d[0], d[1]));
+                }
+                return r;
+            }
+        }));
         out.add(Row.info("Firmware", safe(d.getFirmwareVersion())));
         out.add(Row.info("Plattform (API)", String.valueOf(d.getApiVersion())));
         out.add(Row.info("Android", Build.VERSION.RELEASE));
