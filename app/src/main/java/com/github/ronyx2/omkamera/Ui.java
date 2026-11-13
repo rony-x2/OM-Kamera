@@ -1,5 +1,6 @@
 package com.github.ronyx2.omkamera;
 
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.SystemClock;
 
@@ -31,7 +32,12 @@ public class Ui {
         void redraw();
 
         void exitApp();
+
+        void playFocusBeep();
     }
+
+    /** What a dial changes in the current exposure mode */
+    public enum DialRole { SHUTTER, APERTURE, EV, SHIFT, NONE }
 
     /** A row in the menu. */
     public static final class Row {
@@ -57,6 +63,14 @@ public class Ui {
     private final CameraSession session;
     private final FnLayout fn;
     private final Host host;
+    private final SharedPreferences prefs;
+
+    private boolean beepEnabled;
+    private boolean framesEnabled;
+
+    // Autofocus result
+    private int focusStatus;
+    private int[] focusIndices = new int[0];
 
     private State state = State.LIVE;
     private int fnIndex = 0;
@@ -73,10 +87,75 @@ public class Ui {
     private boolean messageWarn;
     private long messageUntil;
 
-    public Ui(CameraSession session, FnLayout fn, Host host) {
+    public Ui(CameraSession session, FnLayout fn, Host host, SharedPreferences prefs) {
         this.session = session;
         this.fn = fn;
         this.host = host;
+        this.prefs = prefs;
+        beepEnabled = prefs.getBoolean("beep", true);
+        framesEnabled = prefs.getBoolean("frames", true);
+    }
+
+    // ---- autofocus ----
+
+    public void onFocus(int status, int[] indices) {
+        boolean newLock = status == 1 && focusStatus != 1;
+        focusStatus = status;
+        focusIndices = indices;
+        if (newLock && beepEnabled) {
+            host.playFocusBeep();
+        }
+        if (status == 0) {
+            // The AF area may have moved (flexible spot), read it again next time
+            session.invalidateFocusFrames();
+        }
+        host.redraw();
+    }
+
+    public int focusStatus() { return focusStatus; }
+    public int[] focusIndices() { return focusIndices; }
+    public boolean framesEnabled() { return framesEnabled; }
+
+    // ---- dials ----
+
+    /** Role of the upper/front dial */
+    public DialRole dial1Role() {
+        switch (session.exposureMode()) {
+            case M: case S: return DialRole.SHUTTER;
+            case A: return DialRole.APERTURE;
+            case P: return DialRole.SHIFT;
+            default: return DialRole.NONE;
+        }
+    }
+
+    /** Role of the control wheel and the rear dial */
+    public DialRole dial2Role() {
+        switch (session.exposureMode()) {
+            case M: return DialRole.APERTURE;
+            case S: case A: case P: return DialRole.EV;
+            default: return DialRole.NONE;
+        }
+    }
+
+    private void turn(DialRole role, int dir) {
+        switch (role) {
+            case SHUTTER: session.adjustShutterSpeed(dir); break;
+            case APERTURE: session.adjustAperture(dir); break;
+            case SHIFT: session.adjustProgramShift(dir); break;
+            case EV: stepSetting(Settings.get("ev"), dir); break;
+            default:
+                showMessage("Im Modus " + modeName() + " nicht einstellbar", true);
+                break;
+        }
+    }
+
+    public String modeName() {
+        CameraSession.ExposureMode m = session.exposureMode();
+        if (m != CameraSession.ExposureMode.OTHER) {
+            return m.letter;
+        }
+        String scene = session.sceneMode();
+        return scene != null ? scene : "?";
     }
 
     // ---- read access for drawing ----
@@ -138,6 +217,20 @@ public class Ui {
                 out.add(new Row("API-Version", null, null, String.valueOf(d.getApiVersion()), -1));
                 out.add(new Row("Android", null, null, Build.VERSION.RELEASE, -1));
                 out.add(new Row("App-Version", null, null, BuildConfig.VERSION_NAME, -1));
+                out.add(new Row("Signalton bei Fokus", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        beepEnabled = !beepEnabled;
+                        prefs.edit().putBoolean("beep", beepEnabled).apply();
+                    }
+                }, beepEnabled ? "Ein" : "Aus", -1));
+                out.add(new Row("Fokusfelder anzeigen", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        framesEnabled = !framesEnabled;
+                        prefs.edit().putBoolean("frames", framesEnabled).apply();
+                    }
+                }, framesEnabled ? "Ein" : "Aus", -1));
                 out.add(new Row("App beenden", null, new Runnable() {
                     @Override
                     public void run() {
@@ -199,10 +292,10 @@ public class Ui {
                 infoVisible = !infoVisible;
                 return true;
             case DIAL1_CW: case DIAL1_CCW:
-                session.adjustShutterSpeed(Keys.direction(key));
+                turn(dial1Role(), Keys.direction(key));
                 return true;
             case DIAL2_CW: case DIAL2_CCW: case WHEEL_CW: case WHEEL_CCW:
-                session.adjustAperture(Keys.direction(key));
+                turn(dial2Role(), Keys.direction(key));
                 return true;
             case DIAL3_CW: case DIAL3_CCW:
                 stepSetting(Settings.get("ev"), Keys.direction(key));

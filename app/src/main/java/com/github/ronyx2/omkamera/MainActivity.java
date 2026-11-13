@@ -17,6 +17,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private OverlayView overlay;
     private SurfaceHolder holder;
     private boolean surfaceReady;
+    private final Beep focusBeep = new Beep();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,7 +38,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         setContentView(root);
 
         session = new CameraSession(this);
-        ui = new Ui(session, new FnLayout(this), this);
+        ui = new Ui(session, new FnLayout(this), this, getSharedPreferences("ui", MODE_PRIVATE));
         overlay.setUi(ui);
     }
 
@@ -48,6 +49,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         SonySystem.notifyAppInfo(this);
         SonySystem.setNormalAutoPowerOff(this);
         SonySystem.useOverlayFrameBuffer();
+        focusBeep.prepare(Beep.FOCUS_LOCK);
         try {
             session.open();
         } catch (Throwable t) {
@@ -65,6 +67,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     protected void onPause() {
         Log.info("onPause");
         session.close();
+        focusBeep.release();
         super.onPause();
     }
 
@@ -93,8 +96,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         Keys.Key key = Keys.map(event);
+        // Every key with its codes, to learn the layout of each camera model
+        Log.info("key " + key + " scan=" + event.getScanCode() + " code=" + keyCode
+                + (event.getRepeatCount() > 0 ? " repeat=" + event.getRepeatCount() : ""));
         if (key == Keys.Key.OTHER) {
-            Log.info("unknown key scan=" + event.getScanCode() + " code=" + keyCode);
             return super.onKeyDown(keyCode, event);
         }
         try {
@@ -128,6 +133,17 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public void onExposureChanged() {
         redraw();
+    }
+
+    @Override
+    public void onFocus(int status, int[] indices) {
+        Log.info("focus status=" + status + " frames=" + java.util.Arrays.toString(indices));
+        ui.onFocus(status, indices);
+    }
+
+    @Override
+    public void playFocusBeep() {
+        focusBeep.play();
     }
 
     @Override

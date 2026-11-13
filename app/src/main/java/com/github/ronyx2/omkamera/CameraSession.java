@@ -5,7 +5,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.SurfaceHolder;
 
+import android.graphics.Rect;
+
 import com.sony.scalar.hardware.CameraEx;
+import com.sony.scalar.hardware.avio.DisplayManager;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Owns the camera: opening, live view, reading and writing parameters, exposure values.
@@ -43,6 +49,37 @@ public class CameraSession {
 
         /** Shutter speed or aperture changed. */
         void onExposureChanged();
+
+        /**
+         * Result of the camera's autofocus.
+         * @param status one of CameraEx.AutoFocusDoneListener.STATUS_*
+         * @param indices indices of the focused frames (see {@link FocusFrame#index})
+         */
+        void onFocus(int status, int[] indices);
+    }
+
+    /** An AF frame in screen coordinates of the overlay. */
+    public static final class FocusFrame {
+        public final int index;
+        public final Rect rect;
+        public final boolean enabled;
+
+        FocusFrame(int index, Rect rect, boolean enabled) {
+            this.index = index;
+            this.rect = rect;
+            this.enabled = enabled;
+        }
+    }
+
+    /** Exposure modes as reported in the scene mode parameter */
+    public enum ExposureMode {
+        P("P"), A("A"), S("S"), M("M"), AUTO("AUTO"), OTHER("");
+
+        public final String letter;
+
+        ExposureMode(String letter) {
+            this.letter = letter;
+        }
     }
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -50,6 +87,9 @@ public class CameraSession {
 
     private CameraEx cameraEx;
     private Camera camera;
+    private DisplayManager displayManager;
+    private List<FocusFrame> focusFrames = new ArrayList<FocusFrame>();
+    private String focusFramesKey;
     private Params current;
     private boolean previewRunning;
 
@@ -72,6 +112,11 @@ public class CameraSession {
         Log.info("open camera");
         cameraEx = CameraEx.open(0, null);
         camera = cameraEx.getNormalCamera();
+        try {
+            displayManager = new DisplayManager();
+        } catch (Throwable t) {
+            Log.error("DisplayManager", t);
+        }
         refresh();
         registerListeners();
     }
@@ -92,6 +137,21 @@ public class CameraSession {
             });
         } catch (Throwable t) {
             Log.error("setSettingChangedListener", t);
+        }
+        try {
+            cameraEx.setAutoFocusDoneListener(new CameraEx.AutoFocusDoneListener() {
+                @Override
+                public void onDone(final int status, final int[] indices, CameraEx ex) {
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.onFocus(status, indices != null ? indices : new int[0]);
+                        }
+                    });
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setAutoFocusDoneListener", t);
         }
         try {
             cameraEx.setShutterSpeedChangeListener(new CameraEx.ShutterSpeedChangeListener() {
@@ -171,7 +231,17 @@ public class CameraSession {
         } catch (Throwable t) {
             Log.error("release", t);
         }
+        if (displayManager != null) {
+            try {
+                displayManager.finish();
+            } catch (Throwable t) {
+                Log.error("DisplayManager.finish", t);
+            }
+            displayManager = null;
+        }
         previewRunning = false;
+        focusFrames = new ArrayList<FocusFrame>();
+        focusFramesKey = null;
         cameraEx = null;
         camera = null;
         current = null;
@@ -243,6 +313,112 @@ public class CameraSession {
         } catch (Throwable t) {
             Log.error("adjustAperture", t);
         }
+    }
+
+    public void adjustProgramShift(int steps) {
+        try {
+            cameraEx.adjustProgramLine(steps);
+        } catch (Throwable t) {
+            Log.error("adjustProgramLine", t);
+        }
+    }
+
+    public ExposureMode exposureMode() {
+        String scene = null;
+        try {
+            scene = current != null ? current.params.getSceneMode() : null;
+        } catch (Throwable ignored) {
+        }
+        if (scene == null) {
+            return ExposureMode.OTHER;
+        }
+        if (scene.equals("program-auto")) return ExposureMode.P;
+        if (scene.equals("aperture-priority")) return ExposureMode.A;
+        if (scene.equals("shutter-speed")) return ExposureMode.S;
+        if (scene.equals("manual-exposure")) return ExposureMode.M;
+        if (scene.equals("auto") || scene.startsWith("superior")) return ExposureMode.AUTO;
+        return ExposureMode.OTHER;
+    }
+
+    public String sceneMode() {
+        try {
+            return current != null ? current.params.getSceneMode() : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * AF frames of the current focus area mode, converted to overlay coordinates.
+     * The camera reports frames in a -1000..1000 system relative to the displayed video area.
+     * Index 0 is the whole area, higher indices are the single frames.
+     */
+    public List<FocusFrame> focusFrames(int viewWidth, int viewHeight) {
+        if (cameraEx == null || current == null) {
+            return focusFrames;
+        }
+        String mode = null;
+        String aspect = null;
+        try {
+            mode = current.mod.getFocusAreaMode();
+            aspect = current.mod.getImageAspectRatio();
+        } catch (Throwable ignored) {
+        }
+        String key = mode + "|" + aspect + "|" + viewWidth + "x" + viewHeight;
+        if (key.equals(focusFramesKey)) {
+            return focusFrames;
+        }
+        focusFramesKey = key;
+        List<FocusFrame> out = new ArrayList<FocusFrame>();
+        try {
+            int asp = "16:9".equals(aspect) ? 1 : "3:2".equals(aspect) ? 0 : -1;
+            CameraEx.FocusAreaInfos[] infos = cameraEx.getFocusAreaInfos(asp);
+            Rect video = videoRect(viewWidth, viewHeight);
+            if (infos != null) {
+                for (CameraEx.FocusAreaInfos info : infos) {
+                    if (info == null || mode == null || !mode.equals(info.focusAreaMode) || info.rectInfos == null) {
+                        continue;
+                    }
+                    for (CameraEx.FocusAreaRectInfo r : info.rectInfos) {
+                        out.add(new FocusFrame(r.index, toView(video, r.rect), r.enable));
+                    }
+                }
+            }
+            Log.info("focus frames mode=" + mode + " aspect=" + aspect + " count=" + out.size() + " video=" + video);
+        } catch (Throwable t) {
+            Log.error("getFocusAreaInfos", t);
+        }
+        focusFrames = out;
+        return out;
+    }
+
+    /** Invalidates the cached AF frames, e.g. after the AF area moved. */
+    public void invalidateFocusFrames() {
+        focusFramesKey = null;
+    }
+
+    private Rect videoRect(int viewWidth, int viewHeight) {
+        try {
+            if (displayManager != null) {
+                DisplayManager.VideoRect v = displayManager.getDisplayedVideoRect();
+                if (v != null && v.pxRight > v.pxLeft && v.pxBottom > v.pxTop) {
+                    return new Rect(v.pxLeft, v.pxTop, v.pxRight, v.pxBottom);
+                }
+            }
+        } catch (Throwable t) {
+            Log.error("getDisplayedVideoRect", t);
+        }
+        return new Rect(0, 0, viewWidth, viewHeight);
+    }
+
+    private static Rect toView(Rect video, Rect r) {
+        int w = video.width();
+        int h = video.height();
+        return new Rect(
+                video.left + (r.left + 1000) * w / 2000,
+                video.top + (r.top + 1000) * h / 2000,
+                video.left + (r.right + 1000) * w / 2000,
+                video.top + (r.bottom + 1000) * h / 2000);
     }
 
     // ---- display helpers ----

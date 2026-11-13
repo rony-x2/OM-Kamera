@@ -61,11 +61,7 @@ public final class Settings {
             public String display(CameraSession.Params p, String v) {
                 // The camera works with an index, the step converts it to EV
                 float step = stepOf(p);
-                float ev = Integer.parseInt(v) * step;
-                if (Math.abs(ev) < 0.05f) {
-                    return "±0,0";
-                }
-                return String.format(Locale.GERMANY, "%+.1f", ev);
+                return ev(Integer.parseInt(v) * step);
             }
         });
 
@@ -134,6 +130,57 @@ public final class Settings {
             @Override
             protected void set(CameraSession.Params e, String v) {
                 e.mod.setColorMode(v);
+            }
+        });
+
+        add(new Setting("flash", "Blitzmodus", "Blitz", Setting.Category.EXPOSURE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return p.params.getSupportedFlashModes();
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.params.getFlashMode();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.params.setFlashMode(v);
+            }
+        });
+
+        add(new Setting("flashcomp", "Blitzkorrektur", "Blitz ±", Setting.Category.EXPOSURE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                List<String> out = new ArrayList<String>();
+                for (int i = p.mod.getMinFlashCompensation(); i <= p.mod.getMaxFlashCompensation(); i++) {
+                    out.add(String.valueOf(i));
+                }
+                return out;
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return String.valueOf(p.mod.getFlashCompensation());
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setFlashCompensation(Integer.parseInt(v));
+            }
+
+            @Override
+            public String display(CameraSession.Params p, String v) {
+                float step = 1f / 3f;
+                try {
+                    float st = p.mod.getFlashCompensationStep();
+                    if (st > 0) {
+                        step = st;
+                    }
+                } catch (Throwable ignored) {
+                }
+                return ev(Integer.parseInt(v) * step);
             }
         });
 
@@ -276,6 +323,13 @@ public final class Settings {
         }
     }
 
+    static String ev(float ev) {
+        if (Math.abs(ev) < 0.05f) {
+            return "±0,0";
+        }
+        return String.format(Locale.GERMANY, "%+.1f", ev);
+    }
+
     private static void add(Setting s) {
         ALL.put(s.id, s);
     }
@@ -304,6 +358,6 @@ public final class Settings {
     /** Default Fn grid: 2 rows with 6 cells, like the camera's own Fn menu. */
     public static final String[] DEFAULT_FN = {
         "drive", "afmf", "afmode", "afarea", "iso", "ev",
-        "wb", "metering", "dro", "style", "quality", "aspect"
+        "wb", "metering", "dro", "style", "flash", "quality"
     };
 }

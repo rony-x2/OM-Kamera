@@ -70,6 +70,13 @@ public final class Labels {
         put("middle", "Mittel");
         put("midium", "Mittel");
         put("low", "Niedrig");
+        // Flash ("auto", "on", "off" are shared with other settings)
+        put("red-eye", "Rote Augen");
+        put("slow-sync", "Langzeitsync.");
+        put("rear-sync", "2. Verschlussv.");
+        put("slow-rear-sync", "Langz. 2. V.");
+        put("fill-in", "Aufhellblitz");
+        put("wireless", "Drahtlos");
         // Quality, size
         put("raw", "RAW");
         put("rawjpeg", "RAW+JPEG");

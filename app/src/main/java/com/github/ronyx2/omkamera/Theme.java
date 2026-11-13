@@ -22,6 +22,10 @@ public final class Theme {
     public static final int ACCENT_TEXT = 0xFF101317;
     public static final int LINE = 0x55FFFFFF;
     public static final int WARN = 0xFFFF6A50;
+    /** AF frame: idle, focused, not focused */
+    public static final int AF_IDLE = 0xCCFFFFFF;
+    public static final int AF_OK = 0xFF3BD16F;
+    public static final int AF_WARN = 0xFFFF6A50;
 
     /** Color per menu tab, as orientation like in the newer camera menus */
     public static final int[] TAB_COLORS = {
@@ -36,9 +40,15 @@ public final class Theme {
         return viewHeight / 480f;
     }
 
-    public static final float TEXT_SMALL = 15;
-    public static final float TEXT_NORMAL = 19;
-    public static final float TEXT_LARGE = 24;
+    public static final float TEXT_SMALL = 18;
+    public static final float TEXT_NORMAL = 22;
+    public static final float TEXT_LARGE = 28;
+    /** Height of the exposure bar at the bottom */
+    public static final float BAR = 54;
+    /** Height of an Fn cell */
+    public static final float CELL_H = 74;
+    /** Size of icons in the Fn grid and in the status line */
+    public static final float ICON = 34;
     public static final float PAD = 8;
     public static final float RADIUS = 6;
 }

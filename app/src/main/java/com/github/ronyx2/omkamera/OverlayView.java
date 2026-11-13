@@ -38,6 +38,7 @@ public class OverlayView extends View {
         CameraSession.Params p = ui.session().current();
         switch (ui.state()) {
             case LIVE:
+                drawFocusFrames(c);
                 if (ui.infoVisible()) {
                     drawStatusChips(c, p);
                     drawExposureBar(c, p);
@@ -45,6 +46,7 @@ public class OverlayView extends View {
                 break;
             case FN:
             case FN_EDIT:
+                drawFocusFrames(c);
                 drawExposureBar(c, p);
                 drawFnGrid(c, p);
                 break;
@@ -59,44 +61,147 @@ public class OverlayView extends View {
 
     // ---- live view ----
 
-    private static final String[] CHIP_SETTINGS = {"drive", "afmf", "afmode", "afarea", "wb", "quality"};
+    private static final String[] CHIP_SETTINGS = {"drive", "flash", "afmf", "afmode", "afarea", "wb", "metering", "quality"};
 
+    /** Status line at the top: an icon where one exists, otherwise the value as text. */
     private void drawStatusChips(Canvas c, CameraSession.Params p) {
         float x = Theme.PAD * u;
         float y = Theme.PAD * u;
+        float h = Theme.ICON * u + 4 * u;
         textSize(Theme.TEXT_SMALL);
         for (String id : CHIP_SETTINGS) {
             Setting s = Settings.get(id);
             if (s == null || !s.isAvailable(p)) {
                 continue;
             }
+            String value = s.safeGet(p);
             String t = s.currentText(p);
-            float w = text.measureText(t) + 2 * Theme.PAD * u;
-            float h = (Theme.TEXT_SMALL + 10) * u;
+            float w = hasIcon(id, value) ? h : text.measureText(t) + 2 * Theme.PAD * u;
+            if (x + w > getWidth() - Theme.PAD * u) {
+                break;
+            }
             roundRect(c, x, y, x + w, y + h, Theme.PANEL);
-            drawText(c, t, x + Theme.PAD * u, y + h - 8 * u, Theme.TEXT);
+            if (!Icons.draw(c, id, value, x + w / 2, y + h / 2, Theme.ICON * u, Theme.TEXT)) {
+                text.setTypeface(Typeface.DEFAULT_BOLD);
+                drawText(c, t, x + Theme.PAD * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TEXT);
+                text.setTypeface(Typeface.DEFAULT);
+            }
             x += w + 6 * u;
         }
     }
 
+    /** Checks on a scratch canvas whether an icon exists, without drawing it. */
+    private boolean hasIcon(String id, String value) {
+        return Icons.draw(scratch, id, value, 0, 0, 10, 0);
+    }
+
+    private final Canvas scratch = new Canvas(android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888));
+
+    // ---- AF frames ----
+
+    private void drawFocusFrames(Canvas c) {
+        if (!ui.framesEnabled()) {
+            return;
+        }
+        List<CameraSession.FocusFrame> frames = ui.session().focusFrames(getWidth(), getHeight());
+        if (frames.isEmpty()) {
+            return;
+        }
+        int status = ui.focusStatus();
+        int[] focused = ui.focusIndices();
+        boolean locked = status == 1 || status == 4;
+        boolean warn = status == 2;
+
+        // Single frames (index > 0) that are active. With many of them (wide, zone) only the area is shown.
+        int enabled = 0;
+        for (CameraSession.FocusFrame f : frames) {
+            if (f.index != 0 && f.enabled) {
+                enabled++;
+            }
+        }
+        for (CameraSession.FocusFrame f : frames) {
+            boolean isFocused = locked && contains(focused, f.index);
+            if (isFocused) {
+                frame(c, f, Theme.AF_OK, 3 * u, f.index == 0 ? 0.18f : 0.5f);
+            } else if (!locked) {
+                if (f.index == 0 && enabled != 1) {
+                    frame(c, f, warn ? Theme.AF_WARN : 0x88FFFFFF, 2 * u, 0.12f);
+                } else if (f.index != 0 && f.enabled && enabled == 1) {
+                    frame(c, f, warn ? Theme.AF_WARN : Theme.AF_IDLE, 2.5f * u, 0.5f);
+                }
+            }
+        }
+    }
+
+    private static boolean contains(int[] a, int v) {
+        for (int x : a) {
+            if (x == v) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Frame as corner brackets; share is the length of a bracket relative to the shorter side. */
+    private void frame(Canvas c, CameraSession.FocusFrame f, int color, float width, float share) {
+        stroke.setColor(color);
+        stroke.setStrokeWidth(width);
+        float l = f.rect.left, t = f.rect.top, r = f.rect.right, b = f.rect.bottom;
+        float len = Math.max(4 * u, Math.min(r - l, b - t) * share);
+        c.drawLine(l, t, l + len, t, stroke);
+        c.drawLine(l, t, l, t + len, stroke);
+        c.drawLine(r, t, r - len, t, stroke);
+        c.drawLine(r, t, r, t + len, stroke);
+        c.drawLine(l, b, l + len, b, stroke);
+        c.drawLine(l, b, l, b - len, stroke);
+        c.drawLine(r, b, r - len, b, stroke);
+        c.drawLine(r, b, r, b - len, stroke);
+    }
+
+    /**
+     * Exposure bar: mode, shutter speed, aperture, exposure compensation, ISO.
+     * Values that a dial changes in the current mode are underlined; in P the
+     * program shift moves shutter speed and aperture together.
+     */
     private void drawExposureBar(Canvas c, CameraSession.Params p) {
-        float h = 44 * u;
+        float h = Theme.BAR * u;
         float top = getHeight() - h;
         fill.setColor(Theme.PANEL);
         c.drawRect(0, top, getWidth(), getHeight(), fill);
 
+        // Mode badge
+        String mode = ui.modeName();
+        textSize(Theme.TEXT_LARGE);
+        text.setTypeface(Typeface.DEFAULT_BOLD);
+        float bw = Math.max(h - 12 * u, text.measureText(mode) + 16 * u);
+        roundRect(c, 8 * u, top + 6 * u, 8 * u + bw, getHeight() - 6 * u, Theme.ACCENT);
+        drawText(c, mode, 8 * u + (bw - text.measureText(mode)) / 2, getHeight() - 17 * u, Theme.ACCENT_TEXT);
+
+        Ui.DialRole d1 = ui.dial1Role();
+        Ui.DialRole d2 = ui.dial2Role();
+        boolean shift = d1 == Ui.DialRole.SHIFT;
         String[] items = {
             ui.session().shutterText(),
             ui.session().apertureText(),
             valueOf("ev", p),
             "ISO " + valueOf("iso", p),
         };
-        textSize(Theme.TEXT_LARGE);
-        text.setTypeface(Typeface.DEFAULT_BOLD);
-        float slot = getWidth() / (float) items.length;
+        boolean[] active = {
+            d1 == Ui.DialRole.SHUTTER || d2 == Ui.DialRole.SHUTTER || shift,
+            d1 == Ui.DialRole.APERTURE || d2 == Ui.DialRole.APERTURE || shift,
+            d1 == Ui.DialRole.EV || d2 == Ui.DialRole.EV,
+            false,
+        };
+        float left = 16 * u + bw;
+        float slot = (getWidth() - left) / items.length;
         for (int i = 0; i < items.length; i++) {
             float tw = text.measureText(items[i]);
-            drawText(c, items[i], slot * i + (slot - tw) / 2, getHeight() - 13 * u, Theme.TEXT);
+            float x = left + slot * i + (slot - tw) / 2;
+            drawText(c, items[i], x, getHeight() - 17 * u, Theme.TEXT);
+            if (active[i]) {
+                fill.setColor(Theme.ACCENT);
+                c.drawRect(x, getHeight() - 10 * u, x + tw, getHeight() - 7 * u, fill);
+            }
         }
         text.setTypeface(Typeface.DEFAULT);
     }
@@ -111,8 +216,8 @@ public class OverlayView extends View {
     private void drawFnGrid(Canvas c, CameraSession.Params p) {
         float pad = Theme.PAD * u;
         float gap = 4 * u;
-        float cellH = 64 * u;
-        float bottom = getHeight() - 44 * u - pad;
+        float cellH = Theme.CELL_H * u;
+        float bottom = getHeight() - Theme.BAR * u - pad;
         float top = bottom - FnLayout.ROWS * cellH - (FnLayout.ROWS - 1) * gap;
         float cellW = (getWidth() - 2 * pad - (FnLayout.COLS - 1) * gap) / FnLayout.COLS;
 
@@ -136,18 +241,24 @@ public class OverlayView extends View {
             int labelColor = editing ? Theme.ACCENT_TEXT : available ? Theme.TEXT_DIM : Theme.TEXT_DISABLED;
             int valueColor = editing ? Theme.ACCENT_TEXT : available ? Theme.TEXT : Theme.TEXT_DISABLED;
             textSize(Theme.TEXT_SMALL);
-            drawFitted(c, s.shortLabel, l + 6 * u, t + 20 * u, cellW - 12 * u, labelColor);
-            textSize(Theme.TEXT_NORMAL);
-            text.setTypeface(Typeface.DEFAULT_BOLD);
-            drawFitted(c, available ? s.currentText(p) : "–", l + 6 * u, t + cellH - 14 * u, cellW - 12 * u, valueColor);
-            text.setTypeface(Typeface.DEFAULT);
+            drawFitted(c, s.shortLabel, l + 6 * u, t + 22 * u, cellW - 12 * u, labelColor);
+            String value = available ? s.safeGet(p) : null;
+            float iconSize = Theme.ICON * u;
+            if (available && Icons.draw(c, s.id, value, l + cellW / 2, t + cellH - iconSize / 2 - 6 * u, iconSize, valueColor)) {
+                // Icon replaces the value text
+            } else {
+                textSize(Theme.TEXT_NORMAL);
+                text.setTypeface(Typeface.DEFAULT_BOLD);
+                drawFitted(c, available ? s.currentText(p) : "–", l + 6 * u, t + cellH - 14 * u, cellW - 12 * u, valueColor);
+                text.setTypeface(Typeface.DEFAULT);
+            }
         }
 
         // Value strip above the grid while editing
         if (ui.state() == Ui.State.FN_EDIT) {
             Setting s = ui.fnLayout().get(ui.fnIndex());
             if (s != null) {
-                drawValueStrip(c, s, p, pad, top - 52 * u - gap, getWidth() - pad, top - gap);
+                drawValueStrip(c, s, p, pad, top - 60 * u - gap, getWidth() - pad, top - gap);
             }
         }
     }
@@ -178,8 +289,8 @@ public class OverlayView extends View {
         fill.setColor(Theme.PANEL_SOLID);
         c.drawRect(0, 0, getWidth(), getHeight(), fill);
 
-        float tabW = 150 * u;
-        float rowH = 40 * u;
+        float tabW = 160 * u;
+        float rowH = 46 * u;
         float pad = Theme.PAD * u;
 
         // Tabs
@@ -226,7 +337,7 @@ public class OverlayView extends View {
                 }
                 text.setTypeface(editing ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
                 float w = text.measureText(value);
-                drawText(c, value, right - 10 * u - w, t + rowH - 13 * u,
+                drawText(c, value, right - 10 * u - w, t + rowH - 15 * u,
                         editing ? Theme.ACCENT : available ? Theme.TEXT_DIM : Theme.TEXT_DISABLED);
                 text.setTypeface(Typeface.DEFAULT);
             }
