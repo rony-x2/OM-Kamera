@@ -29,12 +29,14 @@ PROTOCOL = "2025-06-18"
 
 def log(msg):
     # stderr landet im MCP-Log von Claude Desktop, stdout ist dem Protokoll vorbehalten
-    print("[omkamera] " + msg, file=sys.stderr, flush=True)
+    sys.stderr.buffer.write(("[omkamera] " + msg + "\n").encode("utf-8", "replace"))
+    sys.stderr.buffer.flush()
 
 
 def send(obj):
-    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    # Immer UTF-8 als Bytes: unter Windows wäre die Konsole sonst cp1252
+    sys.stdout.buffer.write((json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 def post(message, timeout):
