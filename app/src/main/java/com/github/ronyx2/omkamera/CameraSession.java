@@ -188,7 +188,8 @@ public class CameraSession {
                         histG = data.hist.G;
                         histB = data.hist.B;
                         if (histCount++ == 0) {
-                            Log.info("histogram: " + (histY != null ? histY.length : 0) + " bins");
+                            Log.info("histogram: " + (histY != null ? histY.length : 0) + " bins, rgb="
+                                    + (histR != null ? histR.length : 0));
                         }
                         long now = android.os.SystemClock.uptimeMillis();
                         if (now - histShown >= 250) {
@@ -205,6 +206,11 @@ public class CameraSession {
         } catch (Throwable t) {
             Log.error("setPreviewAnalizeListener", t);
         }
+    }
+
+    /** The camera delivers no colour histograms (ILCE-6000): the app computes them itself */
+    public boolean histogramRgbMissing() {
+        return histR == null || histG == null || histB == null;
     }
 
     /** Y, R, G, B bins of the live view, or null while none arrived */

@@ -4,7 +4,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
 /**
- * Zebra and focus peaking in software: the live view JPEG frames (640 px wide) are decoded at
+ * Zebra, focus peaking and the RGB histogram in software: the live view JPEG frames (640 px wide) are decoded at
  * half size on a worker thread, analysed and turned into a small transparent mask that the
  * overlay stretches over the picture. Runs only while one of the two is switched on and the
  * live view is visible; about 3–5 masks per second.
@@ -20,6 +20,9 @@ public class LiveAnalysis {
 
         int peakingColor();
 
+        /** RGB histogram wanted (the ILCE-6000's analyser only delivers luma) */
+        boolean rgbHistogram();
+
         /** Analysis only in the live view (not in menus) */
         boolean liveVisible();
 
@@ -32,6 +35,8 @@ public class LiveAnalysis {
     private volatile Thread thread;
     private volatile Bitmap mask;
     private volatile long lastMs;
+    /** R, G, B histograms with 128 bins each, or null */
+    private volatile short[][] rgb;
 
     public LiveAnalysis(CameraSession session, Host host) {
         this.session = session;
@@ -42,13 +47,17 @@ public class LiveAnalysis {
         return mask;
     }
 
+    public short[][] rgb() {
+        return rgb;
+    }
+
     /** Duration of the last analysis in ms, for the log and MCP */
     public long lastMs() {
         return lastMs;
     }
 
     public synchronized void update() {
-        boolean want = host.zebraLevel() > 0 || host.peakingLevel() > 0;
+        boolean want = host.zebraLevel() > 0 || host.peakingLevel() > 0 || host.rgbHistogram();
         if (want && !running) {
             running = true;
             thread = new Thread(new Runnable() {
@@ -64,6 +73,7 @@ public class LiveAnalysis {
             running = false;
             thread = null;
             mask = null;
+            rgb = null;
             Log.info("live analysis off");
             host.maskReady();
         }
@@ -73,6 +83,7 @@ public class LiveAnalysis {
         running = false;
         thread = null;
         mask = null;
+        rgb = null;
     }
 
     private void loop() {
@@ -85,9 +96,20 @@ public class LiveAnalysis {
         Thread me = Thread.currentThread();
         while (running && thread == me) {
             long t0 = System.currentTimeMillis();
+            if (host.zebraLevel() == 0 && host.peakingLevel() == 0 && !host.rgbHistogram()) {
+                // Nothing left to do, e.g. the camera started delivering colour histograms itself
+                synchronized (this) {
+                    if (thread == me) {
+                        running = false;
+                        thread = null;
+                    }
+                }
+                break;
+            }
             if (!host.liveVisible() || session.isCapturing()) {
                 if (mask != null) {
                     mask = null;
+                    rgb = null;
                     host.maskReady();
                 }
                 sleep(300);
@@ -110,8 +132,13 @@ public class LiveAnalysis {
             }
             b.getPixels(px, 0, w, 0, 0, w, h);
             b.recycle();
-            analyse(px, out, w, h, host.zebraLevel(), host.peakingLevel(), host.peakingColor());
-            Bitmap m = Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888);
+            rgb = host.rgbHistogram() ? histogram(px) : null;
+            int zebra = host.zebraLevel(), peak = host.peakingLevel();
+            Bitmap m = null;
+            if (zebra > 0 || peak > 0) {
+                analyse(px, out, w, h, zebra, peak, host.peakingColor());
+                m = Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888);
+            }
             if (!running || thread != me) {
                 break;
             }
@@ -159,6 +186,28 @@ public class LiveAnalysis {
                 out[i] = o;
             }
         }
+    }
+
+    /** 128 bins per channel, like the camera's own luma histogram */
+    static short[][] histogram(int[] px) {
+        int[] r = new int[128], g = new int[128], b = new int[128];
+        for (int c : px) {
+            r[(c >> 17) & 0x7F]++;
+            g[(c >> 9) & 0x7F]++;
+            b[(c >> 1) & 0x7F]++;
+        }
+        // Scale into the short range the overlay expects
+        int max = 1;
+        for (int i = 0; i < 128; i++) {
+            max = Math.max(max, Math.max(r[i], Math.max(g[i], b[i])));
+        }
+        short[][] out = new short[3][128];
+        for (int i = 0; i < 128; i++) {
+            out[0][i] = (short) (r[i] * 30000L / max);
+            out[1][i] = (short) (g[i] * 30000L / max);
+            out[2][i] = (short) (b[i] * 30000L / max);
+        }
+        return out;
     }
 
     private static int luma(int c) {

@@ -411,6 +411,12 @@ public class OverlayView extends View {
             return;
         }
         float pl = l + 6 * u, pr = r - 6 * u, pt = t + 6 * u, pb = b - 6 * u;
+        if (ui.histo() == Ui.Histo.RGB && (h[1] == null || h[2] == null || h[3] == null)) {
+            short[][] own = analysis != null ? analysis.rgb() : null;
+            if (own != null) {
+                h = new short[][]{h[0], own[0], own[1], own[2]};
+            }
+        }
         if (ui.histo() == Ui.Histo.RGB && h[1] != null && h[2] != null && h[3] != null) {
             histLine(c, h[1], pl, pt, pr, pb, Theme.HIST_R);
             histLine(c, h[2], pl, pt, pr, pb, Theme.HIST_G);

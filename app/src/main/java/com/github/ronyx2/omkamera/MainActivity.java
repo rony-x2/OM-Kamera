@@ -163,6 +163,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
 
             @Override
+            public boolean rgbHistogram() {
+                return ui.histo() == Ui.Histo.RGB && session.histogramRgbMissing();
+            }
+
+            @Override
             public boolean liveVisible() {
                 return ui.liveAnalysisVisible() && !sequencer.isRunning();
             }
