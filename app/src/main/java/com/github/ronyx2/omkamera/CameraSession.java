@@ -210,6 +210,117 @@ public class CameraSession {
         return new short[][]{y, histR, histG, histB};
     }
 
+    // ---- focus magnifier ----
+
+    /** Index in the camera's magnification list, -1 while off */
+    private int magIndex = -1;
+    private int magX, magY;
+    private String magLabel;
+
+    private java.util.List<Integer> magnifications() {
+        java.util.List<Integer> out = new java.util.ArrayList<Integer>();
+        try {
+            for (Object o : current.mod.getSupportedPreviewMagnification()) {
+                out.add(((Number) o).intValue());
+            }
+        } catch (Throwable t) {
+            String raw = current != null ? current.params.get("prv-mag-values") : null;
+            if (raw != null) {
+                for (String v : raw.split(",")) {
+                    try {
+                        out.add(Integer.parseInt(v.trim()));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Next magnification level; false when the magnifier is off afterwards (or not available) */
+    public boolean nextMagnification() {
+        java.util.List<Integer> levels = magnifications();
+        if (cameraEx == null || levels.isEmpty()) {
+            Log.info("magnifier: no levels");
+            return false;
+        }
+        if (magIndex < 0) {
+            // Start where the AF spot is, otherwise in the middle
+            int[] fp = focusPoint();
+            boolean flex = false;
+            try {
+                flex = Settings.isFlexSpot(current);
+            } catch (Throwable ignored) {
+            }
+            magX = flex && fp != null ? fp[0] : 0;
+            magY = flex && fp != null ? fp[1] : 0;
+        }
+        magIndex++;
+        if (magIndex >= levels.size()) {
+            stopMagnification();
+            return false;
+        }
+        return applyMagnification(levels.get(magIndex));
+    }
+
+    private boolean applyMagnification(int level) {
+        try {
+            cameraEx.setPreviewMagnification(level, new android.util.Pair<Integer, Integer>(magX, magY));
+            int ratio = 0;
+            try {
+                ratio = cameraEx.getPreviewMagnificationRatio(level);
+            } catch (Throwable ignored) {
+            }
+            magLabel = ratio > 0 ? String.format(java.util.Locale.US, "×%.1f", ratio / 100.0).replace('.', ',') : "×" + (magIndex + 1);
+            Log.info("magnifier level=" + level + " ratio=" + ratio + " at " + magX + "," + magY);
+            return true;
+        } catch (Throwable t) {
+            Log.error("setPreviewMagnification", t);
+            magIndex = -1;
+            return false;
+        }
+    }
+
+    /** Moves the magnified area by a tenth of the picture; (0, 0) returns to the middle */
+    public void moveMagnification(int dx, int dy) {
+        java.util.List<Integer> levels = magnifications();
+        if (magIndex < 0 || magIndex >= levels.size()) {
+            return;
+        }
+        if (dx == 0 && dy == 0) {
+            magX = 0;
+            magY = 0;
+        } else {
+            magX = Math.max(-900, Math.min(900, magX + dx * 100));
+            magY = Math.max(-900, Math.min(900, magY + dy * 100));
+        }
+        applyMagnification(levels.get(magIndex));
+    }
+
+    public void stopMagnification() {
+        if (magIndex < 0 || cameraEx == null) {
+            magIndex = -1;
+            return;
+        }
+        magIndex = -1;
+        try {
+            cameraEx.stopPreviewMagnification();
+            Log.info("magnifier off");
+        } catch (Throwable t) {
+            Log.error("stopPreviewMagnification", t);
+        }
+    }
+
+    /** "×5,9" while the magnifier is on, otherwise null */
+    public String magnificationLabel() {
+        return magIndex >= 0 ? magLabel : null;
+    }
+
+    /** Position of the magnified area in the -1000..1000 system */
+    public int[] magnificationPoint() {
+        return magIndex >= 0 ? new int[]{magX, magY} : null;
+    }
+
     /** Focal length of the lens in mm, 0 if unknown */
     public float focalLength() {
         try {

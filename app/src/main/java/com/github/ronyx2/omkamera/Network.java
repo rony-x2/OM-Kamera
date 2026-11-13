@@ -40,6 +40,40 @@ public class Network {
         }
     }
 
+    /**
+     * SSID, standard, speed, signal and IP of the connection, or null without connection.
+     * The standard is estimated from the link speed: the camera's WLAN chip works at 2.4 GHz
+     * with 802.11b/g/n, newer standards are not possible.
+     */
+    public String[] details() {
+        try {
+            WifiInfo info = wifi != null ? wifi.getConnectionInfo() : null;
+            if (info == null || info.getIpAddress() == 0) {
+                return null;
+            }
+            int mbit = info.getLinkSpeed();
+            String standard = mbit <= 0 ? "unbekannt"
+                    : mbit <= 11 ? "802.11b (Wi-Fi 1)"
+                    : mbit <= 54 ? "802.11g (Wi-Fi 3) oder n bei schwachem Signal"
+                    : "802.11n (Wi-Fi 4)";
+            int rssi = info.getRssi();
+            int bars = WifiManager.calculateSignalLevel(rssi, 5);
+            String ssid = info.getSSID();
+            if (ssid != null && ssid.startsWith("\"") && ssid.endsWith("\"")) {
+                ssid = ssid.substring(1, ssid.length() - 1);
+            }
+            return new String[]{
+                ssid != null ? ssid : "–",
+                standard,
+                mbit > 0 ? mbit + " Mbit/s" : "–",
+                (bars == 4 ? "sehr gut" : bars == 3 ? "gut" : bars == 2 ? "mittel" : "schwach") + " (" + rssi + " dBm)",
+                ip()
+            };
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     public String status() {
         try {
             if (wifi == null) {

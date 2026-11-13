@@ -76,6 +76,21 @@ public class OverlayView extends View {
                 drawFocusMove(c);
                 drawExposureBar(c, p);
                 break;
+            case QUICK: {
+                drawGrid(c);
+                drawFocusFrames(c);
+                drawBattery(c);
+                drawExposureBar(c, p);
+                Setting q = ui.quickSetting();
+                if (q != null) {
+                    float b = getHeight() - Theme.BAR * u - Theme.PAD * u;
+                    drawValueStrip(c, q, p, Theme.PAD * u, b - 64 * u, vw - Theme.PAD * u, b);
+                }
+                break;
+            }
+            case MAGNIFY:
+                drawMagnifier(c, p);
+                break;
             default:
                 break;
         }
@@ -226,6 +241,17 @@ public class OverlayView extends View {
         float l = v.left * pixelAspect, r = v.right * pixelAspect, t = v.top, b = v.bottom;
         stroke.setColor(Theme.GUIDE);
         stroke.setStrokeWidth(Math.max(1, 1.2f * u));
+        if (g == Ui.Grid.GOLDEN) {
+            // Golden section: lines at 0.382 and 0.618 of width and height
+            float phi = 0.381966f;
+            for (float f : new float[]{phi, 1 - phi}) {
+                float x = l + (r - l) * f;
+                float y = t + (b - t) * f;
+                c.drawLine(x, t, x, b, stroke);
+                c.drawLine(l, y, r, y, stroke);
+            }
+            return;
+        }
         int cols = g == Ui.Grid.THIRDS ? 3 : 6;
         int rows = g == Ui.Grid.THIRDS ? 3 : 4;
         for (int i = 1; i < cols; i++) {
@@ -459,6 +485,37 @@ public class OverlayView extends View {
     private final Canvas scratch = new Canvas(android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888));
 
     // ---- AF frames ----
+
+    /** Focus magnifier: level, position of the magnified area in a small map, hints */
+    private void drawMagnifier(Canvas c, CameraSession.Params p) {
+        String label = ui.session().magnificationLabel();
+        int[] pt = ui.session().magnificationPoint();
+        float pad = Theme.PAD * u;
+        textSize(Theme.TEXT_LARGE);
+        text.setTypeface(Typeface.DEFAULT_BOLD);
+        String t = "Fokuslupe " + (label != null ? label : "");
+        float tw = text.measureText(t);
+        roundRect(c, pad, pad, pad + tw + 24 * u, pad + 44 * u, Theme.PANEL);
+        drawText(c, t, pad + 12 * u, pad + 32 * u, Theme.ACCENT);
+        text.setTypeface(Typeface.DEFAULT);
+        if (pt != null) {
+            // Map of the whole picture with the magnified part
+            float mw = 120 * u, mh = 80 * u;
+            float ml = vw - pad - mw, mt = pad;
+            roundRect(c, ml, mt, ml + mw, mt + mh, Theme.PANEL);
+            outline(c, ml, mt, ml + mw, mt + mh, Theme.GUIDE, 1.5f * u);
+            float cx = ml + mw * (pt[0] + 1000) / 2000f;
+            float cy = mt + mh * (pt[1] + 1000) / 2000f;
+            outline(c, cx - mw / 12, cy - mh / 12, cx + mw / 12, cy + mh / 12, Theme.ACCENT, 2 * u);
+        }
+        String hint = "Pfeile: Ausschnitt  ·  Löschen: Mitte  ·  Mitte: nächste Stufe  ·  MENU: Ende";
+        textSize(Theme.TEXT_SMALL);
+        float hw = text.measureText(hint) + 24 * u;
+        float hb = getHeight() - Theme.BAR * u - pad;
+        roundRect(c, (vw - hw) / 2, hb - 30 * u, (vw + hw) / 2, hb, Theme.PANEL);
+        drawText(c, hint, (vw - hw) / 2 + 12 * u, hb - 10 * u, Theme.TEXT);
+        drawExposureBar(c, p);
+    }
 
     /** Countdown of the running self-timer, large in the middle with a ring that runs down */
     private void drawSelfTimer(Canvas c) {
@@ -776,63 +833,95 @@ public class OverlayView extends View {
         fill.setColor(Theme.PANEL_SOLID);
         c.drawRect(0, 0, vw, getHeight(), fill);
 
-        float tabW = 160 * u;
-        float rowH = 46 * u;
+        float tabW = 200 * u;
+        float rowH = 44 * u;
         float pad = Theme.PAD * u;
 
         // Tabs
+        float tabH = Math.min(rowH + 4 * u, (getHeight() - 2 * pad) / Ui.TABS.length);
         for (int i = 0; i < Ui.TABS.length; i++) {
-            float t = pad + i * (rowH + 4 * u);
+            float t = pad + i * tabH;
             boolean sel = i == ui.tab();
             int color = Theme.TAB_COLORS[i % Theme.TAB_COLORS.length];
             if (sel) {
-                roundRect(c, pad, t, tabW, t + rowH, ui.focus() == Ui.MenuFocus.TABS ? 0x55FFFFFF : 0x33FFFFFF);
+                roundRect(c, pad, t, tabW, t + tabH - 4 * u, ui.focus() == Ui.MenuFocus.TABS ? 0x55FFFFFF : 0x33FFFFFF);
             }
             fill.setColor(color);
-            c.drawRect(pad, t + 6 * u, pad + 5 * u, t + rowH - 6 * u, fill);
+            c.drawRect(pad, t + 6 * u, pad + 5 * u, t + tabH - 10 * u, fill);
             textSize(Theme.TEXT_NORMAL);
             text.setTypeface(sel ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-            drawText(c, Ui.TABS[i], pad + 14 * u, t + rowH - 13 * u, sel ? Theme.TEXT : Theme.TEXT_DIM);
+            drawFitted(c, Ui.TABS[i], pad + 14 * u, t + tabH - 17 * u, tabW - pad - 18 * u, sel ? Theme.TEXT : Theme.TEXT_DIM);
         }
         text.setTypeface(Typeface.DEFAULT);
         stroke.setColor(Theme.LINE);
         stroke.setStrokeWidth(1);
         c.drawLine(tabW + pad, pad, tabW + pad, getHeight() - pad, stroke);
 
-        // Rows
         float left = tabW + 2 * pad;
         float right = vw - pad - 6 * u;
+        float top = pad;
+
+        // Title of an open sub list, like the camera's sub pages
+        String subTitle = ui.subTitle();
+        if (subTitle != null) {
+            textSize(Theme.TEXT_SMALL);
+            text.setTypeface(Typeface.DEFAULT_BOLD);
+            int color = Theme.TAB_COLORS[ui.tab() % Theme.TAB_COLORS.length];
+            drawText(c, "‹  " + subTitle, left + 6 * u, top + 22 * u, color);
+            text.setTypeface(Typeface.DEFAULT);
+            top += 34 * u;
+        }
+
+        // Rows
         List<Ui.Row> rows = ui.rows();
-        int visible = (int) ((getHeight() - 2 * pad) / rowH);
+        int visible = (int) ((getHeight() - top - pad) / rowH);
         int first = Math.max(0, Math.min(ui.row() - visible / 2, rows.size() - visible));
         for (int i = first; i < rows.size() && i < first + visible; i++) {
             Ui.Row row = rows.get(i);
-            float t = pad + (i - first) * rowH;
+            float t = top + (i - first) * rowH;
+            if (row.header) {
+                // Group header with a thin line, in the colour of the tab
+                textSize(Theme.TEXT_SMALL);
+                text.setTypeface(Typeface.DEFAULT_BOLD);
+                int color = Theme.TAB_COLORS[ui.tab() % Theme.TAB_COLORS.length];
+                drawText(c, row.label, left + 6 * u, t + rowH - 14 * u, color);
+                float tw = text.measureText(row.label);
+                stroke.setColor(0x33FFFFFF);
+                stroke.setStrokeWidth(1);
+                c.drawLine(left + 16 * u + tw, t + rowH - 20 * u, right, t + rowH - 20 * u, stroke);
+                text.setTypeface(Typeface.DEFAULT);
+                continue;
+            }
             boolean sel = i == ui.row() && ui.focus() != Ui.MenuFocus.TABS;
             boolean available = row.setting == null || row.setting.isAvailable(p);
+            boolean passive = row.setting == null && row.action == null && row.picker == null && row.sub == null;
             if (sel) {
                 roundRect(c, left, t + 2 * u, right, t + rowH - 2 * u, ui.focus() == Ui.MenuFocus.EDIT ? 0x44F0A030 : 0x33FFFFFF);
             }
             textSize(Theme.TEXT_NORMAL);
-            drawText(c, row.label, left + 10 * u, t + rowH - 13 * u, available ? Theme.TEXT : Theme.TEXT_DISABLED);
-
+            int labelColor = !available ? Theme.TEXT_DISABLED : passive ? Theme.TEXT_DIM : Theme.TEXT;
             String value = row.setting != null ? (available ? row.setting.currentText(p) : "nicht verfügbar") : row.info;
+            if (row.sub != null) {
+                value = (value != null && value.length() > 0 ? value + "  " : "") + "›";
+            }
+            boolean editing = sel && ui.focus() == Ui.MenuFocus.EDIT;
+            if (editing && value != null) {
+                value = "‹ " + value + " ›";
+            }
+            float valueW = 0;
             if (value != null && value.length() > 0) {
-                boolean editing = sel && ui.focus() == Ui.MenuFocus.EDIT;
-                if (editing) {
-                    value = "‹ " + value + " ›";
-                }
                 text.setTypeface(editing ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-                float w = text.measureText(value);
-                drawText(c, value, right - 10 * u - w, t + rowH - 15 * u,
+                valueW = Math.min(text.measureText(value), (right - left) * 0.55f);
+                drawFitted(c, value, right - 10 * u - valueW, t + rowH - 14 * u, valueW + 1,
                         editing ? Theme.ACCENT : available ? Theme.TEXT_DIM : Theme.TEXT_DISABLED);
                 text.setTypeface(Typeface.DEFAULT);
             }
+            drawFitted(c, row.label, left + 10 * u, t + rowH - 13 * u, right - left - valueW - 34 * u, labelColor);
         }
 
         // Scroll indicator when the list is longer than the screen
         if (rows.size() > visible) {
-            float trackT = pad, trackB = getHeight() - pad;
+            float trackT = top, trackB = getHeight() - pad;
             float th = (trackB - trackT) * visible / rows.size();
             float ty = trackT + (trackB - trackT - th) * first / Math.max(1, rows.size() - visible);
             fill.setColor(0x33FFFFFF);

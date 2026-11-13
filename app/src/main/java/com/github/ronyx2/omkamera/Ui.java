@@ -25,7 +25,11 @@ public class Ui {
         /** Menu with tabs */
         MENU,
         /** Flexible spot is being moved with the arrow keys */
-        AF_MOVE
+        AF_MOVE,
+        /** One setting is changed directly from the live view (custom key) */
+        QUICK,
+        /** Focus magnifier */
+        MAGNIFY
     }
 
     public enum MenuFocus { TABS, LIST, EDIT, PICK }
@@ -51,6 +55,12 @@ public class Ui {
         /** Starts or stops histogram and level sensor according to the settings */
         void applyDisplay();
 
+        /** SSID, standard, speed, signal, IP of the WLAN connection, or null */
+        String[] wifiDetails();
+
+        /** Saved settings (memories 1-3, file on the card) */
+        Memories memories();
+
         /** Address of the debug server, or null if it does not run */
         String debugAddress();
     }
@@ -60,33 +70,78 @@ public class Ui {
     /** What a dial changes in the current exposure mode */
     public enum DialRole { SHUTTER, APERTURE, EV, SHIFT, NONE }
 
-    /** A row in the menu. */
+    /** Chooses a setting for a slot (Fn grid, My Menu) */
+    public interface Picker {
+        Setting current();
+
+        void picked(Setting s);
+    }
+
+    /** Opens a sub list, like the camera's sub pages (custom keys, Fn grid, memories) */
+    public interface Sub {
+        String title();
+
+        List<Row> rows();
+    }
+
+    /** A row in the menu: a group header, a setting, an action, an info line, a picker or a sub list. */
     public static final class Row {
         public final String label;
         public final Setting setting;
         public final Runnable action;
         public final String info;
-        public final int fnSlot;
+        public final Picker picker;
+        public final Sub sub;
+        public final boolean header;
 
-        Row(String label, Setting setting, Runnable action, String info, int fnSlot) {
+        private Row(String label, Setting setting, Runnable action, String info, Picker picker, Sub sub, boolean header) {
             this.label = label;
             this.setting = setting;
             this.action = action;
             this.info = info;
-            this.fnSlot = fnSlot;
+            this.picker = picker;
+            this.sub = sub;
+            this.header = header;
+        }
+
+        static Row header(String title) {
+            return new Row(title, null, null, null, null, null, true);
+        }
+
+        static Row of(Setting s) {
+            return new Row(s.label, s, null, null, null, null, false);
+        }
+
+        static Row action(String label, String info, Runnable action) {
+            return new Row(label, null, action, info, null, null, false);
+        }
+
+        static Row info(String label, String value) {
+            return new Row(label, null, null, value, null, null, false);
+        }
+
+        static Row pick(String label, String info, Picker picker) {
+            return new Row(label, null, null, info, picker, null, false);
+        }
+
+        static Row sub(String label, String info, Sub sub) {
+            return new Row(label, null, null, info, null, sub, false);
         }
     }
 
-    /** Setting tabs first (one per category, in its order), then the app's own tabs */
-    public static final String[] TABS = {"Aufnahme", "Belichtung", "Bild", "Fokus", "Blitz", "Anzeige", "Fn-Raster", "App", "Info"};
-    private static final int TAB_DISPLAY = 5;
-    private static final int TAB_FN = 6;
-    private static final int TAB_SYSTEM = 7;
-    private static final int TAB_INFO = 8;
+    /** Tabs like the camera's menu (a7 IV and newer): main list, then by topic */
+    public static final String[] TABS = {"Haupt", "Aufnahme", "Belichtung/Farbe", "Fokus", "Netzwerk", "Einstellung", "Mein Menü"};
+    private static final int TAB_MAIN = 0;
+    private static final int TAB_SHOOTING = 1;
+    private static final int TAB_EXPOSURE = 2;
+    private static final int TAB_FOCUS = 3;
+    private static final int TAB_NETWORK = 4;
+    private static final int TAB_SETUP = 5;
+    private static final int TAB_MYMENU = 6;
 
     /** Grid lines like the camera: off, rule of thirds 3x3, square grid 6x4, diagonal + square */
     public enum Grid {
-        OFF("Aus"), THIRDS("3×3 Raster"), SQUARE("Quadratraster"), DIAGONAL("Diagonal + Quadrat");
+        OFF("Aus"), THIRDS("3×3 Raster"), GOLDEN("Goldener Schnitt"), SQUARE("Quadratraster"), DIAGONAL("Diagonal + Quadrat");
         public final String label;
 
         Grid(String label) {
@@ -151,6 +206,15 @@ public class Ui {
     /** List shown when choosing the setting for an Fn cell */
     private List<Setting> pickList;
     private int pickIndex;
+    private Picker picker;
+    /** Open sub list, null on the tab level */
+    private Sub sub;
+    private int subParentRow;
+    private final KeyFunctions keys;
+    /** Setting changed by a custom key (state QUICK) */
+    private Setting quick;
+    /** Key that opened the quick change, it also closes it */
+    private Keys.Key quickKey;
 
     private String message;
     private boolean messageWarn;
@@ -161,6 +225,7 @@ public class Ui {
         this.fn = fn;
         this.host = host;
         this.prefs = prefs;
+        this.keys = new KeyFunctions(prefs);
         beepMode = Beep.Mode.values()[Math.max(0, Math.min(2, prefs.getInt("beepmode", 1)))];
         framesEnabled = prefs.getBoolean("frames", true);
         wifiEnabled = prefs.getBoolean("wifi", false);
@@ -169,7 +234,15 @@ public class Ui {
         remoteEnabled = prefs.getBoolean("remote", false);
         remoteCode = prefs.getString("remotecode", null);
         mcpEnabled = prefs.getBoolean("mcp", false);
-        grid = Grid.values()[Math.max(0, Math.min(Grid.values().length - 1, prefs.getInt("grid", 0)))];
+        // The grid list got "Goldener Schnitt" at position 2 in 0.6.0
+        int g = prefs.getInt("grid", 0);
+        if (!prefs.getBoolean("grid2", false)) {
+            if (g >= 2) {
+                g++;
+            }
+            prefs.edit().putInt("grid", g).putBoolean("grid2", true).apply();
+        }
+        grid = Grid.values()[Math.max(0, Math.min(Grid.values().length - 1, g))];
         histo = Histo.values()[Math.max(0, Math.min(Histo.values().length - 1, prefs.getInt("histo", 0)))];
         levelEnabled = prefs.getBoolean("level", false);
         warningsEnabled = prefs.getBoolean("warnings", true);
@@ -410,238 +483,464 @@ public class Ui {
         host.redraw();
     }
 
+    /** Rows of the open sub list or of the current tab */
     public List<Row> rows() {
+        if (sub != null) {
+            List<Row> r = sub.rows();
+            return r.isEmpty() ? java.util.Collections.singletonList(Row.info("(leer)", "")) : r;
+        }
         List<Row> out = new ArrayList<Row>();
         switch (tab) {
-            case 0:
-                addSettings(out, Setting.Category.SHOOTING);
+            case TAB_MAIN:
+                mainRows(out);
                 break;
-            case 1:
-                addSettings(out, Setting.Category.EXPOSURE);
+            case TAB_SHOOTING:
+                group(out, "Bildqualität", "quality", "size", "aspect");
+                group(out, "Bildfolgemodus", "drive", "bracketstep", "bracketcount", "bracketlevel", "bracketorder");
+                group(out, "Aufnahme", "lenr");
+                displayRows(out);
                 break;
-            case 2:
-                addSettings(out, Setting.Category.IMAGE);
+            case TAB_EXPOSURE:
+                group(out, "Belichtung", "iso", "ev");
+                group(out, "Messung", "metering");
+                if (!Settings.flashReady) {
+                    out.add(Row.header("Blitz"));
+                    out.add(Row.info("Blitz nicht bereit", "Blitz ausklappen"));
+                    groupRows(out, null, "redeye");
+                } else {
+                    group(out, "Blitz", "flash", "flashcomp", "redeye");
+                }
+                group(out, "Weißabgleich", "wb", "wbtemp", "wbab", "wbgm");
+                group(out, "Farbe/Farbton", "dro", "style", "contrast", "saturation", "sharpness", "effect", "softskin", "colorspace");
                 break;
-            case 3:
-                addSettings(out, Setting.Category.FOCUS);
+            case TAB_FOCUS:
+                group(out, "AF/MF", "afmf", "afmode");
+                group(out, "Fokusfeld", "afarea", "spotsize");
                 if (isFlexSpot()) {
-                    out.add(new Row("Fokusfeld verschieben", null, new Runnable() {
+                    out.add(Row.action("Fokusfeld verschieben", "", new Runnable() {
                         @Override
                         public void run() {
                             state = State.AF_MOVE;
                         }
-                    }, "Mitteltaste im Livebild", -1));
-                    out.add(new Row("Fokusfeld zur Mitte", null, new Runnable() {
+                    }));
+                    out.add(Row.action("Fokusfeld zur Mitte", "", new Runnable() {
                         @Override
                         public void run() {
                             session.centerFocusPoint();
                             showMessage("Fokusfeld in der Mitte", false);
                         }
-                    }, "", -1));
+                    }));
                 }
+                group(out, "Motiverkennung", "face");
+                out.add(Row.header("Fokus-Assistent"));
+                out.add(Row.info("Fokuslupe", "über Benutzertaste (Standard: C1)"));
                 break;
-            case 4:
-                if (!Settings.flashReady) {
-                    out.add(new Row("Blitz nicht bereit", null, null, "Blitz ausklappen", -1));
+            case TAB_NETWORK:
+                networkRows(out);
+                break;
+            case TAB_SETUP:
+                setupRows(out);
+                break;
+            case TAB_MYMENU:
+                myMenuRows(out);
+                break;
+            default:
+                break;
+        }
+        if (out.isEmpty()) {
+            out.add(Row.info("Keine Einstellungen verfügbar", ""));
+        }
+        return out;
+    }
+
+    /** Title of the open sub list, null on the tab level */
+    public String subTitle() {
+        return sub != null ? sub.title() : null;
+    }
+
+    /** Header plus the settings that exist and matter now; nothing if none of them does */
+    private void group(List<Row> out, String title, String... ids) {
+        groupRows(out, title, ids);
+    }
+
+    private void groupRows(List<Row> out, String title, String... ids) {
+        CameraSession.Params p = session.current();
+        List<Row> rows = new ArrayList<Row>();
+        for (String id : ids) {
+            Setting s = Settings.get(id);
+            if (s != null && s.isShown(p)) {
+                rows.add(Row.of(s));
+            }
+        }
+        if (!rows.isEmpty()) {
+            if (title != null) {
+                out.add(Row.header(title));
+            }
+            out.addAll(rows);
+        }
+    }
+
+    /** Main tab: the most important shooting settings at a glance, each can be changed here */
+    private void mainRows(List<Row> out) {
+        out.add(Row.info("Modus · Zeit · Blende", modeName() + "  ·  " + session.shutterText() + "  ·  " + session.apertureText()));
+        out.add(Row.info("Restaufnahmen", remainingShots >= 0 ? String.valueOf(remainingShots) : "–"));
+        groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "style",
+                "afmf", "afmode", "afarea");
+    }
+
+    private void displayRows(List<Row> out) {
+        out.add(Row.header("Aufnahme-Anzeige"));
+        out.add(Row.action("Gitterlinien", grid.label, new Runnable() {
+            @Override
+            public void run() {
+                grid = Grid.values()[(grid.ordinal() + 1) % Grid.values().length];
+                prefs.edit().putInt("grid", grid.ordinal()).apply();
+            }
+        }));
+        out.add(Row.action("Histogramm", histo.label, new Runnable() {
+            @Override
+            public void run() {
+                histo = Histo.values()[(histo.ordinal() + 1) % Histo.values().length];
+                prefs.edit().putInt("histo", histo.ordinal()).apply();
+                host.applyDisplay();
+            }
+        }));
+        out.add(Row.action("Wasserwaage", levelEnabled ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                levelEnabled = !levelEnabled;
+                prefs.edit().putBoolean("level", levelEnabled).apply();
+                host.applyDisplay();
+            }
+        }));
+        out.add(Row.action("Fokusfelder anzeigen", framesEnabled ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                framesEnabled = !framesEnabled;
+                prefs.edit().putBoolean("frames", framesEnabled).apply();
+            }
+        }));
+        out.add(Row.action("Warnhinweise", warningsEnabled ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                warningsEnabled = !warningsEnabled;
+                prefs.edit().putBoolean("warnings", warningsEnabled).apply();
+            }
+        }));
+        out.add(Row.action("Restaufnahmen anzeigen", shotsEnabled ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                shotsEnabled = !shotsEnabled;
+                prefs.edit().putBoolean("shots", shotsEnabled).apply();
+            }
+        }));
+    }
+
+    private void networkRows(List<Row> out) {
+        out.add(Row.header("WLAN"));
+        out.add(Row.action("WLAN in der App", wifiEnabled ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                wifiEnabled = !wifiEnabled;
+                if (!wifiEnabled) {
+                    debugEnabled = false;
+                    remoteEnabled = false;
+                    mcpEnabled = false;
                 }
-                addSettings(out, Setting.Category.FLASH);
-                break;
-            case TAB_DISPLAY:
-                out.add(new Row("Gitterlinien", null, new Runnable() {
+                prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
+                        .putBoolean("remote", remoteEnabled).putBoolean("mcp", mcpEnabled).apply();
+                host.applyNetwork();
+            }
+        }));
+        if (wifiEnabled) {
+            String[] d = host.wifiDetails();
+            out.add(Row.info("Status", host.wifiStatus()));
+            if (d != null) {
+                out.add(Row.info("Netz (SSID)", d[0]));
+                out.add(Row.info("Standard", d[1]));
+                out.add(Row.info("Geschwindigkeit", d[2]));
+                out.add(Row.info("Signal", d[3]));
+                out.add(Row.info("IP-Adresse", d[4]));
+            }
+        }
+        out.add(Row.header("Fernzugriff"));
+        out.add(Row.action("Fernsteuerung (Browser)", remoteEnabled ? "Ein · Code " + remoteCode : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                remoteEnabled = !remoteEnabled;
+                if (remoteEnabled) {
+                    // New code every time remote control is switched on
+                    remoteCode = String.valueOf(1000 + new java.util.Random().nextInt(9000));
+                    wifiEnabled = true;
+                    debugEnabled = true;
+                }
+                prefs.edit().putBoolean("remote", remoteEnabled).putString("remotecode", remoteCode)
+                        .putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                host.applyNetwork();
+            }
+        }));
+        out.add(Row.action("MCP-Schnittstelle (KI)", mcpEnabled ? "Ein · Token " + mcpToken : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                mcpEnabled = !mcpEnabled;
+                if (mcpEnabled) {
+                    // The token stays the same, so the PC side does not need to be changed again
+                    if (mcpToken == null) {
+                        mcpToken = newToken();
+                    }
+                    wifiEnabled = true;
+                    debugEnabled = true;
+                }
+                prefs.edit().putBoolean("mcp", mcpEnabled).putString("mcptoken", mcpToken)
+                        .putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                host.applyNetwork();
+            }
+        }));
+        if (mcpToken != null) {
+            out.add(Row.action("MCP-Token erneuern", "", new Runnable() {
+                @Override
+                public void run() {
+                    mcpToken = newToken();
+                    prefs.edit().putString("mcptoken", mcpToken).apply();
+                    showMessage("Neuer MCP-Token " + mcpToken, false);
+                }
+            }));
+        }
+        out.add(Row.action("Debug-Server", debugEnabled ? (host.debugAddress() != null ? host.debugAddress() : "Ein, wartet auf WLAN") : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                debugEnabled = !debugEnabled;
+                if (debugEnabled) {
+                    wifiEnabled = true;
+                } else {
+                    remoteEnabled = false;
+                    mcpEnabled = false;
+                }
+                prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
+                        .putBoolean("remote", remoteEnabled).putBoolean("mcp", mcpEnabled).apply();
+                host.applyNetwork();
+            }
+        }));
+    }
+
+    private void setupRows(List<Row> out) {
+        out.add(Row.header("Bedienung"));
+        out.add(Row.sub("Benutzertasten", "", new Sub() {
+            @Override
+            public String title() {
+                return "Benutzertasten";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                for (final Keys.Key k : KeyFunctions.KEYS) {
+                    r.add(Row.action(KeyFunctions.keyName(k), keys.get(k).label, new Runnable() {
+                        @Override
+                        public void run() {
+                            keys.cycle(k, 1);
+                        }
+                    }));
+                }
+                r.add(Row.action("Standardbelegung", "", new Runnable() {
                     @Override
                     public void run() {
-                        grid = Grid.values()[(grid.ordinal() + 1) % Grid.values().length];
-                        prefs.edit().putInt("grid", grid.ordinal()).apply();
+                        keys.reset();
+                        showMessage("Benutzertasten zurückgesetzt", false);
                     }
-                }, grid.label, -1));
-                out.add(new Row("Histogramm", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        histo = Histo.values()[(histo.ordinal() + 1) % Histo.values().length];
-                        prefs.edit().putInt("histo", histo.ordinal()).apply();
-                        host.applyDisplay();
-                    }
-                }, histo.label, -1));
-                out.add(new Row("Wasserwaage", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        levelEnabled = !levelEnabled;
-                        prefs.edit().putBoolean("level", levelEnabled).apply();
-                        host.applyDisplay();
-                    }
-                }, levelEnabled ? "Ein" : "Aus", -1));
-                out.add(new Row("Fokusfelder anzeigen", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        framesEnabled = !framesEnabled;
-                        prefs.edit().putBoolean("frames", framesEnabled).apply();
-                    }
-                }, framesEnabled ? "Ein" : "Aus", -1));
-                out.add(new Row("Warnhinweise", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        warningsEnabled = !warningsEnabled;
-                        prefs.edit().putBoolean("warnings", warningsEnabled).apply();
-                    }
-                }, warningsEnabled ? "Ein" : "Aus", -1));
-                out.add(new Row("Restaufnahmen anzeigen", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        shotsEnabled = !shotsEnabled;
-                        prefs.edit().putBoolean("shots", shotsEnabled).apply();
-                    }
-                }, shotsEnabled ? "Ein" : "Aus", -1));
-                break;
-            case TAB_FN:
+                }));
+                return r;
+            }
+        }));
+        out.add(Row.sub("Fn-Raster einrichten", "", new Sub() {
+            @Override
+            public String title() {
+                return "Fn-Raster";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
                 for (int i = 0; i < FnLayout.SIZE; i++) {
-                    Setting s = fn.get(i);
+                    final int slot = i;
+                    Setting cur = fn.get(i);
                     String pos = (i / FnLayout.COLS == 0 ? "Oben " : "Unten ") + (i % FnLayout.COLS + 1);
-                    out.add(new Row(pos, null, null, s != null ? s.label : "(leer)", i));
+                    r.add(Row.pick(pos, cur != null ? cur.label : "(leer)", new Picker() {
+                        @Override
+                        public Setting current() {
+                            return fn.get(slot);
+                        }
+
+                        @Override
+                        public void picked(Setting s) {
+                            fn.set(slot, s != null ? s.id : FnLayout.EMPTY);
+                        }
+                    }));
                 }
-                out.add(new Row("Standardbelegung", null, new Runnable() {
+                r.add(Row.action("Standardbelegung", "", new Runnable() {
                     @Override
                     public void run() {
                         fn.reset();
                         showMessage("Fn-Raster zurückgesetzt", false);
                     }
-                }, "", -1));
-                break;
-            case TAB_INFO: {
-                DeviceInfo d = DeviceInfo.getInstance();
-                out.add(new Row("Modell", null, null, safe(d.getModel()), -1));
-                out.add(new Row("Firmware", null, null, safe(d.getFirmwareVersion()), -1));
-                out.add(new Row("Plattform (API)", null, null, String.valueOf(d.getApiVersion()), -1));
-                out.add(new Row("Android", null, null, Build.VERSION.RELEASE, -1));
-                out.add(new Row("App-Version", null, null, BuildConfig.VERSION_NAME, -1));
-                out.add(new Row("WLAN-Status", null, null, host.wifiStatus(), -1));
-                out.add(new Row("App beenden", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        host.exitApp();
-                    }
-                }, "", -1));
-                break;
+                }));
+                return r;
             }
-            case TAB_SYSTEM:
-                out.add(new Row("Signalton bei Fokus", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        beepMode = Beep.Mode.values()[(beepMode.ordinal() + 1) % 3];
-                        prefs.edit().putInt("beepmode", beepMode.ordinal()).apply();
-                        if (beepMode != Beep.Mode.OFF) {
-                            host.playFocusBeep(beepMode);
-                        }
-                    }
-                }, beepMode == Beep.Mode.OFF ? "Aus" : beepMode == Beep.Mode.CAMERA ? "Kamera-Ton" : "Piepton", -1));
-                out.add(new Row("Auslöser-Steuerung", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        appShutter = !appShutter;
-                        prefs.edit().putBoolean("appshutter", appShutter).apply();
-                        showMessage("Wirkt nach dem nächsten Start der App", false);
-                    }
-                }, appShutter ? "App (mit Fokusanzeige)" : "Kamera direkt", -1));
-                out.add(new Row("Standby in der App", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        int i = 0;
-                        while (i < STANDBY_STEPS.length && STANDBY_STEPS[i] != standbyMinutes) {
-                            i++;
-                        }
-                        standbyMinutes = STANDBY_STEPS[(i + 1) % STANDBY_STEPS.length];
-                        prefs.edit().putInt("standby", standbyMinutes).apply();
-                        host.applyStandby();
-                    }
-                }, standbyText(standbyMinutes), -1));
-                out.add(new Row("WLAN in der App", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        wifiEnabled = !wifiEnabled;
-                        if (!wifiEnabled) {
-                            debugEnabled = false;
-                            remoteEnabled = false;
-                            mcpEnabled = false;
-                        }
-                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
-                                .putBoolean("remote", remoteEnabled).putBoolean("mcp", mcpEnabled).apply();
-                        host.applyNetwork();
-                    }
-                }, wifiEnabled ? "Ein" : "Aus", -1));
-                out.add(new Row("Fernsteuerung (Browser)", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        remoteEnabled = !remoteEnabled;
-                        if (remoteEnabled) {
-                            // New code every time remote control is switched on
-                            remoteCode = String.valueOf(1000 + new java.util.Random().nextInt(9000));
-                            wifiEnabled = true;
-                            debugEnabled = true;
-                        }
-                        prefs.edit().putBoolean("remote", remoteEnabled).putString("remotecode", remoteCode)
-                                .putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
-                        host.applyNetwork();
-                    }
-                }, remoteEnabled ? "Ein · Code " + remoteCode : "Aus", -1));
-                out.add(new Row("MCP-Schnittstelle (KI)", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        mcpEnabled = !mcpEnabled;
-                        if (mcpEnabled) {
-                            // The token stays the same, so the PC side does not need to be changed again
-                            if (mcpToken == null) {
-                                mcpToken = newToken();
-                            }
-                            wifiEnabled = true;
-                            debugEnabled = true;
-                        }
-                        prefs.edit().putBoolean("mcp", mcpEnabled).putString("mcptoken", mcpToken)
-                                .putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
-                        host.applyNetwork();
-                    }
-                }, mcpEnabled ? "Ein · Token " + mcpToken : "Aus", -1));
-                if (mcpToken != null) {
-                    out.add(new Row("MCP-Token erneuern", null, new Runnable() {
+        }));
+        out.add(Row.action("Auslöser-Steuerung", appShutter ? "App (mit Fokusanzeige)" : "Kamera direkt", new Runnable() {
+            @Override
+            public void run() {
+                appShutter = !appShutter;
+                prefs.edit().putBoolean("appshutter", appShutter).apply();
+                showMessage("Wirkt nach dem nächsten Start der App", false);
+            }
+        }));
+        out.add(Row.action("Signalton", beepMode == Beep.Mode.OFF ? "Aus" : beepMode == Beep.Mode.CAMERA ? "Kamera-Ton" : "Piepton", new Runnable() {
+            @Override
+            public void run() {
+                beepMode = Beep.Mode.values()[(beepMode.ordinal() + 1) % 3];
+                prefs.edit().putInt("beepmode", beepMode.ordinal()).apply();
+                if (beepMode != Beep.Mode.OFF) {
+                    host.playFocusBeep(beepMode);
+                }
+            }
+        }));
+        out.add(Row.action("Standby in der App", standbyText(standbyMinutes), new Runnable() {
+            @Override
+            public void run() {
+                int i = 0;
+                while (i < STANDBY_STEPS.length && STANDBY_STEPS[i] != standbyMinutes) {
+                    i++;
+                }
+                standbyMinutes = STANDBY_STEPS[(i + 1) % STANDBY_STEPS.length];
+                prefs.edit().putInt("standby", standbyMinutes).apply();
+                host.applyStandby();
+            }
+        }));
+
+        out.add(Row.header("Speichern/Laden"));
+        for (int i = 1; i <= Memories.SLOTS; i++) {
+            final int slot = i;
+            out.add(Row.sub("Speicher " + i, host.memories().describe(slot), new Sub() {
+                @Override
+                public String title() {
+                    return "Speicher " + slot;
+                }
+
+                @Override
+                public List<Row> rows() {
+                    List<Row> r = new ArrayList<Row>();
+                    r.add(Row.info("Inhalt", host.memories().describe(slot)));
+                    r.add(Row.action("Aktuelle Einstellungen hier speichern", "", new Runnable() {
                         @Override
                         public void run() {
-                            mcpToken = newToken();
-                            prefs.edit().putString("mcptoken", mcpToken).apply();
-                            showMessage("Neuer MCP-Token " + mcpToken, false);
+                            int n = host.memories().save(slot);
+                            showMessage("Speicher " + slot + ": " + n + " Einstellungen gesichert", false);
                         }
-                    }, "", -1));
-                }
-                out.add(new Row("Debug-Server", null, new Runnable() {
-                    @Override
-                    public void run() {
-                        debugEnabled = !debugEnabled;
-                        if (debugEnabled) {
-                            wifiEnabled = true;
-                        } else {
-                            remoteEnabled = false;
-                            mcpEnabled = false;
-                        }
-                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled)
-                                .putBoolean("remote", remoteEnabled).putBoolean("mcp", mcpEnabled).apply();
-                        host.applyNetwork();
+                    }));
+                    if (host.memories().has(slot)) {
+                        r.add(Row.action("Laden und anwenden", "", new Runnable() {
+                            @Override
+                            public void run() {
+                                String res = host.memories().load(slot);
+                                showMessage(res, res.contains("nicht"));
+                            }
+                        }));
                     }
-                }, debugEnabled ? (host.debugAddress() != null ? host.debugAddress() : "Ein, wartet auf WLAN") : "Aus", -1));
-                
-                break;
-            default:
-                break;
+                    return r;
+                }
+            }));
         }
-        return out;
+        out.add(Row.action("Alles auf Karte sichern", "OMKAMERA/EINSTELL.JSN", new Runnable() {
+            @Override
+            public void run() {
+                String res = host.memories().exportToCard();
+                showMessage(res, !res.startsWith("Gespeichert"));
+            }
+        }));
+        out.add(Row.action("Von Karte laden", "", new Runnable() {
+            @Override
+            public void run() {
+                String res = host.memories().importFromCard();
+                showMessage(res, !res.startsWith("Geladen"));
+            }
+        }));
+
+        out.add(Row.header("Info"));
+        DeviceInfo d = DeviceInfo.getInstance();
+        out.add(Row.info("Modell", safe(d.getModel())));
+        out.add(Row.info("Firmware", safe(d.getFirmwareVersion())));
+        out.add(Row.info("Plattform (API)", String.valueOf(d.getApiVersion())));
+        out.add(Row.info("Android", Build.VERSION.RELEASE));
+        out.add(Row.info("App-Version", BuildConfig.VERSION_NAME));
+        out.add(Row.action("App beenden", "", new Runnable() {
+            @Override
+            public void run() {
+                host.exitApp();
+            }
+        }));
     }
 
-    /** Only settings this camera has and that matter with the current values */
-    private void addSettings(List<Row> out, Setting.Category c) {
-        CameraSession.Params p = session.current();
-        for (Setting s : Settings.of(c)) {
-            if (s.isShown(p)) {
-                out.add(new Row(s.label, s, null, null, -1));
+    // ---- My Menu ----
+
+    private List<String> myMenu() {
+        List<String> ids = new ArrayList<String>();
+        String raw = prefs.getString("mymenu", "");
+        for (String id : raw.split(",")) {
+            if (id.length() > 0 && Settings.get(id) != null) {
+                ids.add(id);
             }
         }
-        if (out.isEmpty()) {
-            out.add(new Row("Keine Einstellungen verfügbar", null, null, "", -1));
+        return ids;
+    }
+
+    private void saveMyMenu(List<String> ids) {
+        StringBuilder b = new StringBuilder();
+        for (String id : ids) {
+            if (b.length() > 0) {
+                b.append(',');
+            }
+            b.append(id);
+        }
+        prefs.edit().putString("mymenu", b.toString()).apply();
+    }
+
+    private void myMenuRows(List<Row> out) {
+        CameraSession.Params p = session.current();
+        for (String id : myMenu()) {
+            Setting s = Settings.get(id);
+            if (s != null && s.isAvailable(p)) {
+                out.add(Row.of(s));
+            } else if (s != null) {
+                out.add(Row.info(s.label, "gerade nicht verfügbar"));
+            }
+        }
+        out.add(Row.pick("Posten hinzufügen …", "", new Picker() {
+            @Override
+            public Setting current() {
+                return null;
+            }
+
+            @Override
+            public void picked(Setting s) {
+                if (s == null) {
+                    return;
+                }
+                List<String> ids = myMenu();
+                if (!ids.contains(s.id)) {
+                    ids.add(s.id);
+                    saveMyMenu(ids);
+                }
+            }
+        }));
+        out.add(Row.info("Löschtaste entfernt den gewählten Posten", ""));
+    }
+
+    private void removeFromMyMenu(Setting s) {
+        List<String> ids = myMenu();
+        if (ids.remove(s.id)) {
+            saveMyMenu(ids);
+            showMessage(s.label + " aus Mein Menü entfernt", false);
         }
     }
 
@@ -660,7 +959,7 @@ public class Ui {
 
     public boolean aeLocked() { return aeLocked; }
 
-    /** AEL key: holds the exposure while pressed, like the camera's default "AEL hold" */
+    /** AEL: holds the exposure while pressed (or toggles, depending on the custom key) */
     public void onAel(boolean down) {
         if (down == aeLocked) {
             return;
@@ -683,6 +982,9 @@ public class Ui {
     public boolean onKey(Keys.Key key) {
         if (key == Keys.Key.SHUTTER_HALF || key == Keys.Key.SHUTTER_FULL) {
             // Half press always returns to shooting, like on the camera itself
+            if (state == State.MAGNIFY) {
+                session.stopMagnification();
+            }
             if (state != State.LIVE) {
                 state = State.LIVE;
                 host.redraw();
@@ -696,6 +998,8 @@ public class Ui {
             case FN_EDIT: handled = onFnEditKey(key); break;
             case MENU: handled = onMenuKey(key); break;
             case AF_MOVE: handled = onAfMoveKey(key); break;
+            case QUICK: handled = onQuickKey(key); break;
+            case MAGNIFY: handled = onMagnifyKey(key); break;
             default: handled = false;
         }
         if (handled) {
@@ -705,6 +1009,9 @@ public class Ui {
     }
 
     private boolean onLiveKey(Keys.Key key) {
+        if (KeyFunctions.assignable(key)) {
+            return runFunction(keys.get(key), key);
+        }
         switch (key) {
             case FN:
                 state = State.FN;
@@ -715,13 +1022,6 @@ public class Ui {
             case DISP:
                 infoVisible = !infoVisible;
                 return true;
-            case ENTER:
-                // Like the camera: the centre button moves the flexible spot
-                if (isFlexSpot()) {
-                    state = State.AF_MOVE;
-                    return true;
-                }
-                return false;
             case DIAL1_CW: case DIAL1_CCW:
                 turn(dial1Role(), Keys.direction(key));
                 return true;
@@ -783,6 +1083,160 @@ public class Ui {
         }
     }
 
+    // ---- custom keys ----
+
+    /** Key that holds the exposure while it is pressed (function "AEL halten") */
+    private Keys.Key aelHoldKey;
+
+    public KeyFunctions keyFunctions() { return keys; }
+
+    /** Executes the function of a custom key; returns false if the key is left to the camera */
+    private boolean runFunction(KeyFunctions.Function f, Keys.Key key) {
+        switch (f) {
+            case NONE:
+                return false;
+            case AEL_HOLD:
+                aelHoldKey = key;
+                onAel(true);
+                return true;
+            case AEL_TOGGLE:
+                onAel(!aeLocked);
+                return true;
+            case MAGNIFY:
+                startMagnify(key);
+                return true;
+            case AF_MOVE:
+                if (isFlexSpot()) {
+                    state = State.AF_MOVE;
+                } else {
+                    showMessage("Nur mit Fokusfeld „Flex. Spot“", true);
+                }
+                return true;
+            case AF_CENTER:
+                if (isFlexSpot()) {
+                    session.centerFocusPoint();
+                    showMessage("Fokusfeld in der Mitte", false);
+                }
+                return true;
+            case AF_MF: {
+                Setting s = Settings.get("afmf");
+                String cur = s.safeGet(session.current());
+                s.write(session, "manual".equals(cur) ? "auto" : "manual");
+                showMessage("Fokus: " + s.currentText(session.current()), false);
+                return true;
+            }
+            case FN_MENU:
+                state = State.FN;
+                return true;
+            case MY_MENU:
+                openMenu();
+                tab = TAB_MYMENU;
+                focus = MenuFocus.LIST;
+                row = 0;
+                return true;
+            case GRID:
+                if (grid == Grid.OFF) {
+                    grid = Grid.values()[Math.max(1, prefs.getInt("gridlast", 1))];
+                } else {
+                    prefs.edit().putInt("gridlast", grid.ordinal()).apply();
+                    grid = Grid.OFF;
+                }
+                prefs.edit().putInt("grid", grid.ordinal()).apply();
+                return true;
+            case HISTO:
+                if (histo == Histo.OFF) {
+                    histo = Histo.values()[Math.max(1, prefs.getInt("histolast", 1))];
+                } else {
+                    prefs.edit().putInt("histolast", histo.ordinal()).apply();
+                    histo = Histo.OFF;
+                }
+                prefs.edit().putInt("histo", histo.ordinal()).apply();
+                host.applyDisplay();
+                return true;
+            default: {
+                Setting s = f.setting != null ? Settings.get(f.setting) : null;
+                if (s == null) {
+                    return false;
+                }
+                if (!s.isAvailable(session.current())) {
+                    showMessage(s.label + ": gerade nicht verfügbar", true);
+                    return true;
+                }
+                quick = s;
+                quickKey = key;
+                state = State.QUICK;
+                return true;
+            }
+        }
+    }
+
+    /** A custom key was released (for "AEL halten") */
+    public void onKeyRelease(Keys.Key key) {
+        if (key == aelHoldKey) {
+            aelHoldKey = null;
+            onAel(false);
+        }
+    }
+
+    public Setting quickSetting() { return quick; }
+
+    private boolean onQuickKey(Keys.Key key) {
+        int dir = Keys.direction(key);
+        if (key == Keys.Key.LEFT || key == Keys.Key.UP) dir = -1;
+        if (key == Keys.Key.RIGHT || key == Keys.Key.DOWN) dir = 1;
+        if (key == quickKey && key != Keys.Key.LEFT && key != Keys.Key.RIGHT && key != Keys.Key.DOWN) {
+            dir = 0;
+        }
+        if (dir != 0) {
+            stepSetting(quick, dir);
+            return true;
+        }
+        switch (key) {
+            case ENTER: case MENU: case FN: case BACK: case DISP:
+            default:
+                state = State.LIVE;
+                return true;
+        }
+    }
+
+    // ---- focus magnifier ----
+
+    private Keys.Key magnifyKey;
+
+    private void startMagnify(Keys.Key key) {
+        magnifyKey = key;
+        if (session.nextMagnification()) {
+            state = State.MAGNIFY;
+        } else {
+            showMessage("Fokuslupe an dieser Kamera nicht verfügbar", true);
+        }
+    }
+
+    private boolean onMagnifyKey(Keys.Key key) {
+        switch (key) {
+            case UP: session.moveMagnification(0, -1); return true;
+            case DOWN: session.moveMagnification(0, 1); return true;
+            case LEFT: case WHEEL_CCW: session.moveMagnification(-1, 0); return true;
+            case RIGHT: case WHEEL_CW: session.moveMagnification(1, 0); return true;
+            case DELETE: session.moveMagnification(0, 0); return true;
+            default:
+                break;
+        }
+        if (key == magnifyKey || key == Keys.Key.ENTER) {
+            // Next level, after the last one back to the live view
+            if (!session.nextMagnification()) {
+                state = State.LIVE;
+            }
+            return true;
+        }
+        if (key == Keys.Key.MENU || key == Keys.Key.BACK || key == Keys.Key.FN || key == Keys.Key.DISP) {
+            session.stopMagnification();
+            state = State.LIVE;
+            return true;
+        }
+        return false;
+    }
+
     private boolean onAfMoveKey(Keys.Key key) {
         CameraSession.Result r = null;
         switch (key) {
@@ -808,11 +1262,35 @@ public class Ui {
     private void openMenu() {
         state = State.MENU;
         focus = MenuFocus.TABS;
+        sub = null;
         row = 0;
+    }
+
+    /** Next selectable row (headers are skipped) */
+    private int nextRow(List<Row> rows, int from, int dir) {
+        int n = rows.size();
+        int i = from;
+        for (int k = 0; k < n; k++) {
+            i = (i + dir + n) % n;
+            if (!rows.get(i).header) {
+                return i;
+            }
+        }
+        return from;
+    }
+
+    private int firstRow(List<Row> rows) {
+        for (int i = 0; i < rows.size(); i++) {
+            if (!rows.get(i).header) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     private boolean onMenuKey(Keys.Key key) {
         if (key == Keys.Key.MENU) {
+            sub = null;
             state = State.LIVE;
             return true;
         }
@@ -821,18 +1299,34 @@ public class Ui {
                 switch (key) {
                     case UP: case WHEEL_CCW: tab = (tab + TABS.length - 1) % TABS.length; row = 0; return true;
                     case DOWN: case WHEEL_CW: tab = (tab + 1) % TABS.length; row = 0; return true;
-                    case RIGHT: case ENTER: focus = MenuFocus.LIST; row = 0; return true;
+                    case RIGHT: case ENTER: focus = MenuFocus.LIST; row = firstRow(rows()); return true;
                     case BACK: case LEFT: state = State.LIVE; return true;
                     default: return false;
                 }
             case LIST: {
                 List<Row> rows = rows();
                 row = Math.max(0, Math.min(row, rows.size() - 1));
+                if (rows.get(row).header) {
+                    row = nextRow(rows, row, 1);
+                }
                 switch (key) {
-                    case UP: case WHEEL_CCW: row = (row + rows.size() - 1) % rows.size(); return true;
-                    case DOWN: case WHEEL_CW: row = (row + 1) % rows.size(); return true;
-                    case LEFT: case BACK: focus = MenuFocus.TABS; return true;
+                    case UP: case WHEEL_CCW: row = nextRow(rows, row, -1); return true;
+                    case DOWN: case WHEEL_CW: row = nextRow(rows, row, 1); return true;
+                    case LEFT: case BACK:
+                        if (sub != null) {
+                            sub = null;
+                            row = subParentRow;
+                        } else {
+                            focus = MenuFocus.TABS;
+                        }
+                        return true;
                     case ENTER: case RIGHT: enterRow(rows.get(row)); return true;
+                    case DELETE:
+                        if (sub == null && tab == TAB_MYMENU && rows.get(row).setting != null) {
+                            removeFromMyMenu(rows.get(row).setting);
+                            return true;
+                        }
+                        return false;
                     default: return false;
                 }
             }
@@ -863,9 +1357,10 @@ public class Ui {
                     case DOWN: case WHEEL_CW: pickIndex = (pickIndex + 1) % (pickList.size() + 1); return true;
                     case ENTER: {
                         // Index pickList.size() is the entry "(leer)"
-                        int slot = rows().get(row).fnSlot;
                         Setting chosen = pickIndex < pickList.size() ? pickList.get(pickIndex) : null;
-                        fn.set(slot, chosen != null ? chosen.id : FnLayout.EMPTY);
+                        if (picker != null) {
+                            picker.picked(chosen);
+                        }
                         focus = MenuFocus.LIST;
                         return true;
                     }
@@ -881,17 +1376,25 @@ public class Ui {
     }
 
     private void enterRow(Row r) {
+        if (r.header) {
+            return;
+        }
         if (r.setting != null) {
             if (r.setting.isAvailable(session.current())) {
                 focus = MenuFocus.EDIT;
             } else {
                 showMessage(r.setting.label + ": an dieser Kamera nicht verfügbar", true);
             }
-        } else if (r.fnSlot >= 0) {
+        } else if (r.picker != null) {
+            picker = r.picker;
             pickList = Settings.all();
-            Setting current = fn.get(r.fnSlot);
+            Setting current = r.picker.current();
             pickIndex = current != null ? pickList.indexOf(current) : pickList.size();
             focus = MenuFocus.PICK;
+        } else if (r.sub != null) {
+            subParentRow = row;
+            sub = r.sub;
+            row = firstRow(rows());
         } else if (r.action != null) {
             r.action.run();
         }

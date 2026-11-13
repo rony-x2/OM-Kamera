@@ -29,15 +29,13 @@ public final class Theme {
 
     /** Color per menu tab, as orientation like in the newer camera menus */
     public static final int[] TAB_COLORS = {
+        0xFFB0B8C4, // Haupt
         0xFFE0564E, // Aufnahme
-        0xFFF0A030, // Belichtung
-        0xFFB37AE0, // Bild
+        0xFFF0A030, // Belichtung/Farbe
         0xFF4CB782, // Fokus
-        0xFFE8CF4A, // Blitz
-        0xFF3FC1C9, // Anzeige
-        0xFF4D8FE0, // Fn-Raster
-        0xFF9AA0A8, // App
-        0xFF6E7681, // Info
+        0xFFB37AE0, // Netzwerk
+        0xFFE8CF4A, // Einstellung
+        0xFF3FC1C9, // Mein Menü
     };
 
     /** Colour of the Fn grid and network markers */

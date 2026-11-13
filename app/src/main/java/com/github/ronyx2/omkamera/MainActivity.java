@@ -246,10 +246,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             ui.showMessage("Selbstauslöser abgebrochen", false);
             return true;
         }
-        if (key == Keys.Key.AEL) {
-            if (event.getRepeatCount() == 0 && ui.state() == Ui.State.LIVE) {
-                ui.onAel(true);
-            }
+        if (event.getRepeatCount() > 0 && KeyFunctions.assignable(key) && ui.state() == Ui.State.LIVE) {
+            // Holding a custom key must not repeat its function
             return true;
         }
         if (key == Keys.Key.OTHER) {
@@ -269,9 +267,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         Keys.Key key = Keys.map(event);
-        if (key == Keys.Key.AEL) {
-            ui.onAel(false);
-            return true;
+        if (KeyFunctions.assignable(key)) {
+            ui.onKeyRelease(key);
         }
         if (!session.isDirectShutter()) {
             if (key == Keys.Key.SHUTTER_HALF) {
@@ -536,6 +533,21 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         } catch (Throwable t) {
             return -1;
         }
+    }
+
+    private Memories memories;
+
+    @Override
+    public Memories memories() {
+        if (memories == null) {
+            memories = new Memories(session, getSharedPreferences("ui", MODE_PRIVATE));
+        }
+        return memories;
+    }
+
+    @Override
+    public String[] wifiDetails() {
+        return network.details();
     }
 
     @Override
