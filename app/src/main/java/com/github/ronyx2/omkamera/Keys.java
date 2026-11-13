@@ -9,6 +9,8 @@ public final class Keys {
     public enum Key {
         UP, DOWN, LEFT, RIGHT, ENTER, MENU, FN, DISP, PLAY, DELETE, BACK,
         C1, C2, C3,
+        /** AEL key (a6000, a7II) */
+        AEL,
         /** Control wheel on the back (a6000, a7II) */
         WHEEL_CW, WHEEL_CCW,
         /** Upper / front dial */
@@ -39,6 +41,7 @@ public final class Keys {
             case 622: return Key.C1;
             case 623: return Key.C2;
             case 588: return Key.C3;
+            case 532: return Key.AEL;
             case 522: return Key.WHEEL_CW;
             case 523: return Key.WHEEL_CCW;
             case 525: return Key.DIAL1_CW;

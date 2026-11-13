@@ -31,7 +31,9 @@ public final class Theme {
     public static final int[] TAB_COLORS = {
         0xFFE0564E, // Aufnahme
         0xFFF0A030, // Belichtung
+        0xFFB37AE0, // Bild
         0xFF4CB782, // Fokus
+        0xFFE8CF4A, // Blitz
         0xFF4D8FE0, // Fn-Raster
         0xFF9AA0A8, // App
         0xFF6E7681, // Info

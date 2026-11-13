@@ -14,7 +14,192 @@ public final class Settings {
     private static final Map<String, Setting> ALL = new LinkedHashMap<String, Setting>();
 
     static {
-        // ---- Belichtung ----
+        // ================= Aufnahme =================
+        add(new Setting("quality", "Qualität", "Qualität", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedPictureStorageFormats());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getPictureStorageFormat();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setPictureStorageFormat(v);
+            }
+        });
+
+        add(new Setting("size", "Bildgröße", "Größe", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedImageSizes());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getImageSize();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setImageSize(v);
+            }
+
+            @Override
+            public String display(String v) {
+                return sizeLetter(v);
+            }
+        });
+
+        add(new Setting("aspect", "Seitenverhältnis", "Format", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedImageAspectRatios());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getImageAspectRatio();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setImageAspectRatio(v);
+            }
+        });
+
+        add(new DriveSetting());
+
+        add(new Setting("bracketstep", "Reihe: Belichtungsstufe", "Reihe EV", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedExposureBracketPeriods());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return String.valueOf(p.mod.getExposureBracketPeriod());
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setExposureBracketPeriod(Integer.parseInt(v));
+            }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                return isExposureBracket(p);
+            }
+
+            @Override
+            public String display(String v) {
+                // The camera counts in tenths of an EV step
+                return String.format(Locale.GERMANY, "%.1f EV", Integer.parseInt(v) / 10f);
+            }
+        });
+
+        add(new Setting("bracketcount", "Reihe: Anzahl Bilder", "Reihe Anz.", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedNumsOfBracketPicture());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return String.valueOf(p.mod.getNumOfBracketPicture());
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setNumOfBracketPicture(Integer.parseInt(v));
+            }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                return isExposureBracket(p);
+            }
+
+            @Override
+            public String display(String v) {
+                return v + " Bilder";
+            }
+        });
+
+        add(new Setting("bracketlevel", "Reihe WB/DRO: Stufe", "Reihe Stufe", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedBracketStepPeriods());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getBracketStepPeriod();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setBracketStepPeriod(v);
+            }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                return "bracket".equals(p.mod.getDriveMode()) && !"exposure".equals(p.mod.getBracketMode());
+            }
+
+            @Override
+            public String display(String v) {
+                return "high".equals(v) ? "Hi" : "low".equals(v) ? "Lo" : Labels.of(v);
+            }
+        });
+
+        add(new Setting("bracketorder", "Reihe: Reihenfolge", "Reihenf.", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedBracketOrders());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getBracketOrder();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setBracketOrder(v);
+            }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                return "bracket".equals(p.mod.getDriveMode());
+            }
+
+            @Override
+            public String display(String v) {
+                return "start-zero".equals(v) ? "0 → − → +" : "start-minus".equals(v) ? "− → 0 → +" : v;
+            }
+        });
+
+        add(new Setting("lenr", "Rauschmind. Langzeitbel.", "RM Lang", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return p.mod.isSupportedLongExposureNR() ? ON_OFF : null;
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getLongExposureNR() ? "on" : "off";
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setLongExposureNR("on".equals(v));
+            }
+        });
+
+        // ================= Belichtung =================
         add(new Setting("iso", "ISO-Empfindlichkeit", "ISO", Setting.Category.EXPOSURE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
@@ -40,11 +225,7 @@ public final class Settings {
         add(new Setting("ev", "Belichtungskorrektur", "EV", Setting.Category.EXPOSURE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                List<String> out = new ArrayList<String>();
-                for (int i = p.params.getMinExposureCompensation(); i <= p.params.getMaxExposureCompensation(); i++) {
-                    out.add(String.valueOf(i));
-                }
-                return out;
+                return range(p.params.getMinExposureCompensation(), p.params.getMaxExposureCompensation(), 1);
             }
 
             @Override
@@ -60,12 +241,31 @@ public final class Settings {
             @Override
             public String display(CameraSession.Params p, String v) {
                 // The camera works with an index, the step converts it to EV
-                float step = stepOf(p);
-                return ev(Integer.parseInt(v) * step);
+                return ev(Integer.parseInt(v) * stepOf(p));
             }
         });
 
-        add(new Setting("wb", "Weißabgleich", "WB", Setting.Category.EXPOSURE) {
+        add(new Setting("metering", "Messmethode", "Messung", Setting.Category.EXPOSURE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedMeteringModes());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getMeteringMode();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setMeteringMode(v);
+            }
+        });
+
+        add(new DroHdrSetting());
+
+        // ================= Bild =================
+        add(new Setting("wb", "Weißabgleich", "WB", Setting.Category.IMAGE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
                 return p.params.getSupportedWhiteBalance();
@@ -87,41 +287,83 @@ public final class Settings {
             }
         });
 
-        add(new Setting("metering", "Messmethode", "Messung", Setting.Category.EXPOSURE) {
+        add(new Setting("wbtemp", "Farbtemperatur", "Kelvin", Setting.Category.IMAGE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                return strings(p.mod.getSupportedMeteringModes());
+                return range(p.mod.getMinColorTemperatureForWhiteBalance(), p.mod.getMaxColorTemperatureForWhiteBalance(), 100);
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                return p.mod.getMeteringMode();
+                return String.valueOf(p.mod.getColorTemperatureForWhiteBalance());
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.mod.setMeteringMode(v);
+                e.mod.setColorTemperatureForWhiteBalance(Integer.parseInt(v));
+            }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                String wb = p.params.getWhiteBalance();
+                return wb != null && wb.contains("temp");
+            }
+
+            @Override
+            public String display(String v) {
+                return v + " K";
             }
         });
 
-        add(new Setting("dro", "DRO / Auto-HDR", "DRO", Setting.Category.EXPOSURE) {
+        add(new Setting("wbab", "WB-Feinkorrektur A–B", "WB A–B", Setting.Category.IMAGE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                return strings(p.mod.getSupportedDROModes());
+                return range(p.mod.getMinLightBalanceForWhiteBalance(), p.mod.getMaxLightBalanceForWhiteBalance(), 1);
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                return p.mod.getDROMode();
+                return String.valueOf(p.mod.getLightBalanceForWhiteBalance());
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.mod.setDROMode(v);
+                e.mod.setLightBalanceForWhiteBalance(Integer.parseInt(v));
+            }
+
+            @Override
+            public String display(String v) {
+                // Positive values shift towards amber, negative towards blue
+                int i = Integer.parseInt(v);
+                return i > 0 ? "A" + i : i < 0 ? "B" + (-i) : "0";
             }
         });
 
-        add(new Setting("style", "Kreativmodus", "Stil", Setting.Category.EXPOSURE) {
+        add(new Setting("wbgm", "WB-Feinkorrektur G–M", "WB G–M", Setting.Category.IMAGE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return range(p.mod.getMinColorCompensationForWhiteBalance(), p.mod.getMaxColorCompensationForWhiteBalance(), 1);
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return String.valueOf(p.mod.getColorCompensationForWhiteBalance());
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setColorCompensationForWhiteBalance(Integer.parseInt(v));
+            }
+
+            @Override
+            public String display(String v) {
+                // Positive values shift towards magenta, negative towards green
+                int i = Integer.parseInt(v);
+                return i > 0 ? "M" + i : i < 0 ? "G" + (-i) : "0";
+            }
+        });
+
+        add(new Setting("style", "Kreativmodus", "Stil", Setting.Category.IMAGE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
                 return strings(p.mod.getSupportedColorModes());
@@ -138,60 +380,138 @@ public final class Settings {
             }
         });
 
-        add(new Setting("flash", "Blitzmodus", "Blitz", Setting.Category.EXPOSURE) {
+        // Like the camera's menu, the creative style parameters are limited to -3..+3
+        add(new Setting("contrast", "Stil: Kontrast", "Kontrast", Setting.Category.IMAGE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                return p.params.getSupportedFlashModes();
+                return range(Math.max(-3, p.mod.getMinContrast()), Math.min(3, p.mod.getMaxContrast()), 1);
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                // Only offered while the built-in flash is up or an external flash is attached
-                return flashReady ? p.params.getFlashMode() : null;
+                return String.valueOf(p.mod.getContrast());
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.params.setFlashMode(v);
+                e.mod.setContrast(Integer.parseInt(v));
+            }
+
+            @Override
+            public String display(String v) {
+                return signed(v);
             }
         });
 
-        add(new Setting("flashcomp", "Blitzkorrektur", "Blitz ±", Setting.Category.EXPOSURE) {
+        add(new Setting("saturation", "Stil: Sättigung", "Sättigung", Setting.Category.IMAGE) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                List<String> out = new ArrayList<String>();
-                for (int i = p.mod.getMinFlashCompensation(); i <= p.mod.getMaxFlashCompensation(); i++) {
-                    out.add(String.valueOf(i));
-                }
-                return out;
+                return range(Math.max(-3, p.mod.getMinSaturation()), Math.min(3, p.mod.getMaxSaturation()), 1);
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                return flashReady ? String.valueOf(p.mod.getFlashCompensation()) : null;
+                return String.valueOf(p.mod.getSaturation());
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.mod.setFlashCompensation(Integer.parseInt(v));
+                e.mod.setSaturation(Integer.parseInt(v));
             }
 
             @Override
-            public String display(CameraSession.Params p, String v) {
-                float step = 1f / 3f;
-                try {
-                    float st = p.mod.getFlashCompensationStep();
-                    if (st > 0) {
-                        step = st;
-                    }
-                } catch (Throwable ignored) {
-                }
-                return ev(Integer.parseInt(v) * step);
+            protected boolean relevant(CameraSession.Params p) {
+                // Black and white styles have no saturation
+                String style = p.mod.getColorMode();
+                return !"mono".equals(style) && !"sepia".equals(style);
+            }
+
+            @Override
+            public String display(String v) {
+                return signed(v);
             }
         });
 
-        // ---- Fokus ----
-        add(new Setting("afmf", "Fokus AF/MF", "AF/MF", Setting.Category.FOCUS) {
+        add(new Setting("sharpness", "Stil: Schärfe", "Schärfe", Setting.Category.IMAGE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return range(Math.max(-3, p.mod.getMinSharpness()), Math.min(3, p.mod.getMaxSharpness()), 1);
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return String.valueOf(p.mod.getSharpness());
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setSharpness(Integer.parseInt(v));
+            }
+
+            @Override
+            public String display(String v) {
+                return signed(v);
+            }
+        });
+
+        add(new Setting("effect", "Bildeffekt", "Effekt", Setting.Category.IMAGE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedPictureEffects());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getPictureEffect();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setPictureEffect(v);
+            }
+        });
+
+        add(new Setting("softskin", "Soft Skin-Effekt", "Soft Skin", Setting.Category.IMAGE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedSoftSkinEffects());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getSoftSkinEffect();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setSoftSkinEffect(v);
+            }
+        });
+
+        add(new Setting("colorspace", "Farbraum", "Farbraum", Setting.Category.IMAGE) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedColorSpaces());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getColorSpace();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setColorSpace(v);
+            }
+
+            @Override
+            public String display(String v) {
+                return "standard".equals(v) ? "sRGB" : "expanded".equals(v) ? "AdobeRGB" : v;
+            }
+        });
+
+        // ================= Fokus =================
+        add(new Setting("afmf", "Fokusmodus AF/MF", "AF/MF", Setting.Category.FOCUS) {
             @Override
             protected List<String> values(CameraSession.Params p) {
                 return p.params.getSupportedFocusModes();
@@ -228,6 +548,11 @@ public final class Settings {
             protected void set(CameraSession.Params e, String v) {
                 e.mod.setAutoFocusMode(v);
             }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                return !"manual".equals(p.params.getFocusMode());
+            }
         });
 
         add(new Setting("afarea", "Fokusfeld", "AF-Feld", Setting.Category.FOCUS) {
@@ -245,76 +570,136 @@ public final class Settings {
             protected void set(CameraSession.Params e, String v) {
                 e.mod.setFocusAreaMode(v);
             }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                return !"manual".equals(p.params.getFocusMode());
+            }
         });
 
-        // ---- Aufnahme ----
-        add(new Setting("drive", "Bildfolgemodus", "Bildfolge", Setting.Category.SHOOTING) {
+        add(new Setting("spotsize", "Spot-Größe", "Spot", Setting.Category.FOCUS) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                return strings(p.mod.getSupportedDriveModes());
+                return strings(p.mod.getSupportedFocusAreaFlexibleSpotSizes());
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                return p.mod.getDriveMode();
+                return p.mod.getFocusAreaFlexibleSpotSize();
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.mod.setDriveMode(v);
+                e.mod.setFocusAreaFlexibleSpotSize(v);
+            }
+
+            @Override
+            protected boolean relevant(CameraSession.Params p) {
+                return isFlexSpot(p);
+            }
+
+            @Override
+            public String display(String v) {
+                return sizeLetter(v);
             }
         });
 
-        add(new Setting("quality", "Qualität", "Qualität", Setting.Category.SHOOTING) {
+        add(new Setting("face", "Gesichtserkennung", "Gesicht", Setting.Category.FOCUS) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                return strings(p.mod.getSupportedPictureStorageFormats());
+                return strings(p.mod.getSupportedFaceDetectionModes());
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                return p.mod.getPictureStorageFormat();
+                return p.mod.getFaceDetectionMode();
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.mod.setPictureStorageFormat(v);
+                e.mod.setFaceDetectionMode(v);
+            }
+
+            @Override
+            public String display(String v) {
+                return "auto".equals(v) ? "Ein" : Labels.of(v);
             }
         });
 
-        add(new Setting("size", "Bildgröße", "Größe", Setting.Category.SHOOTING) {
+        // ================= Blitz =================
+        add(new FlashSetting());
+
+        add(new Setting("flashcomp", "Blitzkorrektur", "Blitz ±", Setting.Category.FLASH) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                return strings(p.mod.getSupportedImageSizes());
+                return range(p.mod.getMinFlashCompensation(), p.mod.getMaxFlashCompensation(), 1);
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                return p.mod.getImageSize();
+                return flashReady ? String.valueOf(p.mod.getFlashCompensation()) : null;
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.mod.setImageSize(v);
+                e.mod.setFlashCompensation(Integer.parseInt(v));
+            }
+
+            @Override
+            public String display(CameraSession.Params p, String v) {
+                float step = 1f / 3f;
+                try {
+                    float st = p.mod.getFlashCompensationStep();
+                    if (st > 0) {
+                        step = st;
+                    }
+                } catch (Throwable ignored) {
+                }
+                return ev(Integer.parseInt(v) * step);
             }
         });
 
-        add(new Setting("aspect", "Seitenverhältnis", "Format", Setting.Category.SHOOTING) {
+        add(new Setting("redeye", "Rote-Augen-Reduzierung", "Rote Augen", Setting.Category.FLASH) {
             @Override
             protected List<String> values(CameraSession.Params p) {
-                return strings(p.mod.getSupportedImageAspectRatios());
+                return strings(p.mod.getSupportedRedEyeReductionModes());
             }
 
             @Override
             protected String get(CameraSession.Params p) {
-                return p.mod.getImageAspectRatio();
+                return p.mod.getRedEyeReductionMode();
             }
 
             @Override
             protected void set(CameraSession.Params e, String v) {
-                e.mod.setImageAspectRatio(v);
+                e.mod.setRedEyeReductionMode(v);
             }
         });
+    }
+
+    private static final List<String> ON_OFF = java.util.Arrays.asList("off", "on");
+
+    static boolean isExposureBracket(CameraSession.Params p) {
+        return "bracket".equals(p.mod.getDriveMode()) && "exposure".equals(p.mod.getBracketMode());
+    }
+
+    static boolean isFlexSpot(CameraSession.Params p) {
+        String a = p.mod.getFocusAreaMode();
+        return a != null && (a.contains("flex") || a.equals("local"));
+    }
+
+    /** small / midium / large as S, M, L like on the camera */
+    static String sizeLetter(String v) {
+        if ("large".equals(v)) {
+            return "L";
+        }
+        if ("midium".equals(v) || "middle".equals(v) || "medium".equals(v)) {
+            return "M";
+        }
+        if ("small".equals(v)) {
+            return "S";
+        }
+        return Labels.of(v);
     }
 
     private static float stepOf(CameraSession.Params p) {

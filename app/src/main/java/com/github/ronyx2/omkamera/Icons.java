@@ -62,23 +62,39 @@ public final class Icons {
     private static boolean drive(Canvas c, String v, float cx, float cy, float s) {
         float w = s * 0.5f;
         float h = s * 0.36f;
-        if (v.contains("self")) {
-            float r = s * 0.32f;
-            c.drawCircle(cx, cy, r, LINE);
-            c.drawLine(cx, cy, cx, cy - r * 0.65f, LINE);
-            c.drawLine(cx, cy, cx + r * 0.45f, cy + r * 0.2f, LINE);
-            c.drawLine(cx - r * 0.3f, cy - r - s * 0.08f, cx + r * 0.3f, cy - r - s * 0.08f, LINE);
-            return true;
-        }
-        if (v.contains("burst") || v.contains("continu") || v.contains("speed")) {
-            for (int i = 2; i >= 0; i--) {
-                float o = (i - 1) * s * 0.12f;
-                rect(c, cx - w / 2 + o, cy - h / 2 - o, cx + w / 2 + o, cy + h / 2 - o);
+        if (v.startsWith("timer") || v.contains("self")) {
+            float r = s * 0.3f;
+            float x = cx - s * 0.1f;
+            c.drawCircle(x, cy, r, LINE);
+            c.drawLine(x, cy, x, cy - r * 0.65f, LINE);
+            c.drawLine(x, cy, x + r * 0.45f, cy + r * 0.2f, LINE);
+            c.drawLine(x - r * 0.3f, cy - r - s * 0.08f, x + r * 0.3f, cy - r - s * 0.08f, LINE);
+            if (v.startsWith("timer-")) {
+                text(c, v.substring(6), cx + s * 0.3f, cy + s * 0.2f, s * 0.26f);
             }
             return true;
         }
-        if (v.contains("bracket")) {
-            return false;
+        if (v.startsWith("burst")) {
+            float x = cx - s * 0.08f;
+            for (int i = 2; i >= 0; i--) {
+                float o = (i - 1) * s * 0.1f;
+                rect(c, x - w / 2 + o, cy - h / 2 - o, x + w / 2 + o, cy + h / 2 - o);
+            }
+            String sp = v.endsWith("high") ? "H" : v.endsWith("middle") ? "M" : v.endsWith("low") ? "L" : null;
+            if (sp != null) {
+                text(c, sp, cx + s * 0.34f, cy + s * 0.22f, s * 0.26f);
+            }
+            return true;
+        }
+        if (v.startsWith("bracket")) {
+            // Three frames of falling brightness, the kind as a small label
+            for (int i = 2; i >= 0; i--) {
+                float o = (i - 1) * s * 0.1f;
+                rect(c, cx - w / 2 + o, cy - h / 2 - o, cx + w / 2 + o, cy + h / 2 - o);
+            }
+            String k = v.equals("bracket-wb") ? "WB" : v.equals("bracket-dro") ? "DRO" : v.equals("bracket-c") ? "C" : "S";
+            text(c, k, cx, cy + s * 0.04f, s * (k.length() > 2 ? 0.2f : 0.24f));
+            return true;
         }
         rect(c, cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
         return true;
@@ -185,9 +201,9 @@ public final class Icons {
             c.drawLine(cx - s * 0.32f, cy + s * 0.32f, cx + s * 0.32f, cy - s * 0.32f, LINE);
         } else if (v.equals("auto")) {
             text(c, "A", cx + s * 0.26f, cy + s * 0.18f, s * 0.28f);
-        } else if (v.contains("slow")) {
+        } else if (v.equals("slow")) {
             text(c, "SL", cx + s * 0.26f, cy + s * 0.18f, s * 0.24f);
-        } else if (v.contains("rear")) {
+        } else if (v.startsWith("rear")) {
             text(c, "R", cx + s * 0.26f, cy + s * 0.18f, s * 0.28f);
         } else if (v.contains("wireless")) {
             text(c, "W", cx + s * 0.26f, cy + s * 0.18f, s * 0.28f);

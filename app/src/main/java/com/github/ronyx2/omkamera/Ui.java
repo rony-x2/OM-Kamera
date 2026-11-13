@@ -23,7 +23,9 @@ public class Ui {
         /** Fn grid, value of the selected cell is being changed */
         FN_EDIT,
         /** Menu with tabs */
-        MENU
+        MENU,
+        /** Flexible spot is being moved with the arrow keys */
+        AF_MOVE
     }
 
     public enum MenuFocus { TABS, LIST, EDIT, PICK }
@@ -69,10 +71,11 @@ public class Ui {
         }
     }
 
-    public static final String[] TABS = {"Aufnahme", "Belichtung", "Fokus", "Fn-Raster", "App", "Info"};
-    private static final int TAB_FN = 3;
-    private static final int TAB_SYSTEM = 4;
-    private static final int TAB_INFO = 5;
+    /** Setting tabs first (one per category, in its order), then the app's own tabs */
+    public static final String[] TABS = {"Aufnahme", "Belichtung", "Bild", "Fokus", "Blitz", "Fn-Raster", "App", "Info"};
+    private static final int TAB_FN = 5;
+    private static final int TAB_SYSTEM = 6;
+    private static final int TAB_INFO = 7;
 
     private final CameraSession session;
     private final FnLayout fn;
@@ -101,6 +104,8 @@ public class Ui {
     private FocusResult focusResult = FocusResult.NONE;
 
     private State state = State.LIVE;
+    /** Exposure held with the AEL key */
+    private boolean aeLocked;
     private int fnIndex = 0;
     private boolean infoVisible = true;
 
@@ -308,7 +313,31 @@ public class Ui {
                 addSettings(out, Setting.Category.EXPOSURE);
                 break;
             case 2:
+                addSettings(out, Setting.Category.IMAGE);
+                break;
+            case 3:
                 addSettings(out, Setting.Category.FOCUS);
+                if (isFlexSpot()) {
+                    out.add(new Row("Fokusfeld verschieben", null, new Runnable() {
+                        @Override
+                        public void run() {
+                            state = State.AF_MOVE;
+                        }
+                    }, "Mitteltaste im Livebild", -1));
+                    out.add(new Row("Fokusfeld zur Mitte", null, new Runnable() {
+                        @Override
+                        public void run() {
+                            session.centerFocusPoint();
+                            showMessage("Fokusfeld in der Mitte", false);
+                        }
+                    }, "", -1));
+                }
+                break;
+            case 4:
+                if (!Settings.flashReady) {
+                    out.add(new Row("Blitz nicht bereit", null, null, "Blitz ausklappen", -1));
+                }
+                addSettings(out, Setting.Category.FLASH);
                 break;
             case TAB_FN:
                 for (int i = 0; i < FnLayout.SIZE; i++) {
@@ -428,10 +457,45 @@ public class Ui {
         return out;
     }
 
+    /** Only settings this camera has and that matter with the current values */
     private void addSettings(List<Row> out, Setting.Category c) {
+        CameraSession.Params p = session.current();
         for (Setting s : Settings.of(c)) {
-            out.add(new Row(s.label, s, null, null, -1));
+            if (s.isShown(p)) {
+                out.add(new Row(s.label, s, null, null, -1));
+            }
         }
+        if (out.isEmpty()) {
+            out.add(new Row("Keine Einstellungen verfügbar", null, null, "", -1));
+        }
+    }
+
+    public boolean isFlexSpot() {
+        CameraSession.Params p = session.current();
+        Setting area = Settings.get("afarea");
+        if (p == null || area == null || !area.isShown(p)) {
+            return false;
+        }
+        try {
+            return Settings.isFlexSpot(p);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    public boolean aeLocked() { return aeLocked; }
+
+    /** AEL key: holds the exposure while pressed, like the camera's default "AEL hold" */
+    public void onAel(boolean down) {
+        if (down == aeLocked) {
+            return;
+        }
+        CameraSession.Result r = session.setExposureLock(down);
+        aeLocked = down && r.ok;
+        if (down && !r.ok) {
+            showMessage("AE-Speicher gesperrt" + (r.inhibition != 0 ? " (Grund " + r.inhibition + ")" : ""), true);
+        }
+        host.redraw();
     }
 
     private static String safe(String s) {
@@ -456,6 +520,7 @@ public class Ui {
             case FN: handled = onFnKey(key); break;
             case FN_EDIT: handled = onFnEditKey(key); break;
             case MENU: handled = onMenuKey(key); break;
+            case AF_MOVE: handled = onAfMoveKey(key); break;
             default: handled = false;
         }
         if (handled) {
@@ -475,6 +540,13 @@ public class Ui {
             case DISP:
                 infoVisible = !infoVisible;
                 return true;
+            case ENTER:
+                // Like the camera: the centre button moves the flexible spot
+                if (isFlexSpot()) {
+                    state = State.AF_MOVE;
+                    return true;
+                }
+                return false;
             case DIAL1_CW: case DIAL1_CCW:
                 turn(dial1Role(), Keys.direction(key));
                 return true;
@@ -536,6 +608,28 @@ public class Ui {
         }
     }
 
+    private boolean onAfMoveKey(Keys.Key key) {
+        CameraSession.Result r = null;
+        switch (key) {
+            case UP: r = session.moveFocusPoint(0, -1); break;
+            case DOWN: r = session.moveFocusPoint(0, 1); break;
+            case LEFT: case WHEEL_CCW: case DIAL1_CCW: r = session.moveFocusPoint(-1, 0); break;
+            case RIGHT: case WHEEL_CW: case DIAL1_CW: r = session.moveFocusPoint(1, 0); break;
+            case DIAL2_CCW: r = session.moveFocusPoint(0, -1); break;
+            case DIAL2_CW: r = session.moveFocusPoint(0, 1); break;
+            case DELETE: case C2: r = session.centerFocusPoint(); break;
+            case ENTER: case BACK: case FN: case MENU: case DISP:
+                state = State.LIVE;
+                return true;
+            default:
+                return false;
+        }
+        if (r != null && !r.ok) {
+            showMessage("Fokusfeld gesperrt" + (r.inhibition != 0 ? " (Grund " + r.inhibition + ")" : ""), true);
+        }
+        return true;
+    }
+
     private void openMenu() {
         state = State.MENU;
         focus = MenuFocus.TABS;
@@ -558,6 +652,7 @@ public class Ui {
                 }
             case LIST: {
                 List<Row> rows = rows();
+                row = Math.max(0, Math.min(row, rows.size() - 1));
                 switch (key) {
                     case UP: case WHEEL_CCW: row = (row + rows.size() - 1) % rows.size(); return true;
                     case DOWN: case WHEEL_CW: row = (row + 1) % rows.size(); return true;
@@ -567,7 +662,13 @@ public class Ui {
                 }
             }
             case EDIT: {
-                Setting s = rows().get(row).setting;
+                List<Row> rows = rows();
+                row = Math.max(0, Math.min(row, rows.size() - 1));
+                Setting s = rows.get(row).setting;
+                if (s == null) {
+                    focus = MenuFocus.LIST;
+                    return true;
+                }
                 int dir = Keys.direction(key);
                 if (key == Keys.Key.LEFT) dir = -1;
                 if (key == Keys.Key.RIGHT) dir = 1;

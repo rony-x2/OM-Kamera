@@ -234,6 +234,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                 return true;
             }
         }
+        if (key == Keys.Key.AEL) {
+            if (event.getRepeatCount() == 0 && ui.state() == Ui.State.LIVE) {
+                ui.onAel(true);
+            }
+            return true;
+        }
         if (key == Keys.Key.OTHER) {
             return super.onKeyDown(keyCode, event);
         }
@@ -251,6 +257,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         Keys.Key key = Keys.map(event);
+        if (key == Keys.Key.AEL) {
+            ui.onAel(false);
+            return true;
+        }
         if (!session.isDirectShutter()) {
             if (key == Keys.Key.SHUTTER_HALF) {
                 session.cancelFocus();
@@ -270,8 +280,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     }
 
     private boolean isBurst() {
-        String drive = Settings.get("drive").safeGet(session.current());
-        return drive != null && (drive.contains("burst") || drive.contains("continu") || drive.contains("speed"));
+        return DriveSetting.isContinuous(Settings.get("drive").safeGet(session.current()));
     }
 
     // ---- callbacks ----
@@ -517,8 +526,29 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             if (key == Keys.Key.SHUTTER_HALF || key == Keys.Key.SHUTTER_FULL) {
                 return "Auslöser über /api/af und /api/shoot";
             }
+            if (key == Keys.Key.AEL) {
+                return "AEL über /api/ael";
+            }
             ui.onKey(key);
             return "ok";
+        }
+        if (path.equals("/api/ael")) {
+            ui.onAel("1".equals(r.param("on")));
+            return ui.aeLocked() ? "locked" : "unlocked";
+        }
+        if (path.equals("/api/fp")) {
+            // Flexible spot: dx/dy in steps, or center=1
+            CameraSession.Result res;
+            if ("1".equals(r.param("center"))) {
+                res = session.centerFocusPoint();
+            } else {
+                int dx = parseInt(r.param("dx"));
+                int dy = parseInt(r.param("dy"));
+                res = session.moveFocusPoint(dx, dy);
+            }
+            redraw();
+            int[] fp = session.focusPoint();
+            return (res.ok ? "ok" : "refused " + res.inhibition) + (fp != null ? " " + fp[0] + "," + fp[1] : "");
         }
         if (path.equals("/api/af")) {
             if ("1".equals(r.param("on"))) {
@@ -553,6 +583,14 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         return "unbekannte Aktion";
     }
 
+    private static int parseInt(String s) {
+        try {
+            return s == null ? 0 : Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     private String stateJson() throws org.json.JSONException {
         org.json.JSONObject o = new org.json.JSONObject();
         CameraSession.Params p = session.current();
@@ -573,6 +611,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         o.put("remote", ui.remoteEnabled());
         o.put("directShutter", session.isDirectShutter());
         o.put("ui", ui.state().name());
+        o.put("ael", ui.aeLocked());
+        int[] fp = session.focusPoint();
+        if (fp != null) {
+            o.put("focusPoint", fp[0] + "," + fp[1]);
+        }
         org.json.JSONArray ff = new org.json.JSONArray();
         for (CameraSession.FocusFrame f : session.focusFrames(overlay.getWidth(), overlay.getHeight())) {
             ff.put(f.index + (f.enabled ? "*" : "") + ":" + f.rect.toShortString());
@@ -586,6 +629,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             j.put("group", s.category.title);
             boolean available = s.isAvailable(p);
             j.put("available", available);
+            j.put("shown", s.isShown(p));
             if (available) {
                 j.put("value", s.safeGet(p));
                 j.put("display", s.currentText(p));

@@ -81,6 +81,20 @@ public final class Labels {
         put("slow-rear-sync", "Langz. 2. V.");
         put("fill-in", "Aufhellblitz");
         put("wireless", "Drahtlos");
+        // Picture effects
+        put("toy-camera", "Spielzeugkamera");
+        put("pop-color", "Pop-Farbe");
+        put("posterization", "Posterisation");
+        put("retro-photo", "Retro-Foto");
+        put("soft-high-key", "Soft High-Key");
+        put("part-color", "Teilfarbe");
+        put("rough-mono", "Hochkontr.-Mono");
+        put("soft-focus", "Weichzeichnung");
+        put("hdr-art", "HDR-Gemälde");
+        put("richtone-mono", "Sattes Monochrom");
+        put("miniature", "Miniatur");
+        put("illust", "Illustration");
+        put("watercolor", "Aquarell");
         // Quality, size
         put("raw", "RAW");
         put("rawjpeg", "RAW+JPEG");

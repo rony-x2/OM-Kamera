@@ -662,32 +662,123 @@ public class CameraSession {
             aspect = current.mod.getImageAspectRatio();
         } catch (Throwable ignored) {
         }
-        String key = mode + "|" + aspect + "|" + viewWidth + "x" + viewHeight;
+        int[] point = focusPoint();
+        String key = mode + "|" + aspect + "|" + viewWidth + "x" + viewHeight
+                + (point != null ? "|" + point[0] + "," + point[1] : "");
         if (key.equals(focusFramesKey)) {
             return focusFrames;
         }
         focusFramesKey = key;
         List<FocusFrame> out = new ArrayList<FocusFrame>();
+        flexRange = null;
         try {
             int asp = "16:9".equals(aspect) ? 1 : "3:2".equals(aspect) ? 0 : -1;
             CameraEx.FocusAreaInfos[] infos = cameraEx.getFocusAreaInfos(asp);
             Rect video = videoRect(viewWidth, viewHeight);
+            boolean flex = mode != null && (mode.contains("flex") || mode.equals("local"));
             if (infos != null) {
                 for (CameraEx.FocusAreaInfos info : infos) {
                     if (info == null || mode == null || !mode.equals(info.focusAreaMode) || info.rectInfos == null) {
                         continue;
                     }
+                    int last = -1;
                     for (CameraEx.FocusAreaRectInfo r : info.rectInfos) {
-                        out.add(new FocusFrame(r.index, toView(video, r.rect), r.enable));
+                        if (r.enable && r.index > last) {
+                            last = r.index;
+                        }
+                    }
+                    for (CameraEx.FocusAreaRectInfo r : info.rectInfos) {
+                        Rect scalar = r.rect;
+                        if (flex && r.index == 1) {
+                            flexRange = new Rect(scalar);
+                        }
+                        if (flex && r.index == last && point != null) {
+                            // The spot follows the focus point; the reported rect gives its size
+                            int hw = scalar.width() / 2;
+                            int hh = scalar.height() / 2;
+                            scalar = new Rect(point[0] - hw, point[1] - hh, point[0] + hw, point[1] + hh);
+                        }
+                        out.add(new FocusFrame(r.index, toView(video, scalar), r.enable));
                     }
                 }
             }
-            Log.info("focus frames mode=" + mode + " aspect=" + aspect + " count=" + out.size() + " video=" + video);
+            Log.info("focus frames mode=" + mode + " aspect=" + aspect + " count=" + out.size()
+                    + (point != null ? " point=" + point[0] + "," + point[1] : "") + " range=" + flexRange);
         } catch (Throwable t) {
             Log.error("getFocusAreaInfos", t);
         }
         focusFrames = out;
         return out;
+    }
+
+    /** Range the flexible spot can move in, in the camera's -1000..1000 system; known after focusFrames() */
+    private Rect flexRange;
+
+    /** Centre of the flexible spot in the -1000..1000 system, or null */
+    public int[] focusPoint() {
+        try {
+            if (current == null) {
+                return null;
+            }
+            android.util.Pair<?, ?> fp = current.mod.getFocusPoint();
+            if (fp == null) {
+                return null;
+            }
+            return new int[]{((Number) fp.first).intValue(), ((Number) fp.second).intValue()};
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * Moves the flexible spot by whole steps. Like the camera, the range is divided into
+     * 17 columns and 11 rows.
+     */
+    public Result moveFocusPoint(int dx, int dy) {
+        int[] p = focusPoint();
+        if (p == null) {
+            return new Result(false, 0, "no focus point");
+        }
+        Rect range = flexRange != null ? flexRange : new Rect(-1000, -1000, 1000, 1000);
+        int stepX = Math.max(1, range.width() / 16);
+        int stepY = Math.max(1, range.height() / 10);
+        int x = Math.max(range.left, Math.min(range.right, p[0] + dx * stepX));
+        int y = Math.max(range.top, Math.min(range.bottom, p[1] + dy * stepY));
+        if (x == p[0] && y == p[1]) {
+            return new Result(true, 0, null);
+        }
+        return setFocusPoint(x, y);
+    }
+
+    public Result centerFocusPoint() {
+        return setFocusPoint(0, 0);
+    }
+
+    private Result setFocusPoint(int x, int y) {
+        try {
+            Params edit = createEdit();
+            edit.mod.setFocusPoint(x, y);
+            Result r = apply(edit);
+            invalidateFocusFrames();
+            return r;
+        } catch (Throwable t) {
+            Log.error("setFocusPoint", t);
+            return new Result(false, 0, t.getClass().getSimpleName());
+        }
+    }
+
+    /** Holds or releases the exposure (AEL key) */
+    public Result setExposureLock(boolean locked) {
+        try {
+            Params edit = createEdit();
+            edit.mod.setAutoExposureLock(locked ? "locked" : "unlocked");
+            Result r = apply(edit);
+            Log.info("AEL " + (locked ? "locked" : "unlocked") + " -> " + (r.ok ? "ok" : "refused " + r.inhibition));
+            return r;
+        } catch (Throwable t) {
+            Log.error("setAutoExposureLock", t);
+            return new Result(false, 0, t.getClass().getSimpleName());
+        }
     }
 
     public String focusAreaMode() {

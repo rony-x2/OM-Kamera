@@ -65,6 +65,10 @@ public class OverlayView extends View {
             case MENU:
                 drawMenu(c, p);
                 break;
+            case AF_MOVE:
+                drawFocusMove(c);
+                drawExposureBar(c, p);
+                break;
             default:
                 break;
         }
@@ -156,7 +160,7 @@ public class OverlayView extends View {
             textSize(Theme.TEXT_SMALL);
             float ww = text.measureText(wl) + 2 * pad;
             roundRect(c, l - 6 * u - ww, y, l - 6 * u, y + h, Theme.PANEL);
-            drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TAB_COLORS[3]);
+            drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TAB_COLORS[5]);
             leftEdge = l - 6 * u - ww;
         }
         if (ui.writing()) {
@@ -179,6 +183,53 @@ public class OverlayView extends View {
     private final Canvas scratch = new Canvas(android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888));
 
     // ---- AF frames ----
+
+    /** Moving the flexible spot: range, spot and a short hint */
+    private void drawFocusMove(Canvas c) {
+        List<CameraSession.FocusFrame> frames = ui.session().focusFrames(getWidth(), getHeight());
+        int last = -1;
+        for (CameraSession.FocusFrame f : frames) {
+            if (f.enabled && f.index > last) {
+                last = f.index;
+            }
+        }
+        for (CameraSession.FocusFrame f : frames) {
+            if (f.index == 1 && last > 1) {
+                // Movable range, dashed look by short corners
+                frame(c, f, 0x66FFFFFF, 1.5f * u, 0.06f);
+            } else if (f.index == last) {
+                frame(c, f, Theme.ACCENT, 3 * u, 0.5f);
+                // Arrows around the spot show that it can be moved
+                float cx = (f.rect.left + f.rect.right) / 2f * pixelAspect;
+                float cy = (f.rect.top + f.rect.bottom) / 2f;
+                float hw = (f.rect.right - f.rect.left) / 2f * pixelAspect + 12 * u;
+                float hh = (f.rect.bottom - f.rect.top) / 2f + 12 * u;
+                arrow(c, cx, cy - hh, 0, -1);
+                arrow(c, cx, cy + hh, 0, 1);
+                arrow(c, cx - hw, cy, -1, 0);
+                arrow(c, cx + hw, cy, 1, 0);
+            }
+        }
+        String hint = "Pfeile: verschieben  ·  Löschen: Mitte  ·  Mitteltaste: fertig";
+        textSize(Theme.TEXT_SMALL);
+        float w = text.measureText(hint) + 24 * u;
+        float l = (vw - w) / 2;
+        float t = Theme.PAD * u;
+        roundRect(c, l, t, l + w, t + 32 * u, Theme.PANEL);
+        drawText(c, hint, l + 12 * u, t + 22 * u, Theme.TEXT);
+    }
+
+    /** Small filled triangle pointing in direction (dx, dy) */
+    private void arrow(Canvas c, float x, float y, int dx, int dy) {
+        float s = 7 * u;
+        android.graphics.Path path = new android.graphics.Path();
+        path.moveTo(x + dx * s, y + dy * s);
+        path.lineTo(x - dy * s - dx * s * 0.2f, y + dx * s - dy * s * 0.2f);
+        path.lineTo(x + dy * s - dx * s * 0.2f, y - dx * s - dy * s * 0.2f);
+        path.close();
+        fill.setColor(Theme.ACCENT);
+        c.drawPath(path, fill);
+    }
 
     private void drawFocusFrames(Canvas c) {
         if (!ui.framesEnabled()) {
@@ -278,6 +329,16 @@ public class OverlayView extends View {
         float bw = Math.max(h - 12 * u, text.measureText(mode) + 16 * u);
         roundRect(c, 8 * u, top + 6 * u, 8 * u + bw, getHeight() - 6 * u, Theme.ACCENT);
         drawText(c, mode, 8 * u + (bw - text.measureText(mode)) / 2, getHeight() - 17 * u, Theme.ACCENT_TEXT);
+        if (ui.aeLocked()) {
+            // Exposure held: AEL badge next to the mode, like the camera's asterisk
+            textSize(Theme.TEXT_SMALL);
+            float aw = text.measureText("AEL") + 12 * u;
+            float al = 14 * u + bw;
+            outline(c, al, top + 12 * u, al + aw, getHeight() - 12 * u, Theme.ACCENT, 2 * u);
+            drawText(c, "AEL", al + 6 * u, getHeight() - 20 * u, Theme.ACCENT);
+            textSize(Theme.TEXT_LARGE);
+            bw += aw + 6 * u;
+        }
 
         Ui.DialRole d1 = ui.dial1Role();
         Ui.DialRole d2 = ui.dial2Role();
@@ -486,7 +547,7 @@ public class OverlayView extends View {
 
     private void drawPickList(Canvas c, float l, float t, float r, float b, float rowH) {
         roundRect(c, l, t, r, b, 0xF0181C21);
-        outline(c, l, t, r, b, Theme.TAB_COLORS[3], 2 * u);
+        outline(c, l, t, r, b, Theme.TAB_COLORS[5], 2 * u);
         List<Setting> list = ui.pickList();
         int count = list.size() + 1;
         int visible = (int) ((b - t - 10 * u) / rowH);

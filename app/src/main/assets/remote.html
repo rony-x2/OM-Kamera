@@ -240,7 +240,10 @@
     }
     list.forEach(function (s) {
       var sel = $('s-' + s.id);
-      if (!sel || document.activeElement === sel) return;
+      if (!sel) return;
+      // Settings that do not matter right now (e.g. Kelvin without colour temperature) are hidden
+      sel.parentNode.style.display = s.shown === false ? 'none' : '';
+      if (document.activeElement === sel) return;
       sel.disabled = !s.available;
       var vals = s.available ? s.values : [['', 'nicht verfügbar']];
       var key = JSON.stringify(vals);

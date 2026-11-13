@@ -18,10 +18,13 @@ public abstract class Setting {
     public final String shortLabel;
     public final Category category;
 
+    /** Menu tab of a setting, in the order of the tabs */
     public enum Category {
         SHOOTING("Aufnahme"),
         EXPOSURE("Belichtung"),
-        FOCUS("Fokus");
+        IMAGE("Bild"),
+        FOCUS("Fokus"),
+        FLASH("Blitz");
 
         public final String title;
 
@@ -82,6 +85,26 @@ public abstract class Setting {
         return safeGet(p) != null && safeValues(p).size() > 0;
     }
 
+    /**
+     * Whether the setting matters with the other current values, e.g. the colour temperature only
+     * with the white balance "colour temperature". The menu hides settings that do not matter.
+     */
+    protected boolean relevant(CameraSession.Params p) throws Throwable {
+        return true;
+    }
+
+    /** Available on this camera and meaningful right now */
+    public boolean isShown(CameraSession.Params p) {
+        if (!isAvailable(p)) {
+            return false;
+        }
+        try {
+            return relevant(p);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public String currentText(CameraSession.Params p) {
         String v = safeGet(p);
         return v == null ? "–" : display(p, v);
@@ -114,6 +137,25 @@ public abstract class Setting {
             return null;
         }
         return values.get(n);
+    }
+
+    /** Integers from min to max (both included) in the given step, as strings */
+    protected static List<String> range(int min, int max, int step) {
+        List<String> out = new ArrayList<String>();
+        for (int i = min; i <= max; i += step) {
+            out.add(String.valueOf(i));
+        }
+        return out;
+    }
+
+    /** "+2", "0", "-1" */
+    protected static String signed(String v) {
+        try {
+            int i = Integer.parseInt(v);
+            return i > 0 ? "+" + i : String.valueOf(i);
+        } catch (NumberFormatException e) {
+            return v;
+        }
     }
 
     protected static List<String> strings(List<?> list) {
