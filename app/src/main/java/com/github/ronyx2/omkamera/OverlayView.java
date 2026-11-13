@@ -128,6 +128,18 @@ public class OverlayView extends View {
             }
             x += w + 6 * u;
         }
+        // Current focal length of the lens (follows the zoom ring)
+        float focal = ui.session().focalLength();
+        if (focal > 0) {
+            String t = Math.round(focal) + " mm";
+            text.setTypeface(Typeface.DEFAULT_BOLD);
+            float w = text.measureText(t) + 2 * Theme.PAD * u;
+            if (x + w <= statusLeft - 6 * u) {
+                roundRect(c, x, y, x + w, y + h, Theme.PANEL);
+                drawText(c, t, x + Theme.PAD * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TEXT);
+            }
+            text.setTypeface(Typeface.DEFAULT);
+        }
     }
 
     /** Battery at the top right; WLAN marker left of it while WLAN is switched on in the app. */
