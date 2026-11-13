@@ -444,13 +444,51 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         } else {
             Log.info("no acceleration sensor");
         }
+        // Diagnosis: listen to every sensor at the fastest rate and report which one delivers
+        for (android.hardware.Sensor any : sensors.getSensorList(android.hardware.Sensor.TYPE_ALL)) {
+            boolean ok = sensors.registerListener(probeListener, any, android.hardware.SensorManager.SENSOR_DELAY_FASTEST);
+            Log.info("probe " + any.getName() + " type=" + any.getType() + " registered=" + ok);
+        }
+        probeCounts.clear();
+        handler.postDelayed(probeReport, 5000);
     }
 
     private void stopLevel() {
         if (sensors != null) {
             sensors.unregisterListener(levelListener);
+            sensors.unregisterListener(probeListener);
         }
+        handler.removeCallbacks(probeReport);
     }
+
+    private final java.util.Map<Integer, Integer> probeCounts = new java.util.HashMap<Integer, Integer>();
+
+    private final android.hardware.SensorEventListener probeListener = new android.hardware.SensorEventListener() {
+        @Override
+        public void onSensorChanged(android.hardware.SensorEvent e) {
+            int type = e.sensor.getType();
+            Integer n = probeCounts.get(type);
+            probeCounts.put(type, n == null ? 1 : n + 1);
+            if (n == null) {
+                Log.info("probe first event type=" + type + " values=" + java.util.Arrays.toString(e.values));
+            }
+        }
+
+        @Override
+        public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {
+            Log.info("probe accuracy type=" + sensor.getType() + " " + accuracy);
+        }
+    };
+
+    private final Runnable probeReport = new Runnable() {
+        @Override
+        public void run() {
+            Log.info("probe events after 5 s: " + probeCounts);
+            if (sensors != null) {
+                sensors.unregisterListener(probeListener);
+            }
+        }
+    };
 
     @Override
     public java.util.List<String> warnings() {
