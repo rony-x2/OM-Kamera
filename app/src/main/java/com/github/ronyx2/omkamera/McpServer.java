@@ -276,6 +276,15 @@ public class McpServer {
     private String focus() throws InterruptedException {
         final CameraSession session = host.session();
         final Ui ui = host.ui();
+        String mode = host.onMain(new Callable<String>() {
+            @Override
+            public String call() {
+                return Settings.get("afmf").safeGet(session.current());
+            }
+        });
+        if ("manual".equals(mode)) {
+            return "MF (manueller Fokus)";
+        }
         host.onMain(new Callable<Object>() {
             @Override
             public Object call() {

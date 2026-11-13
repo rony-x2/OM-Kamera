@@ -25,16 +25,42 @@ final class JpegProbe {
             return "Kein JPEG gefunden" + (source != null ? ": " + source : " im DCIM-Ordner (Qualität auf JPEG stellen und ein Bild aufnehmen)");
         }
         StringBuilder out = new StringBuilder();
+        waitStable(in);
         out.append("Quelle: ").append(in.getPath()).append(" (").append(in.length() / 1024).append(" KB)\n");
+        // The newest files of the folder with their final sizes, to compare shots
+        File[] siblings = in.getParentFile() != null ? in.getParentFile().listFiles() : null;
+        if (siblings != null) {
+            java.util.Arrays.sort(siblings, new java.util.Comparator<File>() {
+                @Override
+                public int compare(File a, File b) {
+                    return a.getName().compareTo(b.getName());
+                }
+            });
+            out.append("Letzte Dateien:");
+            for (int i = Math.max(0, siblings.length - 8); i < siblings.length; i++) {
+                out.append(' ').append(siblings[i].getName()).append('=').append(siblings[i].length() / 1024).append("KB");
+            }
+            out.append('\n');
+        }
         File dir = new File(Environment.getExternalStorageDirectory(), "OMKTEST");
         dir.mkdirs();
         OptimizedImage image = null;
         JpegExporter exporter = null;
         try {
             long t0 = System.currentTimeMillis();
-            image = OptimizedImageFactory.decodeImage(in.getPath());
+            // The decoder runs outside Android's chroot, so the card may have another path there
+            String[] paths = {in.getPath(), "/android" + in.getPath()};
+            for (String path : paths) {
+                OptimizedImageFactory.Options o = new OptimizedImageFactory.Options();
+                o.imageType = OptimizedImageFactory.Options.MAIN;
+                image = OptimizedImageFactory.decodeImage(path, o);
+                out.append("decodeImage ").append(path).append(": ").append(image != null ? "ok" : "nichts").append('\n');
+                if (image != null) {
+                    break;
+                }
+            }
             if (image == null) {
-                return out.append("decodeImage lieferte nichts").toString();
+                return out.toString();
             }
             out.append("dekodiert ").append(image.getWidth()).append('x').append(image.getHeight())
                     .append(" in ").append(System.currentTimeMillis() - t0).append(" ms\n");
@@ -82,6 +108,23 @@ final class JpegProbe {
         }
         Log.info("jpeg probe\n" + out);
         return out.toString();
+    }
+
+    /** Waits until the file stops growing (the camera writes in the background), at most 15 s */
+    private static void waitStable(File f) {
+        long last = -1;
+        for (int i = 0; i < 30; i++) {
+            long now = f.length();
+            if (now == last && now > 0) {
+                return;
+            }
+            last = now;
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                return;
+            }
+        }
     }
 
     private static File newestJpeg() {

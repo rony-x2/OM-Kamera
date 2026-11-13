@@ -45,6 +45,9 @@ public class Ui {
 
         String wifiStatus();
 
+        /** WLAN has an address */
+        boolean wifiConnected();
+
         /** Address of the debug server, or null if it does not run */
         String debugAddress();
     }
@@ -173,6 +176,8 @@ public class Ui {
     public boolean appShutter() { return appShutter; }
 
     public boolean wifiEnabled() { return wifiEnabled; }
+
+    public boolean wifiConnected() { return host.wifiConnected(); }
     public boolean debugEnabled() { return debugEnabled; }
 
     public void setBattery(int level, boolean plugged) {

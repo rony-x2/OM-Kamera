@@ -368,6 +368,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     }
 
     @Override
+    public boolean wifiConnected() {
+        return network.ip() != null;
+    }
+
+    @Override
     public String debugAddress() {
         String ip = network.ip();
         return debugServer.isRunning() && ip != null ? ip + ":" + DebugServer.PORT : null;

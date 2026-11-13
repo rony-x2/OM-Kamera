@@ -158,10 +158,12 @@ public class OverlayView extends View {
         float leftEdge = l;
         if (ui.wifiEnabled()) {
             String wl = "WLAN" + (ui.debugEnabled() ? "·DBG" : "") + (ui.mcpEnabled() ? "·MCP" : "");
+            // Red while WLAN is switched on but has no connection (yet)
+            boolean connected = ui.wifiConnected();
             textSize(Theme.TEXT_SMALL);
             float ww = text.measureText(wl) + 2 * pad;
             roundRect(c, l - 6 * u - ww, y, l - 6 * u, y + h, Theme.PANEL);
-            drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TAB_COLORS[5]);
+            drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, connected ? Theme.TAB_COLORS[5] : Theme.WARN);
             leftEdge = l - 6 * u - ww;
         }
         if (ui.writing()) {
@@ -193,19 +195,19 @@ public class OverlayView extends View {
         }
         float cx = vw / 2;
         float cy = getHeight() / 2f;
-        float r = 52 * u;
+        float r = 72 * u;
         fill.setColor(Theme.PANEL);
         c.drawCircle(cx, cy, r, fill);
         // The ring shows the part of the current second that is left
         float frac = (System.currentTimeMillis() % 1000) / 1000f;
         stroke.setColor(Theme.ACCENT);
-        stroke.setStrokeWidth(4 * u);
+        stroke.setStrokeWidth(5 * u);
         android.graphics.RectF arc = new android.graphics.RectF(cx - r + 4 * u, cy - r + 4 * u, cx + r - 4 * u, cy + r - 4 * u);
         c.drawArc(arc, -90, 360 * (1 - frac), false, stroke);
-        textSize(Theme.TEXT_LARGE * 2);
+        textSize(Theme.TEXT_LARGE * 3);
         text.setTypeface(Typeface.DEFAULT_BOLD);
         String t = String.valueOf(left);
-        drawText(c, t, cx - text.measureText(t) / 2, cy + Theme.TEXT_LARGE * 2 * u * 0.36f, Theme.TEXT);
+        drawText(c, t, cx - text.measureText(t) / 2, cy + Theme.TEXT_LARGE * 3 * u * 0.36f, Theme.TEXT);
         text.setTypeface(Typeface.DEFAULT);
         postInvalidateDelayed(100);
     }
