@@ -113,6 +113,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         setContentView(root);
 
         session = new CameraSession(this);
+        Settings.init(getSharedPreferences("ui", MODE_PRIVATE));
         ui = new Ui(session, new FnLayout(this), this, getSharedPreferences("ui", MODE_PRIVATE));
         overlay.setUi(ui);
         network = new Network(this);
@@ -323,6 +324,15 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public void playFocusBeep(Beep.Mode mode) {
         focusBeep.play(mode);
+    }
+
+    @Override
+    public void onTimerTick(int remaining) {
+        // Beep with the camera's setting for focus beeps; without beep the countdown is only shown
+        if (ui.beepMode() != Beep.Mode.OFF) {
+            focusBeep.play(Beep.Mode.TONE);
+        }
+        redraw();
     }
 
     @Override

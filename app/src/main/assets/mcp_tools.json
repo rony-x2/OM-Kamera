@@ -2,7 +2,10 @@
   {
     "name": "status",
     "description": "Aktueller Zustand der Kamera: Modell, Belichtungsmodus, Zeit, Blende, Belichtungskorrektur, ISO, Akku, ob gerade geschrieben wird, Fokusergebnis, Bedienzustand der App (LIVE, FN, MENU, AF_MOVE), Position des flexiblen Spots, AE-Speicher und alle derzeit sichtbaren Einstellungen mit ihrem Wert.",
-    "inputSchema": {"type": "object", "properties": {}}
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
   },
   {
     "name": "einstellungen",
@@ -10,8 +13,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "gruppe": {"type": "string", "description": "Nur eine Gruppe: Aufnahme, Belichtung, Bild, Fokus oder Blitz"},
-        "alle": {"type": "boolean", "description": "Auch Einstellungen zeigen, die gerade keine Rolle spielen oder nicht verfügbar sind"}
+        "gruppe": {
+          "type": "string",
+          "description": "Nur eine Gruppe: Aufnahme, Belichtung, Bild, Fokus oder Blitz"
+        },
+        "alle": {
+          "type": "boolean",
+          "description": "Auch Einstellungen zeigen, die gerade keine Rolle spielen oder nicht verfügbar sind"
+        }
       }
     }
   },
@@ -21,10 +30,19 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "id": {"type": "string", "description": "Kennung der Einstellung, z. B. iso, ev, wb, drive, dro, afarea"},
-        "wert": {"type": "string", "description": "Neuer Wert"}
+        "id": {
+          "type": "string",
+          "description": "Kennung der Einstellung, z. B. iso, ev, wb, drive, dro, afarea"
+        },
+        "wert": {
+          "type": "string",
+          "description": "Neuer Wert"
+        }
       },
-      "required": ["id", "wert"]
+      "required": [
+        "id",
+        "wert"
+      ]
     }
   },
   {
@@ -33,10 +51,24 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "was": {"type": "string", "enum": ["zeit", "blende", "shift", "ev"]},
-        "schritte": {"type": "integer", "description": "Rastungen wie am Rad, positiv im Uhrzeigersinn, negativ dagegen; -10 bis 10"}
+        "was": {
+          "type": "string",
+          "enum": [
+            "zeit",
+            "blende",
+            "shift",
+            "ev"
+          ]
+        },
+        "schritte": {
+          "type": "integer",
+          "description": "Rastungen wie am Rad, positiv im Uhrzeigersinn, negativ dagegen; -10 bis 10"
+        }
       },
-      "required": ["was", "schritte"]
+      "required": [
+        "was",
+        "schritte"
+      ]
     }
   },
   {
@@ -45,19 +77,27 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "halten": {"type": "boolean"}
+        "halten": {
+          "type": "boolean"
+        }
       }
     }
   },
   {
     "name": "fokus_loesen",
     "description": "Lässt den halb gedrückten Auslöser los.",
-    "inputSchema": {"type": "object", "properties": {}}
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
   },
   {
     "name": "ausloesen",
     "description": "Stellt scharf und nimmt ein Bild auf, wie ein ganz gedrückter Auslöser. Funktioniert nur mit der Auslöser-Steuerung durch die App.",
-    "inputSchema": {"type": "object", "properties": {}}
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
   },
   {
     "name": "taste",
@@ -65,10 +105,39 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "name": {"type": "string", "enum": ["UP", "DOWN", "LEFT", "RIGHT", "ENTER", "MENU", "FN", "DISP", "DELETE", "C1", "C2", "C3", "WHEEL_CW", "WHEEL_CCW", "DIAL1_CW", "DIAL1_CCW", "DIAL2_CW", "DIAL2_CCW", "DIAL3_CW", "DIAL3_CCW"]},
-        "anzahl": {"type": "integer", "description": "Wie oft gedrückt wird, Standard 1, höchstens 20"}
+        "name": {
+          "type": "string",
+          "enum": [
+            "UP",
+            "DOWN",
+            "LEFT",
+            "RIGHT",
+            "ENTER",
+            "MENU",
+            "FN",
+            "DISP",
+            "DELETE",
+            "C1",
+            "C2",
+            "C3",
+            "WHEEL_CW",
+            "WHEEL_CCW",
+            "DIAL1_CW",
+            "DIAL1_CCW",
+            "DIAL2_CW",
+            "DIAL2_CCW",
+            "DIAL3_CW",
+            "DIAL3_CCW"
+          ]
+        },
+        "anzahl": {
+          "type": "integer",
+          "description": "Wie oft gedrückt wird, Standard 1, höchstens 20"
+        }
       },
-      "required": ["name"]
+      "required": [
+        "name"
+      ]
     }
   },
   {
@@ -77,11 +146,21 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "dx": {"type": "integer"},
-        "dy": {"type": "integer"},
-        "mitte": {"type": "boolean"},
-        "x": {"type": "integer"},
-        "y": {"type": "integer"}
+        "dx": {
+          "type": "integer"
+        },
+        "dy": {
+          "type": "integer"
+        },
+        "mitte": {
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
       }
     }
   },
@@ -90,8 +169,14 @@
     "description": "AE-Speicher: an=true hält die aktuelle Belichtung, an=false gibt sie frei.",
     "inputSchema": {
       "type": "object",
-      "properties": {"an": {"type": "boolean"}},
-      "required": ["an"]
+      "properties": {
+        "an": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "an"
+      ]
     }
   },
   {
@@ -100,7 +185,14 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "quelle": {"type": "string", "enum": ["live", "anzeige", "beides"]}
+        "quelle": {
+          "type": "string",
+          "enum": [
+            "live",
+            "anzeige",
+            "beides"
+          ]
+        }
       }
     }
   },
@@ -109,7 +201,54 @@
     "description": "Letzte Zeilen des App-Logs (Tasten, Einstellungen, Fehler, Antworten der Kamera).",
     "inputSchema": {
       "type": "object",
-      "properties": {"zeilen": {"type": "integer", "description": "Standard 60, höchstens 400"}}
+      "properties": {
+        "zeilen": {
+          "type": "integer",
+          "description": "Standard 60, höchstens 400"
+        }
+      }
+    }
+  },
+  {
+    "name": "parameter",
+    "description": "Diagnose: liest die rohen Kameraparameter (Schlüssel=Wert) und setzt sie auf Wunsch direkt, ohne die Prüfungen der App. 'filter' grenzt die Ausgabe auf Schlüssel ein, die den Text enthalten. 'setzen' ist ein Objekt Schlüssel → Wert. Die Antwort meldet, ob die Kamera angenommen hat, und die Werte danach.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filter": {
+          "type": "string"
+        },
+        "setzen": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "jpeg_test",
+    "description": "Diagnose: kodiert ein JPEG von der Speicherkarte mit Sonys Hardware-JpegExporter in mehreren Qualitätsstufen neu und meldet Dateigröße und Fehler je Stufe. Ohne 'datei' wird das neueste JPEG im DCIM-Ordner genommen. Die Testdateien landen in OMKTEST auf der Karte und können mit loeschen=true wieder entfernt werden.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "datei": {
+          "type": "string",
+          "description": "Pfad auf der Karte, z. B. /mnt/sdcard/DCIM/100MSDCF/DSC01234.JPG"
+        },
+        "stufen": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Werte für die Qualität des Exporters, Standard 1, 2, 3"
+        },
+        "loeschen": {
+          "type": "boolean",
+          "description": "Testdateien nach dem Messen löschen, Standard true"
+        }
+      }
     }
   }
 ]

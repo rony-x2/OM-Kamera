@@ -12,6 +12,9 @@ import java.util.Locale;
 /** Bildfolgemodus: single shot, burst with speed, self-timer and the bracket kinds. */
 final class DriveSetting extends Setting {
 
+    /** Self-timer times offered in the menu */
+    static final int[] APP_TIMES = {2, 5, 10, 20, 60};
+
     DriveSetting() {
         super("drive", "Bildfolgemodus", "Bildfolge", Category.SHOOTING);
     }
@@ -45,9 +48,13 @@ final class DriveSetting extends Setting {
                     return q.mod.getSupportedSelfTimers();
                 }
             }, p);
-            for (String t : new String[]{"10", "5", "2"}) {
-                if (timers.contains(t)) {
+            // Camera timers where the camera has them, the other times counted by the app
+            for (int t : APP_TIMES) {
+                String v = String.valueOf(t);
+                if (timers.contains(v)) {
                     out.add("timer-" + t);
+                } else {
+                    out.add("apptimer-" + t);
                 }
             }
         }
@@ -104,13 +111,27 @@ final class DriveSetting extends Setting {
                 t = p.mod.getSelfTimer();
             } catch (Throwable ignored) {
             }
-            return t > 0 ? "timer-" + t : "single";
+            if (t > 0) {
+                return "timer-" + t;
+            }
+            return Settings.appTimer > 0 ? "apptimer-" + Settings.appTimer : "single";
         }
         return mode;
     }
 
     @Override
     protected void set(CameraSession.Params e, String v) {
+        if (v.startsWith("apptimer-")) {
+            // Single shot without camera timer; the app counts and releases itself
+            e.mod.setDriveMode("single");
+            try {
+                e.mod.setSelfTimer(0);
+            } catch (Throwable ignored) {
+            }
+            Settings.setAppTimer(Integer.parseInt(v.substring(9)));
+            return;
+        }
+        Settings.setAppTimer(0);
         if (v.startsWith("timer-")) {
             e.mod.setDriveMode("single");
             e.mod.setSelfTimer(Integer.parseInt(v.substring(6)));
@@ -149,6 +170,7 @@ final class DriveSetting extends Setting {
         if ("burst-low".equals(v)) return "Serie Lo";
         if ("burst".equals(v)) return "Serie";
         if (v.startsWith("timer-")) return "Timer " + v.substring(6) + " s";
+        if (v.startsWith("apptimer-")) return "Timer " + v.substring(9) + " s";
         if ("bracket-c".equals(v)) return "Reihe Serie";
         if ("bracket-s".equals(v)) return "Reihe Einzel";
         if ("bracket-wb".equals(v)) return "WB-Reihe";
@@ -385,6 +407,94 @@ final class FlashSetting extends Setting {
         if ("slow".equals(v)) return "Langzeitsync.";
         if ("rear".equals(v) || "rear-sync".equals(v)) return "2. Vorhang";
         if ("wireless".equals(v)) return "Drahtlos";
+        return Labels.of(v);
+    }
+}
+
+/**
+ * Qualität like the camera menu: RAW, RAW+JPEG and the JPEG levels (Extrafein 95, Fein 50, Standard 25).
+ * The camera keeps the storage format and the JPEG quality in two parameters.
+ */
+final class QualitySetting extends Setting {
+
+    QualitySetting() {
+        super("quality", "Qualität", "Qualität", Category.SHOOTING);
+    }
+
+    /** JPEG quality numbers the camera offers, highest first */
+    static List<Integer> jpegLevels(CameraSession.Params p) {
+        List<Integer> out = new ArrayList<Integer>();
+        try {
+            for (Object o : p.mod.getSupportedJpegQualities()) {
+                out.add(((Number) o).intValue());
+            }
+        } catch (Throwable t) {
+            String raw = p.params.get("jpeg-quality-values");
+            if (raw != null) {
+                for (String v : raw.split(",")) {
+                    try {
+                        out.add(Integer.parseInt(v.trim()));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        java.util.Collections.sort(out, java.util.Collections.reverseOrder());
+        return out;
+    }
+
+    @Override
+    protected List<String> values(CameraSession.Params p) {
+        List<String> formats = strings(p.mod.getSupportedPictureStorageFormats());
+        List<String> out = new ArrayList<String>();
+        if (formats.contains("raw")) {
+            out.add("raw");
+        }
+        if (formats.contains("rawjpeg")) {
+            out.add("rawjpeg");
+        }
+        if (formats.contains("jpeg")) {
+            List<Integer> levels = jpegLevels(p);
+            for (int q : levels) {
+                out.add("jpeg-" + q);
+            }
+            if (levels.isEmpty()) {
+                out.add("jpeg");
+            }
+        }
+        return out;
+    }
+
+    @Override
+    protected String get(CameraSession.Params p) {
+        String f = p.mod.getPictureStorageFormat();
+        if ("jpeg".equals(f)) {
+            return "jpeg-" + p.params.getJpegQuality();
+        }
+        return f;
+    }
+
+    @Override
+    protected void set(CameraSession.Params e, String v) {
+        if (v.startsWith("jpeg-")) {
+            e.mod.setPictureStorageFormat("jpeg");
+            e.params.setJpegQuality(Integer.parseInt(v.substring(5)));
+        } else {
+            e.mod.setPictureStorageFormat(v);
+        }
+    }
+
+    @Override
+    public String display(String v) {
+        if ("raw".equals(v)) return "RAW";
+        if ("rawjpeg".equals(v)) return "RAW+JPEG";
+        if (v.startsWith("jpeg-")) {
+            int q = Integer.parseInt(v.substring(5));
+            if (q >= 90) return "Extrafein";
+            if (q == 50) return "Fein";
+            if (q == 25) return "Standard";
+            return "JPEG " + q;
+        }
         return Labels.of(v);
     }
 }

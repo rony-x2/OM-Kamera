@@ -249,6 +249,17 @@ public class McpServer {
         if (name.equals("bild")) {
             return pictures(a.optString("quelle", "beides"));
         }
+        if (name.equals("parameter")) {
+            return text(host.onMain(new Callable<String>() {
+                @Override
+                public String call() throws Exception {
+                    return rawParameters(a.optString("filter", ""), a.optJSONObject("setzen"));
+                }
+            }));
+        }
+        if (name.equals("jpeg_test")) {
+            return text(JpegProbe.run(a.optString("datei", null), a.optJSONArray("stufen"), a.optBoolean("loeschen", true)));
+        }
         if (name.equals("log")) {
             int lines = Math.max(1, Math.min(400, a.optInt("zeilen", 60)));
             String[] all = Log.tail(64 * 1024).split("\n");
@@ -307,6 +318,43 @@ public class McpServer {
                         + "  EV " + Settings.get("ev").currentText(p) + "  ISO " + Settings.get("iso").currentText(p);
             }
         });
+    }
+
+    /** Reads and optionally writes raw camera parameters, for experiments */
+    private String rawParameters(String filter, JSONObject set) throws JSONException {
+        CameraSession s = host.session();
+        StringBuilder out = new StringBuilder();
+        if (set != null && set.length() > 0) {
+            CameraSession.Params edit = s.createEdit();
+            java.util.Iterator<?> keys = set.keys();
+            while (keys.hasNext()) {
+                String k = String.valueOf(keys.next());
+                edit.params.set(k, set.getString(k));
+            }
+            CameraSession.Result r = s.apply(edit);
+            out.append(r.ok ? "angenommen" : "abgelehnt (Grund " + r.inhibition + ", " + r.error + ")").append('\n');
+            host.redraw();
+            if (filter.length() == 0) {
+                // Show the keys that were written when no filter is given
+                java.util.Iterator<?> again = set.keys();
+                while (again.hasNext()) {
+                    String k = String.valueOf(again.next());
+                    out.append(k).append('=').append(s.current().params.get(k)).append('\n');
+                }
+                return out.toString();
+            }
+        }
+        String flat = s.flatten();
+        if (flat != null) {
+            String[] pairs = flat.split(";");
+            java.util.Arrays.sort(pairs);
+            for (String pair : pairs) {
+                if (filter.length() == 0 || pair.contains(filter)) {
+                    out.append(pair).append('\n');
+                }
+            }
+        }
+        return out.toString();
     }
 
     private JSONObject status() throws JSONException {

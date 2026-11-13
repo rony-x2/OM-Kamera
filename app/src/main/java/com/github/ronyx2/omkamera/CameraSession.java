@@ -63,6 +63,9 @@ public class CameraSession {
         /** An exposure was made (status 0) */
         void onShot();
 
+        /** A second of the self-timer counted by the app has passed; remaining seconds */
+        void onTimerTick(int remaining);
+
         /** The camera reports a stored picture file (platform V6 and newer only) */
         void onStored(String file);
     }
@@ -445,6 +448,16 @@ public class CameraSession {
         }
         capturing = true;
         burstCapture = burst;
+        int appTimer = appTimerSeconds();
+        if (appTimer > 0) {
+            // The app counts down and then releases like a normal single shot
+            burstCapture = false;
+            selfTimerEnd = android.os.SystemClock.uptimeMillis() + appTimer * 1000L;
+            appTimerRunning = true;
+            handler.post(appTimerTick);
+            Log.info("app self-timer " + appTimer + " s");
+            return;
+        }
         int timer = selfTimerSeconds();
         if (timer > 0) {
             // The camera counts down itself (lamp and beeps) and reports the exposure via onShutter
@@ -481,6 +494,44 @@ public class CameraSession {
     /** Uptime when the running self-timer fires, 0 if none runs */
     private long selfTimerEnd;
 
+    private boolean appTimerRunning;
+
+    private int appTimerSeconds() {
+        try {
+            if (current != null && "single".equals(current.mod.getDriveMode()) && current.mod.getSelfTimer() == 0) {
+                return Settings.appTimer;
+            }
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
+
+    private final Runnable appTimerTick = new Runnable() {
+        @Override
+        public void run() {
+            if (selfTimerEnd == 0) {
+                return;
+            }
+            long left = selfTimerEnd - android.os.SystemClock.uptimeMillis();
+            if (left <= 0) {
+                selfTimerEnd = 0;
+                appTimerRunning = false;
+                try {
+                    cameraEx.burstableTakePicture();
+                    Log.info("app self-timer: burstableTakePicture");
+                } catch (Throwable t) {
+                    capturing = false;
+                    Log.error("burstableTakePicture", t);
+                }
+                return;
+            }
+            listener.onTimerTick((int) ((left + 999) / 1000));
+            // Faster beeps in the last two seconds, like the camera
+            long next = left > 2000 ? (left - 1) % 1000 + 1 : Math.min(left, 250);
+            handler.postDelayed(this, next);
+        }
+    };
+
     private int selfTimerSeconds() {
         try {
             if (current != null && "single".equals(current.mod.getDriveMode())) {
@@ -510,6 +561,13 @@ public class CameraSession {
             return;
         }
         selfTimerEnd = 0;
+        handler.removeCallbacks(appTimerTick);
+        if (appTimerRunning) {
+            appTimerRunning = false;
+            capturing = false;
+            Log.info("app self-timer cancelled");
+            return;
+        }
         try {
             cameraEx.cancelTakePicture();
             cameraEx.cancelSelfTimerShutter();

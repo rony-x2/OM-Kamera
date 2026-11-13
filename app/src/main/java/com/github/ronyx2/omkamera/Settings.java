@@ -15,22 +15,7 @@ public final class Settings {
 
     static {
         // ================= Aufnahme =================
-        add(new Setting("quality", "Qualität", "Qualität", Setting.Category.SHOOTING) {
-            @Override
-            protected List<String> values(CameraSession.Params p) {
-                return strings(p.mod.getSupportedPictureStorageFormats());
-            }
-
-            @Override
-            protected String get(CameraSession.Params p) {
-                return p.mod.getPictureStorageFormat();
-            }
-
-            @Override
-            protected void set(CameraSession.Params e, String v) {
-                e.mod.setPictureStorageFormat(v);
-            }
-        });
+        add(new QualitySetting());
 
         add(new Setting("size", "Bildgröße", "Größe", Setting.Category.SHOOTING) {
             @Override
@@ -732,6 +717,22 @@ public final class Settings {
 
     /** Set by the activity from the camera's equipment reports */
     static volatile boolean flashReady;
+
+    /** Self-timer counted by the app (seconds, 0 = off) for times the camera does not offer */
+    static volatile int appTimer;
+    private static android.content.SharedPreferences prefs;
+
+    static void init(android.content.SharedPreferences p) {
+        prefs = p;
+        appTimer = p.getInt("apptimer", 0);
+    }
+
+    static void setAppTimer(int seconds) {
+        appTimer = seconds;
+        if (prefs != null) {
+            prefs.edit().putInt("apptimer", seconds).apply();
+        }
+    }
 
     static String ev(float ev) {
         if (Math.abs(ev) < 0.05f) {

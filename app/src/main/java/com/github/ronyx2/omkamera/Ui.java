@@ -141,6 +141,8 @@ public class Ui {
 
     public int standbyMinutes() { return standbyMinutes; }
 
+    public Beep.Mode beepMode() { return beepMode; }
+
     /** Remote control in the browser: live view, settings, shutter. Protected by a code shown on the camera. */
     public boolean remoteEnabled() { return remoteEnabled; }
 

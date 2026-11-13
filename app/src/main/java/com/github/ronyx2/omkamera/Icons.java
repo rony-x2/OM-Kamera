@@ -62,15 +62,16 @@ public final class Icons {
     private static boolean drive(Canvas c, String v, float cx, float cy, float s) {
         float w = s * 0.5f;
         float h = s * 0.36f;
-        if (v.startsWith("timer") || v.contains("self")) {
+        if (v.contains("timer") || v.contains("self")) {
             float r = s * 0.3f;
             float x = cx - s * 0.1f;
             c.drawCircle(x, cy, r, LINE);
             c.drawLine(x, cy, x, cy - r * 0.65f, LINE);
             c.drawLine(x, cy, x + r * 0.45f, cy + r * 0.2f, LINE);
             c.drawLine(x - r * 0.3f, cy - r - s * 0.08f, x + r * 0.3f, cy - r - s * 0.08f, LINE);
-            if (v.startsWith("timer-")) {
-                text(c, v.substring(6), cx + s * 0.3f, cy + s * 0.2f, s * 0.26f);
+            int dash = v.lastIndexOf('-');
+            if (dash > 0) {
+                text(c, v.substring(dash + 1), cx + s * 0.3f, cy + s * 0.2f, s * 0.26f);
             }
             return true;
         }
