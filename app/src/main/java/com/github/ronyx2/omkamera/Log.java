@@ -39,6 +39,31 @@ public final class Log {
         info("---- start ----");
     }
 
+    /** Last lines of the log, for the debug server. */
+    public static synchronized String tail(int maxBytes) {
+        if (file == null || !file.exists()) {
+            return "";
+        }
+        java.io.RandomAccessFile f = null;
+        try {
+            f = new java.io.RandomAccessFile(file, "r");
+            long start = Math.max(0, f.length() - maxBytes);
+            byte[] b = new byte[(int) (f.length() - start)];
+            f.seek(start);
+            f.readFully(b);
+            return new String(b, "UTF-8");
+        } catch (Throwable t) {
+            return "Log nicht lesbar: " + t;
+        } finally {
+            if (f != null) {
+                try {
+                    f.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
     public static void info(String msg) {
         android.util.Log.i(TAG, msg);
         write("I", msg);

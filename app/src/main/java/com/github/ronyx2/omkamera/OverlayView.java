@@ -41,12 +41,14 @@ public class OverlayView extends View {
                 drawFocusFrames(c);
                 if (ui.infoVisible()) {
                     drawStatusChips(c, p);
+                    drawBattery(c);
                     drawExposureBar(c, p);
                 }
                 break;
             case FN:
             case FN_EDIT:
                 drawFocusFrames(c);
+                drawBattery(c);
                 drawExposureBar(c, p);
                 drawFnGrid(c, p);
                 break;
@@ -77,7 +79,7 @@ public class OverlayView extends View {
             String value = s.safeGet(p);
             String t = s.currentText(p);
             float w = hasIcon(id, value) ? h : text.measureText(t) + 2 * Theme.PAD * u;
-            if (x + w > getWidth() - Theme.PAD * u) {
+            if (x + w > getWidth() - 230 * u) {
                 break;
             }
             roundRect(c, x, y, x + w, y + h, Theme.PANEL);
@@ -87,6 +89,44 @@ public class OverlayView extends View {
                 text.setTypeface(Typeface.DEFAULT);
             }
             x += w + 6 * u;
+        }
+    }
+
+    /** Battery at the top right; WLAN marker left of it while WLAN is switched on in the app. */
+    private void drawBattery(Canvas c) {
+        int level = ui.batteryLevel();
+        float h = Theme.ICON * u + 4 * u;
+        float pad = Theme.PAD * u;
+        textSize(Theme.TEXT_SMALL);
+        text.setTypeface(Typeface.DEFAULT_BOLD);
+        String t = level >= 0 ? level + "%" : "?";
+        float bodyW = 30 * u;
+        float w = bodyW + 6 * u + text.measureText(t) + 2 * pad;
+        float r = getWidth() - pad;
+        float l = r - w;
+        float y = pad;
+        roundRect(c, l, y, r, y + h, Theme.PANEL);
+        // Battery body with fill level
+        float bl = l + pad;
+        float bt = y + h / 2 - 8 * u;
+        float bb = y + h / 2 + 8 * u;
+        int color = level >= 0 && level <= 15 ? Theme.WARN : ui.batteryPlugged() ? Theme.AF_OK : Theme.TEXT;
+        outline(c, bl, bt, bl + bodyW - 4 * u, bb, color, 2 * u);
+        fill.setColor(color);
+        c.drawRect(bl + bodyW - 4 * u, bt + 5 * u, bl + bodyW - 1 * u, bb - 5 * u, fill);
+        if (level > 0) {
+            float inner = (bodyW - 10 * u) * Math.min(100, level) / 100f;
+            c.drawRect(bl + 3 * u, bt + 3 * u, bl + 3 * u + inner, bb - 3 * u, fill);
+        }
+        drawText(c, t, bl + bodyW + 6 * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, color);
+        text.setTypeface(Typeface.DEFAULT);
+
+        if (ui.wifiEnabled()) {
+            String wl = ui.debugEnabled() ? "WLAN·DBG" : "WLAN";
+            textSize(Theme.TEXT_SMALL);
+            float ww = text.measureText(wl) + 2 * pad;
+            roundRect(c, l - 6 * u - ww, y, l - 6 * u, y + h, Theme.PANEL);
+            drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TAB_COLORS[3]);
         }
     }
 

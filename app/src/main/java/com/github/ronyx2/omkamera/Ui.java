@@ -34,6 +34,14 @@ public class Ui {
         void exitApp();
 
         void playFocusBeep();
+
+        /** Switches WLAN and debug server according to the settings. */
+        void applyNetwork();
+
+        String wifiStatus();
+
+        /** Address of the debug server, or null if it does not run */
+        String debugAddress();
     }
 
     /** What a dial changes in the current exposure mode */
@@ -67,6 +75,12 @@ public class Ui {
 
     private boolean beepEnabled;
     private boolean framesEnabled;
+    private boolean wifiEnabled;
+    private boolean debugEnabled;
+
+    // Battery as reported by the system, -1 if unknown
+    private int batteryLevel = -1;
+    private boolean batteryPlugged;
 
     // Autofocus result
     private int focusStatus;
@@ -94,7 +108,21 @@ public class Ui {
         this.prefs = prefs;
         beepEnabled = prefs.getBoolean("beep", true);
         framesEnabled = prefs.getBoolean("frames", true);
+        wifiEnabled = prefs.getBoolean("wifi", false);
+        debugEnabled = prefs.getBoolean("debug", false);
     }
+
+    public boolean wifiEnabled() { return wifiEnabled; }
+    public boolean debugEnabled() { return debugEnabled; }
+
+    public void setBattery(int level, boolean plugged) {
+        batteryLevel = level;
+        batteryPlugged = plugged;
+        host.redraw();
+    }
+
+    public int batteryLevel() { return batteryLevel; }
+    public boolean batteryPlugged() { return batteryPlugged; }
 
     // ---- autofocus ----
 
@@ -115,6 +143,24 @@ public class Ui {
     public int focusStatus() { return focusStatus; }
     public int[] focusIndices() { return focusIndices; }
     public boolean framesEnabled() { return framesEnabled; }
+
+    // ---- mode dial ----
+
+    /** Follows the mode dial. Called with the dial position as scan code. */
+    public void onModeDial(int position) {
+        String scene = ModeDial.sceneMode(position);
+        Log.info("mode dial " + ModeDial.name(position) + " -> " + scene);
+        if (scene == null) {
+            showMessage("Modus " + ModeDial.name(position) + " wird in der App nicht unterstützt", true);
+            return;
+        }
+        CameraSession.Result r = session.setSceneMode(scene);
+        if (!r.ok) {
+            showMessage("Modus " + ModeDial.name(position) + " nicht verfügbar", true);
+        }
+        session.invalidateFocusFrames();
+        host.redraw();
+    }
 
     // ---- dials ----
 
@@ -231,6 +277,29 @@ public class Ui {
                         prefs.edit().putBoolean("frames", framesEnabled).apply();
                     }
                 }, framesEnabled ? "Ein" : "Aus", -1));
+                out.add(new Row("WLAN in der App", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        wifiEnabled = !wifiEnabled;
+                        if (!wifiEnabled) {
+                            debugEnabled = false;
+                        }
+                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                        host.applyNetwork();
+                    }
+                }, wifiEnabled ? "Ein" : "Aus", -1));
+                out.add(new Row("WLAN-Status", null, null, host.wifiStatus(), -1));
+                out.add(new Row("Debug-Server", null, new Runnable() {
+                    @Override
+                    public void run() {
+                        debugEnabled = !debugEnabled;
+                        if (debugEnabled) {
+                            wifiEnabled = true;
+                        }
+                        prefs.edit().putBoolean("wifi", wifiEnabled).putBoolean("debug", debugEnabled).apply();
+                        host.applyNetwork();
+                    }
+                }, debugEnabled ? (host.debugAddress() != null ? host.debugAddress() : "Ein, wartet auf WLAN") : "Aus", -1));
                 out.add(new Row("App beenden", null, new Runnable() {
                     @Override
                     public void run() {

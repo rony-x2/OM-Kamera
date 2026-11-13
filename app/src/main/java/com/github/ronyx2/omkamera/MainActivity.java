@@ -1,12 +1,24 @@
 package com.github.ronyx2.omkamera;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+
+import com.github.ma1co.openmemories.framework.DeviceInfo;
+
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Single activity: live view at the bottom, overlay with the own interface on top.
@@ -18,6 +30,28 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private SurfaceHolder holder;
     private boolean surfaceReady;
     private final Beep focusBeep = new Beep();
+    private final Handler handler = new Handler();
+    private Network network;
+    private DebugServer debugServer;
+
+    private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 0);
+            int level = scale > 0 ? intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / scale : -1;
+            boolean plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
+            ui.setBattery(level, plugged);
+        }
+    };
+
+    /** Redraws regularly while WLAN is on, so its status in the menu stays current. */
+    private final Runnable networkTick = new Runnable() {
+        @Override
+        public void run() {
+            redraw();
+            handler.postDelayed(this, 2000);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,6 +74,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         session = new CameraSession(this);
         ui = new Ui(session, new FnLayout(this), this, getSharedPreferences("ui", MODE_PRIVATE));
         overlay.setUi(ui);
+        network = new Network(this);
+        debugServer = new DebugServer(new DebugServer.Provider() {
+            @Override
+            public String[] get(String path) {
+                return debugContent(path);
+            }
+        });
     }
 
     @Override
@@ -60,12 +101,29 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (surfaceReady) {
             session.startPreview(holder);
         }
+        // Follow the mode dial position the camera had when the app started
+        int dial = ModeDial.position();
+        if (dial > 0) {
+            ui.onModeDial(dial);
+        }
+        registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        applyNetwork();
         redraw();
     }
 
     @Override
     protected void onPause() {
         Log.info("onPause");
+        try {
+            unregisterReceiver(batteryReceiver);
+        } catch (Throwable ignored) {
+        }
+        handler.removeCallbacks(networkTick);
+        debugServer.stop();
+        if (ui.wifiEnabled()) {
+            // The camera's own interface expects WLAN to be off
+            network.setEnabled(false);
+        }
         session.close();
         focusBeep.release();
         super.onPause();
@@ -99,6 +157,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         // Every key with its codes, to learn the layout of each camera model
         Log.info("key " + key + " scan=" + event.getScanCode() + " code=" + keyCode
                 + (event.getRepeatCount() > 0 ? " repeat=" + event.getRepeatCount() : ""));
+        if (ModeDial.isModeDial(event.getScanCode())) {
+            ui.onModeDial(event.getScanCode());
+            return true;
+        }
         if (key == Keys.Key.OTHER) {
             return super.onKeyDown(keyCode, event);
         }
@@ -145,6 +207,115 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     public void playFocusBeep() {
         focusBeep.play();
     }
+
+    // ---- network and debug server ----
+
+    @Override
+    public void applyNetwork() {
+        network.setEnabled(ui.wifiEnabled());
+        if (ui.debugEnabled()) {
+            debugServer.start();
+        } else {
+            debugServer.stop();
+        }
+        handler.removeCallbacks(networkTick);
+        if (ui.wifiEnabled()) {
+            handler.postDelayed(networkTick, 2000);
+        }
+    }
+
+    @Override
+    public String wifiStatus() {
+        return ui.wifiEnabled() ? network.status() : "aus";
+    }
+
+    @Override
+    public String debugAddress() {
+        String ip = network.ip();
+        return debugServer.isRunning() && ip != null ? ip + ":" + DebugServer.PORT : null;
+    }
+
+    /** Content of the debug server. Camera data is collected on the main thread. */
+    private String[] debugContent(String path) {
+        if (path.equals("/") || path.startsWith("/?")) {
+            return new String[] {"text/html", DEBUG_PAGE};
+        }
+        if (path.startsWith("/log")) {
+            return new String[] {"text/plain", Log.tail(64 * 1024)};
+        }
+        if (path.startsWith("/status") || path.startsWith("/params")) {
+            final boolean params = path.startsWith("/params");
+            final String[] result = new String[1];
+            final CountDownLatch done = new CountDownLatch(1);
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        result[0] = params ? paramsText() : statusText();
+                    } catch (Throwable t) {
+                        result[0] = "Fehler: " + t;
+                    }
+                    done.countDown();
+                }
+            });
+            try {
+                done.await(3, TimeUnit.SECONDS);
+            } catch (InterruptedException ignored) {
+            }
+            return new String[] {"text/plain", result[0] != null ? result[0] : "keine Antwort"};
+        }
+        return null;
+    }
+
+    private String statusText() {
+        StringBuilder sb = new StringBuilder();
+        DeviceInfo d = DeviceInfo.getInstance();
+        sb.append("Modell: ").append(d.getModel()).append('\n');
+        sb.append("Firmware: ").append(d.getFirmwareVersion()).append('\n');
+        sb.append("API-Version: ").append(d.getApiVersion()).append('\n');
+        sb.append("Android: ").append(android.os.Build.VERSION.RELEASE).append('\n');
+        sb.append("App: ").append(BuildConfig.VERSION_NAME).append('\n');
+        sb.append("Akku: ").append(ui.batteryLevel()).append(" %").append(ui.batteryPlugged() ? " (Netz)" : "").append('\n');
+        sb.append("Modus: ").append(ui.modeName()).append(" (").append(session.sceneMode()).append(")\n");
+        sb.append("Moduswahlrad: ").append(ModeDial.name(ModeDial.position())).append('\n');
+        sb.append("Zeit/Blende: ").append(session.shutterText()).append(' ').append(session.apertureText()).append('\n');
+        sb.append("Fokus: Status ").append(ui.focusStatus()).append(" Felder ").append(Arrays.toString(ui.focusIndices())).append('\n');
+        sb.append("Fokusfelder: ").append(session.focusFrames(overlay.getWidth(), overlay.getHeight()).size()).append('\n');
+        sb.append("Oberfläche: ").append(overlay.getWidth()).append('x').append(overlay.getHeight()).append('\n');
+        sb.append('\n');
+        CameraSession.Params p = session.current();
+        for (Setting s : Settings.all()) {
+            sb.append(s.label).append(": ");
+            if (!s.isAvailable(p)) {
+                sb.append("nicht verfügbar\n");
+                continue;
+            }
+            sb.append(s.safeGet(p)).append("  [").append(android.text.TextUtils.join(", ", s.safeValues(p))).append("]\n");
+        }
+        return sb.toString();
+    }
+
+    private String paramsText() {
+        String[] parts = session.flatten().split(";");
+        Arrays.sort(parts);
+        return android.text.TextUtils.join("\n", parts) + "\n";
+    }
+
+    private static final String DEBUG_PAGE = "<!DOCTYPE html><html lang=\"de\"><head><meta charset=\"utf-8\">"
+            + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>OM Kamera Debug</title>"
+            + "<style>body{background:#101317;color:#e8eaed;font:15px/1.5 system-ui,sans-serif;margin:0;padding:16px}"
+            + "nav a{color:#f0a030;margin-right:16px;text-decoration:none;font-weight:600}"
+            + "pre{background:#181c21;border:1px solid #2a3038;border-radius:8px;padding:12px;white-space:pre-wrap;"
+            + "word-break:break-all;font:13px/1.45 ui-monospace,Consolas,monospace}</style></head><body>"
+            + "<h1 style=\"font-size:20px\">OM Kamera – Debug</h1>"
+            + "<nav><a href=\"#\" onclick=\"show('/status');return false\">Status</a>"
+            + "<a href=\"#\" onclick=\"show('/params');return false\">Parameter</a>"
+            + "<a href=\"#\" onclick=\"show('/log');return false\">Log</a>"
+            + "<label><input type=\"checkbox\" id=\"auto\" checked> automatisch aktualisieren</label></nav>"
+            + "<pre id=\"out\">…</pre><script>var cur='/status';"
+            + "function show(p){cur=p;var x=new XMLHttpRequest();x.onload=function(){var o=document.getElementById('out');"
+            + "o.textContent=x.responseText;if(cur=='/log')window.scrollTo(0,document.body.scrollHeight)};x.open('GET',p);x.send()}"
+            + "setInterval(function(){if(document.getElementById('auto').checked)show(cur)},2000);show(cur)</script></body></html>";
 
     @Override
     public void redraw() {

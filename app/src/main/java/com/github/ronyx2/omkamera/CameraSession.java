@@ -119,6 +119,7 @@ public class CameraSession {
         }
         refresh();
         registerListeners();
+        handler.postDelayed(poll, 1500);
     }
 
     private void registerListeners() {
@@ -137,6 +138,41 @@ public class CameraSession {
             });
         } catch (Throwable t) {
             Log.error("setSettingChangedListener", t);
+        }
+        try {
+            cameraEx.setEquipmentCallback(new CameraEx.EquipmentCallback() {
+                @Override
+                public void onEquipmentChange(final int type, final int status, CameraEx ex) {
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.info("equipment type=" + type + " status=" + status);
+                            refresh();
+                            invalidateFocusFrames();
+                            listener.onParamsChanged();
+                        }
+                    });
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setEquipmentCallback", t);
+        }
+        try {
+            cameraEx.setFlashChargingStateListener(new CameraEx.FlashChargingStateListener() {
+                @Override
+                public void onChanged(final int state, CameraEx ex) {
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.info("flash charging state=" + state);
+                            refresh();
+                            listener.onParamsChanged();
+                        }
+                    });
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setFlashChargingStateListener", t);
         }
         try {
             cameraEx.setAutoFocusDoneListener(new CameraEx.AutoFocusDoneListener() {
@@ -176,6 +212,39 @@ public class CameraSession {
         } catch (Throwable t) {
             Log.error("setApertureChangeListener", t);
         }
+    }
+
+    /**
+     * Reads the parameters regularly. Not every change (e.g. the built-in flash popping up)
+     * is reported by a listener on every model.
+     */
+    private final Runnable poll = new Runnable() {
+        @Override
+        public void run() {
+            if (cameraEx == null) {
+                return;
+            }
+            String before = signature();
+            refresh();
+            if (!before.equals(signature())) {
+                invalidateFocusFrames();
+                listener.onParamsChanged();
+            }
+            handler.postDelayed(this, 1500);
+        }
+    };
+
+    private String signature() {
+        try {
+            return current != null ? current.params.flatten() : "";
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    /** All parameters as the camera reports them (key=value;...), for research. */
+    public String flatten() {
+        return signature();
     }
 
     private void postExposure() {
@@ -219,6 +288,7 @@ public class CameraSession {
             return;
         }
         Log.info("close camera");
+        handler.removeCallbacks(poll);
         try {
             if (previewRunning) {
                 camera.stopPreview();
@@ -338,6 +408,25 @@ public class CameraSession {
         if (scene.equals("manual-exposure")) return ExposureMode.M;
         if (scene.equals("auto") || scene.startsWith("superior")) return ExposureMode.AUTO;
         return ExposureMode.OTHER;
+    }
+
+    /** Sets the exposure mode. In app mode the camera does not follow the mode dial by itself. */
+    public Result setSceneMode(String mode) {
+        try {
+            List<String> supported = current != null ? current.params.getSupportedSceneModes() : null;
+            if (supported != null && !supported.contains(mode)) {
+                Log.info("scene mode " + mode + " not supported: " + supported);
+                return new Result(false, 0, "nicht unterstützt");
+            }
+            Params edit = createEdit();
+            edit.params.setSceneMode(mode);
+            Result r = apply(edit);
+            Log.info("scene mode " + mode + " -> " + (r.ok ? "ok" : "refused " + r.inhibition));
+            return r;
+        } catch (Throwable t) {
+            Log.error("setSceneMode " + mode, t);
+            return new Result(false, 0, t.getClass().getSimpleName());
+        }
     }
 
     public String sceneMode() {
