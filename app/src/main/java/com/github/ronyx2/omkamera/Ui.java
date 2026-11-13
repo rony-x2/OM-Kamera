@@ -220,6 +220,20 @@ public class Ui {
     public boolean shotsEnabled() { return shotsEnabled; }
     public float roll() { return roll; }
 
+    private long levelSince;
+
+    /** Called when the level sensor is switched on */
+    public void markLevelStart() {
+        levelSince = SystemClock.uptimeMillis();
+        roll = Float.NaN;
+        pitch = Float.NaN;
+    }
+
+    /** The sensor was switched on a while ago but has not delivered anything */
+    public boolean levelSilent() {
+        return levelEnabled && Float.isNaN(roll) && levelSince > 0 && SystemClock.uptimeMillis() - levelSince > 3000;
+    }
+
     private int remainingShots = -1;
 
     public int remainingShots() { return remainingShots; }

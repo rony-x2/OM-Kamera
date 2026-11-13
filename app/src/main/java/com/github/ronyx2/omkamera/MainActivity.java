@@ -430,6 +430,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             return;
         }
         android.hardware.Sensor s = sensors.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
+        ui.markLevelStart();
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                redraw();
+            }
+        }, 3200);
         if (s != null) {
             gravityValid = false;
             levelEvents = 0;

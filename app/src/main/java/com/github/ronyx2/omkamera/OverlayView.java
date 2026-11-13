@@ -249,6 +249,15 @@ public class OverlayView extends View {
     private void drawLevel(Canvas c) {
         float roll = ui.roll();
         if (Float.isNaN(roll)) {
+            if (ui.levelSilent()) {
+                // Some models (a6000) have a sensor that apps cannot read
+                String t = "Wasserwaage: Kamera liefert keine Sensordaten";
+                textSize(Theme.TEXT_SMALL);
+                float tw = text.measureText(t);
+                float cx = vw / 2, y = getHeight() / 2f + 44 * u;
+                roundRect(c, cx - tw / 2 - 12 * u, y - 22 * u, cx + tw / 2 + 12 * u, y + 8 * u, Theme.PANEL);
+                drawText(c, t, cx - tw / 2, y, Theme.TEXT_DIM);
+            }
             return;
         }
         // Deviation from the nearest of 0, 90, 180, 270 degrees; the quadrant is the orientation
