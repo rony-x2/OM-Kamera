@@ -25,6 +25,23 @@ public final class HardwareProbe {
         out.put("JpegExporter", has("com.sony.scalar.graphics.JpegExporter"));
         out.put("OptimizedImageFactory", has("com.sony.scalar.graphics.OptimizedImageFactory"));
 
+        out.put("rawimage.mp", prop("mem.rawimage.size.in.mega.pixel"));
+        out.put("device.memory", prop("device.memory"));
+        out.put("etc.memmap", list("/etc/memmap", null));
+        // Sony apps bring their own memory maps in their lib folder
+        StringBuilder apps = new StringBuilder();
+        java.io.File[] data = new java.io.File("/data/data").listFiles();
+        if (data != null) {
+            for (java.io.File d : data) {
+                String l = list(d.getPath() + "/lib", "libILDCSC");
+                if (l.length() > 0 && !l.startsWith("(")) {
+                    apps.append(d.getName()).append(": ").append(l).append("; ");
+                }
+            }
+        } else {
+            apps.append("(/data/data nicht lesbar)");
+        }
+        out.put("app.memmaps", apps.length() > 0 ? apps.toString() : "keine");
         filter(out, "RawRawAdditionNR", "com.sony.scalar.hardware.CameraSequence$RawRawAdditionNRDevelopFilter");
         filter(out, "RawImgAdditionNR", "com.sony.scalar.hardware.CameraSequence$RawImgAdditionNRDevelopFilter");
         filter(out, "HDRDevelop", "com.sony.scalar.hardware.CameraSequence$HDRDevelopFilter");
@@ -50,6 +67,28 @@ public final class HardwareProbe {
         } catch (Throwable t) {
             return t.getClass().getSimpleName();
         }
+    }
+
+    private static String prop(String key) {
+        try {
+            return String.valueOf(com.sony.scalar.sysutil.ScalarProperties.getString(key));
+        } catch (Throwable t) {
+            return t.getClass().getSimpleName();
+        }
+    }
+
+    private static String list(String dir, String prefix) {
+        java.io.File[] fs = new java.io.File(dir).listFiles();
+        if (fs == null) {
+            return "(nicht lesbar)";
+        }
+        StringBuilder b = new StringBuilder();
+        for (java.io.File f : fs) {
+            if (prefix == null || f.getName().startsWith(prefix)) {
+                b.append(f.getName()).append(' ');
+            }
+        }
+        return b.toString().trim();
     }
 
     private static String has(String cls) {
