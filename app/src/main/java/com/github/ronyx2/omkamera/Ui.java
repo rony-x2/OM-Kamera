@@ -105,6 +105,8 @@ public class Ui {
         public final boolean header;
         /** Value changed with the dials or left/right after ENTER (number rows) */
         public Stepper stepper;
+        /** ENTER opens the value for the dials (number rows); false: ENTER runs the action */
+        public boolean stepperOnly = true;
 
         private Row(String label, Setting setting, Runnable action, String info, Picker picker, Sub sub, boolean header) {
             this.label = label;
@@ -1404,12 +1406,27 @@ public class Ui {
     }
 
     private Row cycle(String label, final String key, final int[] values, final int def, Fmt fmt) {
-        return Row.action(label, fmt.f(sequencer.get(key, def)), new Runnable() {
+        Row r = Row.action(label, fmt.f(sequencer.get(key, def)), new Runnable() {
             @Override
             public void run() {
                 sequencer.cycle(key, values, def);
             }
         });
+        // The top dial goes both ways through the values (ENTER only forward)
+        r.stepper = new Stepper() {
+            @Override
+            public void step(int dir) {
+                int cur = sequencer.get(key, def), i = 0;
+                for (int k = 0; k < values.length; k++) {
+                    if (values[k] == cur) {
+                        i = k;
+                    }
+                }
+                sequencer.put(key, values[(i + dir + values.length) % values.length]);
+            }
+        };
+        r.stepperOnly = false;
+        return r;
     }
 
     private void displayRows(List<Row> out) {
@@ -2380,12 +2397,21 @@ public class Ui {
         return true;
     }
 
+    /** Opens the menu where it was left: same tab, sub list and row, like the camera */
     private void openMenu() {
         state = State.MENU;
-        focus = MenuFocus.TABS;
-        sub = null;
-        row = 0;
+        List<Row> rows = rows();
+        if (row >= 0 && row < rows.size() && !rows.get(row).header && menuUsed) {
+            focus = MenuFocus.LIST;
+        } else {
+            focus = MenuFocus.TABS;
+            sub = null;
+            row = 0;
+        }
+        menuUsed = true;
     }
+
+    private boolean menuUsed;
 
     /** Next selectable row (headers are skipped) */
     private int nextRow(List<Row> rows, int from, int dir) {
@@ -2411,7 +2437,10 @@ public class Ui {
 
     private boolean onMenuKey(Keys.Key key) {
         if (key == Keys.Key.MENU) {
-            sub = null;
+            // The place is kept for the next time (sub list and row)
+            if (focus != MenuFocus.LIST) {
+                focus = MenuFocus.LIST;
+            }
             state = State.LIVE;
             return true;
         }
@@ -2433,10 +2462,14 @@ public class Ui {
                     row = nextRow(rows, row, 1);
                 }
                 switch (key) {
-                    case UP: case WHEEL_CCW: case DIAL1_CCW: case DIAL2_CCW: case DIAL3_CCW:
+                    case UP: case WHEEL_CCW: case DIAL2_CCW:
                         row = nextRow(rows, row, -1); return true;
-                    case DOWN: case WHEEL_CW: case DIAL1_CW: case DIAL2_CW: case DIAL3_CW:
+                    case DOWN: case WHEEL_CW: case DIAL2_CW:
                         row = nextRow(rows, row, 1); return true;
+                    case DIAL1_CW: case DIAL1_CCW: case DIAL3_CW: case DIAL3_CCW:
+                        // The top dial changes the value of the marked row right away, in a circle
+                        dialValue(rows.get(row), Keys.direction(key));
+                        return true;
                     case LEFT: case BACK:
                         if (sub != null) {
                             sub = null;
@@ -2521,7 +2554,7 @@ public class Ui {
         if (r.header) {
             return;
         }
-        if (r.stepper != null) {
+        if (r.stepper != null && r.stepperOnly) {
             focus = MenuFocus.EDIT;
             return;
         }
@@ -2543,6 +2576,41 @@ public class Ui {
             row = firstRow(rows());
         } else if (r.action != null) {
             r.action.run();
+        }
+    }
+
+    /** Value of a menu row with the top dial: settings and number rows both ways, others like ENTER */
+    private void dialValue(Row r, int dir) {
+        if (r.header || dir == 0) {
+            return;
+        }
+        if (r.stepper != null) {
+            r.stepper.step(dir);
+        } else if (r.setting != null) {
+            stepSettingCircular(r.setting, dir);
+        } else if (r.action != null && r.picker == null && r.sub == null) {
+            r.action.run();
+        }
+    }
+
+    /** Like stepSetting, but from the last value on to the first and back (carousel) */
+    private void stepSettingCircular(Setting s, int dir) {
+        CameraSession.Params p = session.current();
+        if (!s.isAvailable(p)) {
+            showMessage(s.label + ": nicht verfügbar", true);
+            return;
+        }
+        String next = s.step(p, dir);
+        if (next == null) {
+            List<String> v = s.safeValues(p);
+            if (v.isEmpty()) {
+                return;
+            }
+            next = dir > 0 ? v.get(0) : v.get(v.size() - 1);
+        }
+        CameraSession.Result r = s.write(session, next);
+        if (!r.ok) {
+            showMessage(s.label + ": gesperrt" + (r.inhibition != 0 ? " (Grund " + r.inhibition + ")" : ""), true);
         }
     }
 
