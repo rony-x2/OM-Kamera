@@ -957,6 +957,27 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             // Read-only: lists what a class on the camera offers (methods, fields), nothing is called
             return DebugServer.Response.text(200, "text/plain; charset=utf-8", reflect(String.valueOf(r.param("cls"))));
         }
+        if (path.equals("/api/bench")) {
+            // Speed test on the newest ARW: card reading vs. decoding
+            try {
+                java.util.List<java.io.File> f = Processor.newest(1);
+                if (f.isEmpty()) {
+                    return DebugServer.Response.text(404, "text/plain", "keine ARW-Datei");
+                }
+                int rows = 1024;
+                try {
+                    rows = Integer.parseInt(String.valueOf(r.param("zeilen")));
+                } catch (NumberFormatException ignored) {
+                }
+                RawFile rf = new RawFile(f.get(0));
+                String res = f.get(0).getName() + ": " + rf.bench(rows);
+                rf.close();
+                Log.info("bench " + res);
+                return DebugServer.Response.text(200, "text/plain; charset=utf-8", res + "\n");
+            } catch (Throwable t) {
+                return DebugServer.Response.text(500, "text/plain", "Fehler: " + t + "\n");
+            }
+        }
         if (path.equals("/api/ls")) {
             StringBuilder sb = new StringBuilder();
             java.io.File[] fs = new java.io.File(String.valueOf(r.param("dir"))).listFiles();

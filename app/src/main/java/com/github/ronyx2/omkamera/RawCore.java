@@ -38,6 +38,9 @@ public final class RawCore {
                                     boolean little, int[] curve, int y, int count, int[] out);
 
     /** mode 0: acc += add, 1: acc = max(acc, add) */
+    /** Measures reading 'rows' rows from the card and decoding them with 1 and n threads */
+    public static native String bench(int fd, long offset, int rawWidth, int width, int rows, int[] curve);
+
     public static native void combine(int mode, int[] acc, int[] add, int n);
 
     /** mode 0: mean over count, 1: sum minus sub, clipped to 0..lim */

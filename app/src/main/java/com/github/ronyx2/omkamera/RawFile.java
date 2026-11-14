@@ -281,6 +281,22 @@ public class RawFile {
         return true;
     }
 
+    /** Speed test: reading from the card and decoding in memory (native decoder) */
+    public String bench(int rows) {
+        if (!nativeAvailable() || compression != 32767) {
+            return "nur mit nativem Dekoder und Sony-cRAW";
+        }
+        int fd = nativeOpen(file.getPath());
+        if (fd < 0) {
+            return "Datei nicht lesbar";
+        }
+        try {
+            return RawCore.bench(fd, dataOffset, rawWidth, width, Math.min(rows, height), curve);
+        } finally {
+            nativeClose(fd);
+        }
+    }
+
     private static boolean nativeAvailable() {
         try {
             return RawCore.AVAILABLE;

@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <time.h>
+#include <stdio.h>
 
 
 
@@ -580,4 +582,75 @@ Java_com_github_ronyx2_omkamera_RawCore_scaleRow(JNIEnv *env, jclass cls, jbyteA
     (*env)->ReleasePrimitiveArrayCritical(env, jout, o, 0);
     (*env)->ReleasePrimitiveArrayCritical(env, jb, b, JNI_ABORT);
     (*env)->ReleasePrimitiveArrayCritical(env, ja, a, JNI_ABORT);
+}
+
+/* ---- measurement: reading from the card vs. decoding in memory ---- */
+
+static long long now_ms(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (long long) t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_github_ronyx2_omkamera_RawCore_bench(JNIEnv *env, jclass cls, jint fd, jlong offset,
+        jint rawWidth, jint width, jint rows, jintArray jcurve)
+{
+    char msg[256];
+    size_t total = (size_t) rows * rawWidth, got = 0;
+    unsigned char *src = (unsigned char *) malloc(total + 32);
+    int *out = (int *) malloc((size_t) rows * width * sizeof(int));
+    long long t0, t1, t2, t3;
+    int n = cores(), i;
+    if (!src || !out) {
+        free(src);
+        free(out);
+        return (*env)->NewStringUTF(env, "kein Speicher");
+    }
+    memset(src + total, 0, 32);
+    t0 = now_ms();
+    while (got < total) {
+        size_t want = total - got > 1048576 ? 1048576 : total - got;
+        ssize_t r = pread(fd, src + got, want, (off_t) (offset + (long long) got));
+        if (r <= 0) {
+            break;
+        }
+        got += (size_t) r;
+    }
+    t1 = now_ms();
+    jint *curve = (*env)->GetIntArrayElements(env, jcurve, NULL);
+    {
+        job_t j;
+        j.src = src; j.bpr = rawWidth; j.rawWidth = rawWidth; j.width = width; j.compression = 32767;
+        j.little = 1; j.curve = curve; j.rows = rows; j.out = out; j.err = 0;
+        worker(&j);
+    }
+    t2 = now_ms();
+    {
+        pthread_t th[4];
+        job_t jobs[4];
+        for (i = 0; i < n; i++) {
+            int y0 = rows * i / n, y1 = rows * (i + 1) / n;
+            jobs[i].src = src + (size_t) y0 * rawWidth; jobs[i].bpr = rawWidth; jobs[i].rawWidth = rawWidth;
+            jobs[i].width = width; jobs[i].compression = 32767; jobs[i].little = 1; jobs[i].curve = curve;
+            jobs[i].rows = y1 - y0; jobs[i].out = out + (size_t) y0 * width; jobs[i].err = 0;
+        }
+        for (i = 1; i < n; i++) {
+            pthread_create(&th[i], NULL, worker, &jobs[i]);
+        }
+        worker(&jobs[0]);
+        for (i = 1; i < n; i++) {
+            pthread_join(th[i], NULL);
+        }
+    }
+    t3 = now_ms();
+    (*env)->ReleaseIntArrayElements(env, jcurve, curve, JNI_ABORT);
+    snprintf(msg, sizeof msg,
+             "%d Zeilen, %.1f MB: lesen %lld ms (%.1f MB/s), entpacken 1 Thread %lld ms, %d Threads %lld ms",
+             rows, got / 1048576.0, t1 - t0, t1 > t0 ? got / 1048576.0 / ((t1 - t0) / 1000.0) : 0.0,
+             t2 - t1, n, t3 - t2);
+    free(src);
+    free(out);
+    return (*env)->NewStringUTF(env, msg);
 }
