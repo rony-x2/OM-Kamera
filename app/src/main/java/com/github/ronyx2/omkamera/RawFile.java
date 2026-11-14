@@ -32,7 +32,13 @@ public class RawFile {
     }
 
     public final File file;
-    private final RandomAccessFile in;
+    /** Opened when needed; the camera's card file system allows only a few open files */
+    private RandomAccessFile in;
+    /**
+     * Close the file again after every block of rows: needed when many files are read in turn
+     * (combining), as the camera refuses more than a handful of open files.
+     */
+    public boolean transientIo;
     private final boolean little;
 
     public final Map<Integer, Entry> ifd0 = new LinkedHashMap<Integer, Entry>();
@@ -142,17 +148,44 @@ public class RawFile {
             in.close();
             throw new IOException("RAW-Kompression " + compression + " wird nicht unterstützt");
         }
+        // Header read: close the file until the sensor data is needed
+        in.close();
+        in = null;
     }
 
-    public void close() {
-        try {
-            in.close();
-        } catch (IOException ignored) {
+    private RandomAccessFile raf() throws IOException {
+        if (in == null) {
+            in = new RandomAccessFile(file, "r");
+        }
+        return in;
+    }
+
+    /** Closes the file handles; the next read opens them again */
+    public void release() {
+        if (in != null) {
+            try {
+                in.close();
+            } catch (IOException ignored) {
+            }
+            in = null;
         }
         if (nativeFd >= 0) {
             nativeClose(nativeFd);
-            nativeFd = -1;
+            nativeFd = -2;
         }
+    }
+
+    /** Only the values needed for reading rows stay: frees EXIF and maker note data of extra files */
+    public void dropMeta() {
+        ifd0.clear();
+        exif.clear();
+        sr2.clear();
+    }
+
+    public void close() {
+        release();
+        nativeFd = -1;
+        cache = null;
     }
 
     /**
@@ -239,6 +272,10 @@ public class RawFile {
             }
             cacheY = y0;
             cacheN = n;
+            if (transientIo) {
+                nativeClose(nativeFd);
+                nativeFd = -2;
+            }
         }
         System.arraycopy(cache, (row - cacheY) * width, out, 0, width);
         return true;
@@ -282,6 +319,42 @@ public class RawFile {
         if (nativeRow(row, out)) {
             return;
         }
+        javaRow(row, out);
+        if (transientIo && (row + 1) % BLOCK == 0) {
+            release();
+        }
+    }
+
+    /**
+     * Reads n rows from y0 into out (n * width values), without the per-file cache: for
+     * combining many files with one shared buffer. With transientIo the file is closed afterwards.
+     */
+    public void readBand(int y0, int n, int[] out) throws IOException {
+        if (nativeFd == -2) {
+            nativeFd = useNative && nativeAvailable() ? nativeOpen(file.getPath()) : -1;
+        }
+        boolean ok = false;
+        if (nativeFd >= 0) {
+            ok = nativeDecode(nativeFd, dataOffset, rawWidth, width, compression, little, curve, y0, n, out) == 0;
+            if (!ok) {
+                nativeClose(nativeFd);
+                nativeFd = -1;
+            }
+        }
+        if (!ok) {
+            int[] row = new int[width];
+            for (int i = 0; i < n; i++) {
+                javaRow(y0 + i, row);
+                System.arraycopy(row, 0, out, i * width, width);
+            }
+        }
+        if (transientIo) {
+            release();
+        }
+    }
+
+    private void javaRow(int row, int[] out) throws IOException {
+        RandomAccessFile in = raf();
         if (compression == 32767) {
             in.seek(dataOffset + (long) row * rawWidth);
             in.readFully(rowBuf, 0, rawWidth);
@@ -393,8 +466,8 @@ public class RawFile {
 
     private void read(byte[] mem, long base, long off, byte[] out) throws IOException {
         if (mem == null) {
-            in.seek(off);
-            in.readFully(out);
+            raf().seek(off);
+            raf().readFully(out);
         } else {
             int p = (int) (off - base);
             if (p < 0 || p + out.length > mem.length) {
@@ -420,8 +493,8 @@ public class RawFile {
                 return;
             }
             byte[] buf = new byte[len];
-            in.seek(off);
-            in.readFully(buf);
+            raf().seek(off);
+            raf().readFully(buf);
             decrypt(buf, key);
             readIfd(off, sr2, buf, off);
         } catch (IOException ignored) {

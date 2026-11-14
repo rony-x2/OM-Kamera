@@ -587,6 +587,9 @@ public final class CameraClock {
             return sign + String.format(Locale.GERMANY, "%.1f s", a / 1000.0);
         }
         long s = Math.round(a / 1000.0);
+        if (s < 60) {
+            return sign + s + " s";
+        }
         if (s < 3600) {
             return sign + s / 60 + " min " + s % 60 + " s";
         }

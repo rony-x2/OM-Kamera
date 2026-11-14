@@ -266,7 +266,7 @@ public class Ui {
         return i == 1 ? Processor.Kind.DNG : i == 2 ? Processor.Kind.TIFF : i == 3 ? Processor.Kind.PNG : null;
     }
 
-    private static final int[] COMBINE_COUNTS = {2, 3, 4, 5, 6, 8, 10, 15, 20, 30};
+    private static final int[] COMBINE_COUNTS = {2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50, 100, 200, 300, 500};
 
     public int combineCount() { return prefs.getInt("combinecount", 4); }
 

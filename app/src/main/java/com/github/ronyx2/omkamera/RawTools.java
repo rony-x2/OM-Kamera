@@ -592,10 +592,19 @@ public final class RawTools {
         if (files.size() < 2) {
             throw new IOException("mindestens 2 Dateien");
         }
+        if (mode == Mode.FOCUS && files.size() > FOCUS_MAX) {
+            // Focus stacking keeps a row cache per file; more would not fit into the 24 MB heap
+            throw new IOException("Fokus-Stacking höchstens " + FOCUS_MAX + " Bilder");
+        }
         final RawFile[] f = new RawFile[files.size()];
         try {
             for (int i = 0; i < f.length; i++) {
                 f[i] = new RawFile(files.get(i));
+                // The card allows only a few open files: each file is closed after every block
+                f[i].transientIo = true;
+                if (i > 0) {
+                    f[i].dropMeta();
+                }
                 if (i > 0 && (f[i].width != f[0].width || f[i].height != f[0].height)) {
                     throw new IOException(files.get(i).getName() + " hat eine andere Größe");
                 }
@@ -614,15 +623,28 @@ public final class RawTools {
         return new Simple(f, mode);
     }
 
+    /** Focus stacking keeps a cache of rows per file (about 0.8 MB each) */
+    public static final int FOCUS_MAX = 10;
+
+    /**
+     * Mean, sum and maximum in bands of 32 rows: the band is read from one file after the other
+     * into a shared buffer, so memory and open files stay the same for any number of pictures
+     * (star trails with hundreds of frames).
+     */
     private static final class Simple implements Rows {
+        private static final int BAND = 32;
         private final RawFile[] f;
         private final Mode mode;
-        private final int[] tmp;
+        private final int w;
+        private final int[] acc, tmp;
+        private int bandY = -1, bandN;
 
         Simple(RawFile[] f, Mode mode) {
             this.f = f;
             this.mode = mode;
-            tmp = new int[f[0].rawWidth];
+            w = f[0].width;
+            acc = new int[BAND * w];
+            tmp = new int[BAND * w];
         }
 
         @Override
@@ -630,33 +652,43 @@ public final class RawTools {
             return f[0];
         }
 
-        @Override
-        public void row(int y, int[] out) throws IOException {
-            int w = f[0].width;
-            f[0].readRow(y, out);
-            int black = f[0].black[(y & 1) * 2];
+        private void loadBand(int y0) throws IOException {
+            int n = Math.min(BAND, f[0].height - y0);
+            int len = n * w;
+            f[0].readBand(y0, n, acc);
             for (int i = 1; i < f.length; i++) {
-                f[i].readRow(y, tmp);
+                f[i].readBand(y0, n, tmp);
                 if (nativeOn()) {
-                    RawCore.combine(mode == Mode.MAX ? 1 : 0, out, tmp, w);
+                    RawCore.combine(mode == Mode.MAX ? 1 : 0, acc, tmp, len);
                     continue;
                 }
-                switch (mode) {
-                    case MAX:
-                        for (int x = 0; x < w; x++) {
-                            if (tmp[x] > out[x]) {
-                                out[x] = tmp[x];
-                            }
+                if (mode == Mode.MAX) {
+                    for (int x = 0; x < len; x++) {
+                        if (tmp[x] > acc[x]) {
+                            acc[x] = tmp[x];
                         }
-                        break;
-                    default:
-                        for (int x = 0; x < w; x++) {
-                            out[x] += tmp[x];
-                        }
-                        break;
+                    }
+                } else {
+                    for (int x = 0; x < len; x++) {
+                        acc[x] += tmp[x];
+                    }
                 }
             }
-            if (nativeOn() && mode != Mode.MAX) {
+            bandY = y0;
+            bandN = n;
+        }
+
+        @Override
+        public void row(int y, int[] out) throws IOException {
+            if (bandY < 0 || y < bandY || y >= bandY + bandN) {
+                loadBand(y - y % BAND);
+            }
+            System.arraycopy(acc, (y - bandY) * w, out, 0, w);
+            if (mode == Mode.MAX) {
+                return;
+            }
+            int black = f[0].black[(y & 1) * 2];
+            if (nativeOn()) {
                 RawCore.finish(mode == Mode.MEAN ? 0 : 1, out, w, f.length, black * (f.length - 1), f[0].white);
                 return;
             }
@@ -665,7 +697,7 @@ public final class RawTools {
                 for (int x = 0; x < w; x++) {
                     out[x] = (out[x] + half) / n;
                 }
-            } else if (mode == Mode.SUM) {
+            } else {
                 // Light adds up, the black level only once
                 int lim = f[0].white, sub = black * (f.length - 1);
                 for (int x = 0; x < w; x++) {
