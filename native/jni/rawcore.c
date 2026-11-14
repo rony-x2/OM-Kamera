@@ -426,3 +426,102 @@ Java_com_github_ronyx2_omkamera_RawCore_develop(JNIEnv *env, jclass cls, jintArr
     (*env)->ReleaseIntArrayElements(env, jpat, pat, JNI_ABORT);
     return out ? 0 : 3;
 }
+
+/* ---- parallel deflate for PNG (like pigz): parts compressed independently, joined ---- */
+
+#include <zlib.h>
+
+typedef struct {
+    const unsigned char *in;
+    int inLen;
+    unsigned char *out;
+    int outCap, outLen;
+    int level, finish;
+    int err;
+} zjob_t;
+
+static void *zworker(void *arg)
+{
+    zjob_t *j = (zjob_t *) arg;
+    z_stream s;
+    memset(&s, 0, sizeof(s));
+    /* raw deflate (no header): the caller writes the zlib header and the Adler-32 */
+    if (deflateInit2(&s, j->level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        j->err = 1;
+        return NULL;
+    }
+    s.next_in = (Bytef *) j->in;
+    s.avail_in = j->inLen;
+    s.next_out = j->out;
+    s.avail_out = j->outCap;
+    /* Sync flush ends on a byte boundary without the final bit, so parts can be joined */
+    if (deflate(&s, j->finish ? Z_FINISH : Z_SYNC_FLUSH) == Z_STREAM_ERROR || s.avail_in != 0) {
+        j->err = 2;
+    }
+    j->outLen = j->outCap - s.avail_out;
+    deflateEnd(&s);
+    return NULL;
+}
+
+/*
+ * Compresses in[0..len) into out, split over all cores. last: the stream ends here.
+ * adler[0]: running Adler-32 of all uncompressed data (updated). Returns the number of
+ * bytes written or a negative error code.
+ */
+JNIEXPORT jint JNICALL
+Java_com_github_ronyx2_omkamera_RawCore_deflate(JNIEnv *env, jclass cls, jbyteArray jin, jint len,
+        jint level, jboolean last, jbyteArray jout, jlongArray jadler)
+{
+    int n = cores(), t, total = 0, err = 0;
+    pthread_t th[4];
+    zjob_t jobs[4];
+    unsigned char *bufs[4];
+    jbyte *in = (*env)->GetByteArrayElements(env, jin, NULL);
+    jlong ad;
+    int outCap = (*env)->GetArrayLength(env, jout);
+    (*env)->GetLongArrayRegion(env, jadler, 0, 1, &ad);
+    if (len < 64 * 1024) {
+        n = 1;
+    }
+    for (t = 0; t < n; t++) {
+        int a = (int) ((long long) len * t / n), b = (int) ((long long) len * (t + 1) / n);
+        jobs[t].in = (const unsigned char *) in + a;
+        jobs[t].inLen = b - a;
+        jobs[t].outCap = (b - a) + (b - a) / 8 + 1024;
+        bufs[t] = (unsigned char *) malloc(jobs[t].outCap);
+        jobs[t].out = bufs[t];
+        jobs[t].level = level;
+        jobs[t].finish = last && t == n - 1;
+        jobs[t].err = bufs[t] ? 0 : 3;
+        jobs[t].outLen = 0;
+    }
+    for (t = 1; t < n; t++) {
+        if (!jobs[t].err) {
+            pthread_create(&th[t], NULL, zworker, &jobs[t]);
+        }
+    }
+    if (!jobs[0].err) {
+        zworker(&jobs[0]);
+    }
+    /* Adler-32 of the uncompressed data while the other threads work */
+    ad = adler32((uLong) ad, (const Bytef *) in, len);
+    for (t = 1; t < n; t++) {
+        if (jobs[t].err != 3) {
+            pthread_join(th[t], NULL);
+        }
+    }
+    for (t = 0; t < n; t++) {
+        if (jobs[t].err) {
+            err = -10 - jobs[t].err;
+        } else if (total + jobs[t].outLen > outCap) {
+            err = -20;
+        } else if (!err) {
+            (*env)->SetByteArrayRegion(env, jout, total, jobs[t].outLen, (jbyte *) bufs[t]);
+            total += jobs[t].outLen;
+        }
+        free(bufs[t]);
+    }
+    (*env)->ReleaseByteArrayElements(env, jin, in, JNI_ABORT);
+    (*env)->SetLongArrayRegion(env, jadler, 0, 1, &ad);
+    return err ? err : total;
+}

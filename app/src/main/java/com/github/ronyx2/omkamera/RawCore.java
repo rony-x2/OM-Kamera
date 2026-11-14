@@ -49,6 +49,12 @@ public final class RawCore {
     public static native int develop(int[] cfa, int n, int fullW, int x0, int w, int y0, int[] pat, int[] blk,
                                      int[] scale, int[] mat, short[] lut, int format, byte[] out);
 
+    /**
+     * Raw deflate of in[0..len) split over all cores; last ends the stream. adler[0] is the
+     * running Adler-32 (start with 1). Returns the bytes written to out or a negative error.
+     */
+    public static native int deflate(byte[] in, int len, int level, boolean last, byte[] out, long[] adler);
+
     /** True if the library is loaded; false on the PC tests without it */
     public static boolean on() {
         return AVAILABLE && RawFile.useNative;

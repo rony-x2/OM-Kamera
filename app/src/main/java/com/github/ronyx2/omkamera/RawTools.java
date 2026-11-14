@@ -478,24 +478,64 @@ public final class RawTools {
             chunk(o, "sRGB", new byte[]{0}, 0, 1);
             byte[] exif = TiffOut.exifBlock(m, lens, software);
             chunk(o, "eXIf", exif, 0, exif.length);
-            final byte[] buf = new byte[128 * 1024];
-            develop(src, bits == 8 ? 2 : 1, new ByteSink() {
-                @Override
-                public void write(byte[] b, int len) throws IOException {
-                    def.setInput(b, 0, len);
-                    while (!def.needsInput()) {
-                        int n = def.deflate(buf);
-                        if (n > 0) {
-                            chunk(o, "IDAT", buf, 0, n);
+            if (nativeOn()) {
+                // Parallel deflate on all cores: zlib header, raw deflate parts, Adler-32
+                final int CH = 2 * 1024 * 1024;
+                final byte[] in = new byte[CH];
+                final byte[] zout = new byte[CH + CH / 8 + 8192];
+                final long[] adler = {1};
+                final int[] fill = {0};
+                chunk(o, "IDAT", new byte[]{0x78, 0x01}, 0, 2);
+                develop(src, bits == 8 ? 2 : 1, new ByteSink() {
+                    @Override
+                    public void write(byte[] b, int len) throws IOException {
+                        int off = 0;
+                        while (off < len) {
+                            int n = Math.min(len - off, CH - fill[0]);
+                            System.arraycopy(b, off, in, fill[0], n);
+                            fill[0] += n;
+                            off += n;
+                            if (fill[0] == CH) {
+                                int z = RawCore.deflate(in, CH, 1, false, zout, adler);
+                                if (z < 0) {
+                                    throw new IOException("Kompression fehlgeschlagen (" + z + ")");
+                                }
+                                chunk(o, "IDAT", zout, 0, z);
+                                fill[0] = 0;
+                            }
                         }
                     }
+                }, p);
+                int z = RawCore.deflate(in, fill[0], 1, true, zout, adler);
+                if (z < 0) {
+                    throw new IOException("Kompression fehlgeschlagen (" + z + ")");
                 }
-            }, p);
-            def.finish();
-            while (!def.finished()) {
-                int n = def.deflate(buf);
-                if (n > 0) {
-                    chunk(o, "IDAT", buf, 0, n);
+                byte[] tail = new byte[4];
+                be32(tail, 0, adler[0]);
+                byte[] last = new byte[z + 4];
+                System.arraycopy(zout, 0, last, 0, z);
+                System.arraycopy(tail, 0, last, z, 4);
+                chunk(o, "IDAT", last, 0, last.length);
+            } else {
+                final byte[] buf = new byte[128 * 1024];
+                develop(src, bits == 8 ? 2 : 1, new ByteSink() {
+                    @Override
+                    public void write(byte[] b, int len) throws IOException {
+                        def.setInput(b, 0, len);
+                        while (!def.needsInput()) {
+                            int n = def.deflate(buf);
+                            if (n > 0) {
+                                chunk(o, "IDAT", buf, 0, n);
+                            }
+                        }
+                    }
+                }, p);
+                def.finish();
+                while (!def.finished()) {
+                    int n = def.deflate(buf);
+                    if (n > 0) {
+                        chunk(o, "IDAT", buf, 0, n);
+                    }
                 }
             }
             chunk(o, "IEND", new byte[0], 0, 0);
