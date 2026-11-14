@@ -38,6 +38,10 @@ public final class RawCore {
                                     boolean little, int[] curve, int y, int count, int[] out);
 
     /** mode 0: acc += add, 1: acc = max(acc, add) */
+    /** Like decode, but adds the rows (mode 0) or takes the maximum (mode 1) into acc */
+    public static native int decodeCombine(int fd, long offset, int rawWidth, int width, int compression,
+                                           boolean little, int[] curve, int y, int count, int[] acc, int mode);
+
     /** Measures reading 'rows' rows from the card and decoding them with 1 and n threads */
     public static native String bench(int fd, long offset, int rawWidth, int width, int rows, int[] curve);
 

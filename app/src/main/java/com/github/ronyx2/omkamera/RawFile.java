@@ -345,6 +345,27 @@ public class RawFile {
      * Reads n rows from y0 into out (n * width values), without the per-file cache: for
      * combining many files with one shared buffer. With transientIo the file is closed afterwards.
      */
+    /**
+     * Native only: decodes n rows from y0 and adds them (mode 0) or takes the maximum (mode 1)
+     * into acc. Returns false if the native decoder is not available (then nothing was changed).
+     */
+    public boolean combineBand(int y0, int n, int[] acc, int mode) throws IOException {
+        if (nativeFd == -2) {
+            nativeFd = useNative && nativeAvailable() ? nativeOpen(file.getPath()) : -1;
+        }
+        if (nativeFd < 0) {
+            return false;
+        }
+        int r = RawCore.decodeCombine(nativeFd, dataOffset, rawWidth, width, compression, little, curve, y0, n, acc, mode);
+        if (transientIo) {
+            release();
+        }
+        if (r != 0) {
+            throw new IOException("Dekoder-Fehler " + r + " in " + file.getName());
+        }
+        return true;
+    }
+
     public void readBand(int y0, int n, int[] out) throws IOException {
         if (nativeFd == -2) {
             nativeFd = useNative && nativeAvailable() ? nativeOpen(file.getPath()) : -1;

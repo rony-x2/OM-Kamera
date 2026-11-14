@@ -59,26 +59,48 @@ typedef struct {
     const int *curve;
     int rows;
     int *out;      /* rows of 'width' ints */
+    int mode;      /* -1 store, 0 add, 1 maximum (combining straight into 'out') */
     int err;
 } job_t;
 
-/* Decodes rows that are already in memory */
+/* Decodes rows that are already in memory; with mode >= 0 combines them into 'out' */
 static void *worker(void *arg)
 {
     job_t *j = (job_t *) arg;
-    int y;
+    int y, x;
+    int *row = NULL;
+    if (j->mode >= 0) {
+        row = (int *) malloc((size_t) j->width * sizeof(int));
+        if (!row) {
+            j->err = 3;
+            return NULL;
+        }
+    }
     for (y = 0; y < j->rows; y++) {
         const unsigned char *buf = j->src + (size_t) y * j->bpr;
         int *o = j->out + (size_t) y * j->width;
+        int *d = row ? row : o;
         if (j->compression == 32767) {
-            decode_row(buf, j->rawWidth, j->width, j->curve, o);
+            decode_row(buf, j->rawWidth, j->width, j->curve, d);
         } else {
             int c;
             for (c = 0; c < j->width; c++) {
-                o[c] = j->little ? (buf[2 * c] | buf[2 * c + 1] << 8) : (buf[2 * c] << 8 | buf[2 * c + 1]);
+                d[c] = j->little ? (buf[2 * c] | buf[2 * c + 1] << 8) : (buf[2 * c] << 8 | buf[2 * c + 1]);
+            }
+        }
+        if (j->mode == 1) {
+            for (x = 0; x < j->width; x++) {
+                if (row[x] > o[x]) {
+                    o[x] = row[x];
+                }
+            }
+        } else if (j->mode == 0) {
+            for (x = 0; x < j->width; x++) {
+                o[x] += row[x];
             }
         }
     }
+    free(row);
     return NULL;
 }
 
@@ -123,10 +145,9 @@ static pthread_mutex_t dec_lock = PTHREAD_MUTEX_INITIALIZER;
 static unsigned char *dec_buf;
 static size_t dec_cap;
 
-JNIEXPORT jint JNICALL
-Java_com_github_ronyx2_omkamera_RawCore_decode(JNIEnv *env, jclass cls, jint fd, jlong offset,
+static jint decode_impl(JNIEnv *env, jint fd, jlong offset,
         jint rawWidth, jint width, jint compression, jboolean little, jintArray jcurve,
-        jint y, jint count, jintArray jout)
+        jint y, jint count, jintArray jout, jint mode)
 {
     int n = cores(), i, err = 0;
     pthread_t th[4];
@@ -186,6 +207,7 @@ Java_com_github_ronyx2_omkamera_RawCore_decode(JNIEnv *env, jclass cls, jint fd,
         j->curve = (const int *) curve;
         j->rows = y1 - y0;
         j->out = (int *) out + (size_t) y0 * width;
+        j->mode = mode;
         j->err = 0;
     }
     for (i = 1; i < n; i++) {
@@ -200,10 +222,32 @@ Java_com_github_ronyx2_omkamera_RawCore_decode(JNIEnv *env, jclass cls, jint fd,
             pthread_join(th[i], NULL);
         }
     }
+    for (i = 0; i < n; i++) {
+        if (jobs[i].err > 0) {
+            err = jobs[i].err;
+        }
+    }
     (*env)->ReleasePrimitiveArrayCritical(env, jout, out, 0);
     (*env)->ReleaseIntArrayElements(env, jcurve, curve, JNI_ABORT);
     pthread_mutex_unlock(&dec_lock);
     return err;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_github_ronyx2_omkamera_RawCore_decode(JNIEnv *env, jclass cls, jint fd, jlong offset,
+        jint rawWidth, jint width, jint compression, jboolean little, jintArray jcurve,
+        jint y, jint count, jintArray jout)
+{
+    return decode_impl(env, fd, offset, rawWidth, width, compression, little, jcurve, y, count, jout, -1);
+}
+
+/* Decodes rows and adds them (mode 0) or takes the maximum (mode 1) into acc */
+JNIEXPORT jint JNICALL
+Java_com_github_ronyx2_omkamera_RawCore_decodeCombine(JNIEnv *env, jclass cls, jint fd, jlong offset,
+        jint rawWidth, jint width, jint compression, jboolean little, jintArray jcurve,
+        jint y, jint count, jintArray jacc, jint mode)
+{
+    return decode_impl(env, fd, offset, rawWidth, width, compression, little, jcurve, y, count, jacc, mode);
 }
 
 /* ---- combining rows: 0 add, 1 max ---- */
@@ -639,7 +683,7 @@ Java_com_github_ronyx2_omkamera_RawCore_bench(JNIEnv *env, jclass cls, jint fd, 
     {
         job_t j;
         j.src = src; j.bpr = rawWidth; j.rawWidth = rawWidth; j.width = width; j.compression = 32767;
-        j.little = 1; j.curve = curve; j.rows = rows; j.out = out; j.err = 0;
+        j.little = 1; j.curve = curve; j.rows = rows; j.out = out; j.mode = -1; j.err = 0;
         worker(&j);
     }
     t2 = now_ms();
@@ -650,7 +694,7 @@ Java_com_github_ronyx2_omkamera_RawCore_bench(JNIEnv *env, jclass cls, jint fd, 
             int y0 = rows * i / n, y1 = rows * (i + 1) / n;
             jobs[i].src = src + (size_t) y0 * rawWidth; jobs[i].bpr = rawWidth; jobs[i].rawWidth = rawWidth;
             jobs[i].width = width; jobs[i].compression = 32767; jobs[i].little = 1; jobs[i].curve = curve;
-            jobs[i].rows = y1 - y0; jobs[i].out = out + (size_t) y0 * width; jobs[i].err = 0;
+            jobs[i].rows = y1 - y0; jobs[i].out = out + (size_t) y0 * width; jobs[i].mode = -1; jobs[i].err = 0;
         }
         for (i = 1; i < n; i++) {
             pthread_create(&th[i], NULL, worker, &jobs[i]);

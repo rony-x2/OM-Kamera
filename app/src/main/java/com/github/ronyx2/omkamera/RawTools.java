@@ -637,7 +637,9 @@ public final class RawTools {
         private final RawFile[] f;
         private final Mode mode;
         private final int w;
-        private final int[] acc, tmp;
+        private final int[] acc;
+        /** Only for the Java decoder; natively the decoder combines straight into acc */
+        private int[] tmp;
         private int bandY = -1, bandN;
 
         Simple(RawFile[] f, Mode mode) {
@@ -645,14 +647,12 @@ public final class RawTools {
             this.mode = mode;
             w = f[0].width;
             int b = 128;
-            int[] a = null, t = null;
-            // 128 rows of a 24 MP file: 2 x 3 MB; fall back to smaller bands if the heap is short
-            while (t == null) {
+            int[] a = null;
+            // 128 rows of a 24 MP file: 3 MB; fall back to smaller bands if the heap is short
+            while (a == null) {
                 try {
                     a = new int[b * w];
-                    t = new int[b * w];
                 } catch (OutOfMemoryError e) {
-                    a = null;
                     if (b <= 16) {
                         throw e;
                     }
@@ -661,7 +661,6 @@ public final class RawTools {
             }
             band = b;
             acc = a;
-            tmp = t;
             Log.info("combine " + mode + " " + f.length + " files, band " + band + " rows");
         }
 
@@ -680,6 +679,14 @@ public final class RawTools {
             readMs += System.currentTimeMillis() - t0;
             for (int i = 1; i < f.length; i++) {
                 t0 = System.currentTimeMillis();
+                // Native: decode and combine in one pass, row by row in the decoder threads
+                if (f[i].combineBand(y0, n, acc, mode == Mode.MAX ? 1 : 0)) {
+                    readMs += System.currentTimeMillis() - t0;
+                    continue;
+                }
+                if (tmp == null) {
+                    tmp = new int[band * w];
+                }
                 f[i].readBand(y0, n, tmp);
                 long t1 = System.currentTimeMillis();
                 readMs += t1 - t0;
