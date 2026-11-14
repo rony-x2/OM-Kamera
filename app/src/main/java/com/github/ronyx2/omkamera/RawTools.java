@@ -467,6 +467,8 @@ public final class RawTools {
         final OutputStream o = open(out);
         boolean ok = false;
         final Deflater def = new Deflater(1);
+        // Photo data after the Sub filter barely repeats: Huffman only is as small and faster
+        def.setStrategy(Deflater.HUFFMAN_ONLY);
         try {
             o.write(new byte[]{(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'});
             byte[] ihdr = new byte[13];
