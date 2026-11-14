@@ -631,6 +631,11 @@ public class Ui {
             session.adjustShutterSpeed(dir);
             return;
         }
+        if (SystemClock.uptimeMillis() < leavingBulbUntil) {
+            // The camera is still switching from BULB to 30": further detents go to the camera
+            session.adjustShutterSpeed(dir);
+            return;
+        }
         if (!session.isBulb()) {
             boolean at30 = "30\"".equals(session.shutterText());
             session.adjustShutterSpeed(dir);
@@ -656,6 +661,7 @@ public class Ui {
         } else if (i <= 0) {
             // Back from the first long time to the camera's 30"
             setLongSecs(0);
+            leavingBulbUntil = SystemClock.uptimeMillis() + 600;
             session.adjustShutterSpeed(dir);
         } else {
             setLongSecs(t[i - 1]);
@@ -666,6 +672,8 @@ public class Ui {
     public void stepShutter(int dir) {
         turnShutter(dir);
     }
+
+    private long leavingBulbUntil;
 
     private void setLongSecs(int secs) {
         session.setLongSecs(secs);

@@ -771,6 +771,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public String sequenceRelease() {
         if (sequencer.mode() == Sequencer.Mode.OFF && !sequencer.isRunning()) {
+            if (session.longSecs() > 0) {
+                // A time beyond 30" from the shutter dial, as with the shutter button
+                String r = sequencer.startLongExposure();
+                redraw();
+                return r;
+            }
             return null;
         }
         String r = sequencer.onFullPress();
