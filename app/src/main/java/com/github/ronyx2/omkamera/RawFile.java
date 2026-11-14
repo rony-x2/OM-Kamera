@@ -149,12 +149,87 @@ public class RawFile {
             in.close();
         } catch (IOException ignored) {
         }
+        if (nativeFd >= 0) {
+            nativeClose(nativeFd);
+            nativeFd = -1;
+        }
+    }
+
+    // ---- native decoder (librawcore) with a cache of row blocks ----
+
+    /** Switched off on the PC and when the library is missing */
+    public static volatile boolean useNative = true;
+    private static final int BLOCK = 32;
+    private int nativeFd = -2;
+    private int[] cache;
+    private int cacheY = -1, cacheN;
+
+    private boolean nativeRow(int row, int[] out) {
+        if (nativeFd == -2) {
+            nativeFd = useNative && nativeAvailable() ? nativeOpen(file.getPath()) : -1;
+        }
+        if (nativeFd < 0) {
+            return false;
+        }
+        if (cacheY < 0 || row < cacheY || row >= cacheY + cacheN) {
+            int y0 = row - row % BLOCK;
+            int n = Math.min(BLOCK, height - y0);
+            if (cache == null) {
+                cache = new int[BLOCK * width];
+            }
+            int err = nativeDecode(nativeFd, dataOffset, rawWidth, width, compression, little, curve, y0, n, cache);
+            if (err != 0) {
+                // Fall back to Java for this file
+                nativeClose(nativeFd);
+                nativeFd = -1;
+                cacheY = -1;
+                return false;
+            }
+            cacheY = y0;
+            cacheN = n;
+        }
+        System.arraycopy(cache, (row - cacheY) * width, out, 0, width);
+        return true;
+    }
+
+    private static boolean nativeAvailable() {
+        try {
+            return RawCore.AVAILABLE;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static int nativeOpen(String path) {
+        try {
+            return RawCore.open(path);
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    private static void nativeClose(int fd) {
+        try {
+            RawCore.close(fd);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static int nativeDecode(int fd, long off, int rw, int w, int comp, boolean le, int[] curve, int y, int n, int[] out) {
+        try {
+            return RawCore.decode(fd, off, rw, w, comp, le, curve, y, n, out);
+        } catch (Throwable t) {
+            return -1;
+        }
     }
 
     // ---- sensor data ----
 
     /** Reads one row of sensor values (curve applied, black level not subtracted) into out[0..width) */
     public void readRow(int row, int[] out) throws IOException {
+        if (nativeRow(row, out)) {
+            return;
+        }
         if (compression == 32767) {
             in.seek(dataOffset + (long) row * rawWidth);
             in.readFully(rowBuf, 0, rawWidth);

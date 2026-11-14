@@ -208,7 +208,7 @@ public class Processor {
             src = j.kind.combines()
                     ? RawTools.combine(j.files, RawTools.Mode.valueOf(j.kind.name()))
                     : RawTools.single(new RawFile(first));
-            Log.info("process " + j.kind + " " + src.meta().describe() + " -> " + out.getPath());
+            Log.info("process " + j.kind + " " + src.meta().describe() + " -> " + out.getPath() + ", Dekoder " + RawCore.STATUS);
             TiffOut.Lens lens = host.lens();
             String sw = "OM Kamera " + host.version();
             RawTools.Progress p = new RawTools.Progress() {

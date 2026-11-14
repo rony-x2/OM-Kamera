@@ -142,6 +142,7 @@ public class CameraSession {
             probe = HardwareProbe.run(cameraEx);
             liveFrame();
             probe.put("SplitExposure", liveView.splitExposure());
+            probe.put("Dekoder", RawCore.STATUS);
             Log.info("hardware probe " + probe);
         }
         return probe;
