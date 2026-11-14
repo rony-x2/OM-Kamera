@@ -246,6 +246,22 @@ public class Ui {
 
     public void setSequencer(Sequencer s) { sequencer = s; }
 
+    private Processor processor;
+
+    public void setProcessor(Processor p) { processor = p; }
+
+    public Processor processor() { return processor; }
+
+    /** Format for the automatic conversion of each new ARW, null = off */
+    public Processor.Kind autoExport() {
+        int i = prefs.getInt("autoexport", 0);
+        return i == 1 ? Processor.Kind.DNG : i == 2 ? Processor.Kind.TIFF : i == 3 ? Processor.Kind.PNG : null;
+    }
+
+    private static final int[] COMBINE_COUNTS = {2, 3, 4, 5, 6, 8, 10, 15, 20, 30};
+
+    public int combineCount() { return prefs.getInt("combinecount", 4); }
+
     public Sequencer sequencer() { return sequencer; }
     /** Setting changed by a custom key (state QUICK) */
     private Setting quick;
@@ -601,6 +617,7 @@ public class Ui {
                 group(out, "Bildqualität", "quality", "size", "aspect");
                 group(out, "Bildfolgemodus", "drive", "bracketstep", "bracketcount", "bracketlevel", "bracketorder");
                 sequenceRows(out);
+                processRows(out);
                 group(out, "Aufnahme", "lenr");
                 displayRows(out);
                 break;
@@ -720,6 +737,124 @@ public class Ui {
         }));
         groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "look", "style",
                 "afmf", "afmode", "afarea");
+    }
+
+    /** Stage 3c: RAW files converted and combined by the app, experiments with the camera's filters */
+    private void processRows(List<Row> out) {
+        if (processor == null) {
+            return;
+        }
+        out.add(Row.header("Verarbeitung (RAW)"));
+        Processor.Kind auto = autoExport();
+        out.add(Row.action("Zusätzlich speichern als", auto == null ? "Aus" : auto.label, new Runnable() {
+            @Override
+            public void run() {
+                int i = (prefs.getInt("autoexport", 0) + 1) % 4;
+                prefs.edit().putInt("autoexport", i).apply();
+                processor.markSeen();
+            }
+        }));
+        out.add(Row.sub("Letztes RAW umwandeln", "DNG, TIFF, PNG", new Sub() {
+            @Override
+            public String title() {
+                return "Letztes RAW umwandeln";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                List<java.io.File> last = Processor.newest(1);
+                r.add(Row.info("Datei", last.isEmpty() ? "keine ARW auf der Karte" : last.get(0).getName()));
+                for (final Processor.Kind k : new Processor.Kind[]{Processor.Kind.DNG, Processor.Kind.TIFF, Processor.Kind.PNG}) {
+                    r.add(Row.action("als " + k.label, k == Processor.Kind.DNG ? "verlustfrei" : "entwickelt, sRGB", new Runnable() {
+                        @Override
+                        public void run() {
+                            showMessage(processor.add(k, Processor.newest(1)), false);
+                        }
+                    }));
+                }
+                return r;
+            }
+        }));
+        out.add(Row.action("Verrechnen: Anzahl Bilder", String.valueOf(combineCount()), new Runnable() {
+            @Override
+            public void run() {
+                int n = combineCount(), i = 0;
+                while (i < COMBINE_COUNTS.length && COMBINE_COUNTS[i] <= n) {
+                    i++;
+                }
+                prefs.edit().putInt("combinecount", COMBINE_COUNTS[i % COMBINE_COUNTS.length]).apply();
+            }
+        }));
+        out.add(Row.sub("Letzte " + combineCount() + " Bilder verrechnen", "als DNG", new Sub() {
+            @Override
+            public String title() {
+                return "Letzte " + combineCount() + " RAWs verrechnen";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                final List<java.io.File> files = Processor.newest(combineCount());
+                r.add(Row.info("Bilder", files.isEmpty() ? "keine ARW auf der Karte"
+                        : files.get(0).getName() + " – " + files.get(files.size() - 1).getName()));
+                Object[][] kinds = {
+                    {Processor.Kind.MEAN, "weniger Rauschen"},
+                    {Processor.Kind.SUM, "aufhellen"},
+                    {Processor.Kind.MAX, "Sternspuren, Lichtspuren"},
+                    {Processor.Kind.FOCUS, "vom Stativ"}};
+                for (Object[] k : kinds) {
+                    final Processor.Kind kind = (Processor.Kind) k[0];
+                    r.add(Row.action(kind.label, (String) k[1], new Runnable() {
+                        @Override
+                        public void run() {
+                            showMessage(processor.add(kind, Processor.newest(combineCount())), false);
+                        }
+                    }));
+                }
+                return r;
+            }
+        }));
+        out.add(Row.sub("Kamera-Verarbeitung (Versuch)", "Bildprozessor", new Sub() {
+            @Override
+            public String title() {
+                return "Kamera-Verarbeitung (Versuch)";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                final RawLab lab = session.rawLab();
+                r.add(Row.info("Letzter Versuch", lab.result()));
+                Object[][] modes = {
+                    {"durchreiche", "RAW-Übernahme testen", "1 Bild"},
+                    {"addition", "Mehrbild-Rauschminderung", Math.min(8, combineCount()) + " Bilder"},
+                    {"hdr", "HDR (0, −2, +2 EV)", "3 Bilder"}};
+                for (final Object[] m : modes) {
+                    r.add(Row.action((String) m[1], (String) m[2], new Runnable() {
+                        @Override
+                        public void run() {
+                            int n = "hdr".equals(m[0]) ? 2 : Math.min(8, combineCount());
+                            showMessage(lab.start((String) m[0], n), false);
+                            state = State.LIVE;
+                            sub = null;
+                        }
+                    }));
+                }
+                return r;
+            }
+        }));
+        String pr = processor.progress();
+        if (pr != null) {
+            out.add(Row.info("Läuft", pr));
+            out.add(Row.action("Verarbeitung abbrechen", "", new Runnable() {
+                @Override
+                public void run() {
+                    processor.cancelAll();
+                    showMessage("Verarbeitung wird abgebrochen", false);
+                }
+            }));
+        }
     }
 
     /** Sequences run by the app: interval, focus bracket, extended bracket, BULB timer */

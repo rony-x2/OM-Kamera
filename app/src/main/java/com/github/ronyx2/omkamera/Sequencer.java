@@ -42,6 +42,44 @@ public class Sequencer {
         void cancelFocus();
     }
 
+    /** Camera, lens and settings for the film's INFO block */
+    private String[][] filmInfo() {
+        StringBuilder c = new StringBuilder();
+        try {
+            c.append(com.github.ma1co.openmemories.framework.DeviceInfo.getInstance().getModel());
+        } catch (Throwable ignored) {
+            c.append("Sony");
+        }
+        TiffOut.Lens l = session.lensForFiles();
+        if (l != null) {
+            c.append(", Objektiv ").append(l.name);
+            if (l.focalMin > 0) {
+                c.append(" (").append(Math.round(l.focalMin));
+                if (Math.round(l.focalMax) != Math.round(l.focalMin)) {
+                    c.append("-").append(Math.round(l.focalMax));
+                }
+                c.append(" mm");
+                if (l.fMin > 0) {
+                    c.append(" F").append(String.valueOf(l.fMin).replace(".0", "").replace('.', ','));
+                }
+                c.append(")");
+            }
+            float fl = session.focalLength();
+            if (fl > 0) {
+                c.append(", ").append(Math.round(fl)).append(" mm");
+            }
+        }
+        c.append(", ").append(session.shutterText()).append(", ").append(session.apertureText());
+        CameraSession.Params p = session.current();
+        String iso = p != null ? Settings.get("iso").currentText(p) : null;
+        if (iso != null) {
+            c.append(", ISO ").append(iso);
+        }
+        c.append(", Intervall ").append(get("iv.interval", 5)).append(" s");
+        String date = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(new java.util.Date());
+        return new String[][]{{"ISFT", "OM Kamera"}, {"ICRD", date}, {"ICMT", c.toString()}};
+    }
+
     // Choices for the menu
     public static final int[] START_DELAYS = {0, 5, 10, 30, 60, 300, 600, 1800, 3600};
     public static final int[] INTERVALS = {1, 2, 3, 5, 10, 15, 20, 30, 60, 120, 300, 600};
@@ -308,6 +346,7 @@ public class Sequencer {
             try {
                 filmFile = nextFilmFile();
                 film = new MjpegAvi(filmFile, fps);
+                film.setInfo(filmInfo());
             } catch (Exception e) {
                 Log.error("film", e);
                 host.message("Zeitrafferfilm nicht möglich: " + e.getMessage(), true);

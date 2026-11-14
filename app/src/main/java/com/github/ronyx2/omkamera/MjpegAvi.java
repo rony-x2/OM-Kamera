@@ -37,6 +37,32 @@ public class MjpegAvi {
         f = new RandomAccessFile(file, "rw");
     }
 
+    private String[][] info;
+
+    /** RIFF INFO entries (e.g. ISFT software, ICMT comment, ICRD date); call before the first frame */
+    public void setInfo(String[][] entries) {
+        info = entries;
+    }
+
+    private int infoSize() {
+        if (info == null) {
+            return 0;
+        }
+        int n = 4;
+        for (String[] e : info) {
+            n += 8 + ((latin(e[1]).length + 1 + 1) & ~1);
+        }
+        return n;
+    }
+
+    private static byte[] latin(String s) {
+        try {
+            return s.getBytes("ISO-8859-1");
+        } catch (java.io.UnsupportedEncodingException e) {
+            return s.getBytes();
+        }
+    }
+
     public int frames() {
         return frames;
     }
@@ -166,6 +192,22 @@ public class MjpegAvi {
         writeInt(0);
         writeInt(0);
         writeInt(0);
+        // Metadata: camera, lens and settings as RIFF INFO (AVI has no EXIF)
+        if (info != null) {
+            writeFourCC("LIST");
+            writeInt(infoSize());
+            writeFourCC("INFO");
+            for (String[] e : info) {
+                byte[] b = latin(e[1]);
+                writeFourCC(e[0]);
+                writeInt(b.length + 1);
+                f.write(b);
+                f.write(0);
+                if (((b.length + 1) & 1) != 0) {
+                    f.write(0);
+                }
+            }
+        }
         // movi list
         writeFourCC("LIST");
         writeInt(0);               // patched

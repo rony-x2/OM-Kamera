@@ -181,6 +181,29 @@ public class CameraSession {
                 public boolean isCapturing() {
                     return capturing;
                 }
+
+                @Override
+                public int evIndex() {
+                    try {
+                        return current.params.getExposureCompensation();
+                    } catch (Throwable t) {
+                        return 0;
+                    }
+                }
+
+                @Override
+                public float evStep() {
+                    try {
+                        return current.params.getExposureCompensationStep();
+                    } catch (Throwable t) {
+                        return 1f / 3;
+                    }
+                }
+
+                @Override
+                public boolean setEvIndex(int index) {
+                    return Settings.get("ev").write(CameraSession.this, String.valueOf(index)).ok;
+                }
             });
         }
         return rawLab;
@@ -551,6 +574,30 @@ public class CameraSession {
         String w = fNumber(v.wide);
         String t = fNumber(v.tele);
         return v.wide == v.tele ? w : w + "–" + t.substring(1);
+    }
+
+    /** Lens data for the metadata of files the app writes, or null without lens data */
+    public TiffOut.Lens lensForFiles() {
+        try {
+            CameraEx.LensInfo l = lens();
+            if (l == null || l.LensName == null || l.LensName.trim().length() == 0) {
+                return null;
+            }
+            TiffOut.Lens o = new TiffOut.Lens();
+            o.name = l.LensName.trim();
+            float scale = focalScale();
+            if (l.FocalLength != null && l.FocalLength.wide > 0) {
+                o.focalMin = l.FocalLength.wide / scale;
+                o.focalMax = l.FocalLength.tele / scale;
+            }
+            if (l.MinFValue != null && l.MinFValue.wide > 0) {
+                o.fMin = l.MinFValue.wide / 10.0;
+                o.fMax = l.MinFValue.tele / 10.0;
+            }
+            return o;
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     /** "FE 24-105mm F4 G OSS · 50 mm" or null without lens data */

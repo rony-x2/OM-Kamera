@@ -72,6 +72,7 @@ public class OverlayView extends View {
                 }
                 drawSelfTimer(c);
                 drawSequence(c);
+                drawProcessing(c);
                 break;
             case FN:
             case FN_EDIT:
@@ -609,6 +610,26 @@ public class OverlayView extends View {
     }
 
     /** Progress of a running app sequence, centred under the status line */
+    /** Small chip at the bottom while the app converts or combines RAW files */
+    private void drawProcessing(Canvas c) {
+        Processor pr = ui.processor();
+        String t = pr != null ? pr.progress() : null;
+        if (t == null) {
+            return;
+        }
+        textSize(Theme.TEXT_SMALL);
+        float w = text.measureText(t) + 36 * u;
+        float b = getHeight() - Theme.BAR * u - Theme.PAD * u - 90 * u;
+        float l = (vw - w) / 2;
+        roundRect(c, l, b - 28 * u, l + w, b, Theme.PANEL);
+        // Slow breathing dot: working, not recording
+        int alpha = 120 + (int) (100 * Math.abs(Math.sin(android.os.SystemClock.uptimeMillis() / 700.0)));
+        fill.setColor((alpha << 24) | 0x4DA3FF);
+        c.drawCircle(l + 14 * u, b - 14 * u, 5 * u, fill);
+        drawText(c, t, l + 26 * u, b - 8 * u, Theme.TEXT);
+        postInvalidateDelayed(500);
+    }
+
     private void drawSequence(Canvas c) {
         Sequencer q = ui.sequencer();
         String t = q != null ? q.status() : null;

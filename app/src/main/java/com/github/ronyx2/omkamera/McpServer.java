@@ -278,6 +278,50 @@ public class McpServer {
                 }
             }));
         }
+        if (name.equals("verarbeiten")) {
+            Processor pr = host.ui().processor();
+            if (pr == null) {
+                return error("Verarbeitung nicht verfügbar");
+            }
+            String art = a.optString("art", "status").toLowerCase(java.util.Locale.US);
+            if ("status".equals(art)) {
+                return text(pr.status());
+            }
+            if ("abbrechen".equals(art)) {
+                pr.cancelAll();
+                return text("abgebrochen");
+            }
+            Processor.Kind kind;
+            if ("dng".equals(art)) {
+                kind = Processor.Kind.DNG;
+            } else if ("tiff".equals(art) || "tif".equals(art)) {
+                kind = Processor.Kind.TIFF;
+            } else if ("png".equals(art)) {
+                kind = Processor.Kind.PNG;
+            } else if ("mittel".equals(art)) {
+                kind = Processor.Kind.MEAN;
+            } else if ("summe".equals(art)) {
+                kind = Processor.Kind.SUM;
+            } else if ("maximum".equals(art)) {
+                kind = Processor.Kind.MAX;
+            } else if ("fokus".equals(art)) {
+                kind = Processor.Kind.FOCUS;
+            } else {
+                return error("unbekannte Art " + art);
+            }
+            java.util.List<java.io.File> files;
+            String datei = a.optString("datei", "");
+            if (datei.length() > 0 && !kind.name().equals("MEAN") && kind.ordinal() <= Processor.Kind.PNG.ordinal()) {
+                java.io.File f = Processor.find(datei);
+                if (f == null) {
+                    return error("Datei " + datei + " nicht gefunden");
+                }
+                files = java.util.Collections.singletonList(f);
+            } else {
+                files = Processor.newest(kind.ordinal() <= Processor.Kind.PNG.ordinal() ? 1 : Math.max(2, a.optInt("anzahl", 3)));
+            }
+            return text(pr.add(kind, files));
+        }
         if (name.equals("rawtest")) {
             final String mode = a.optString("modus", "status");
             final int n = a.optInt("anzahl", 2);

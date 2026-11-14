@@ -16,7 +16,8 @@ import java.util.Vector;
  * Experiments with the camera's RAW pipeline (stage 3c): the shutter sequence callback hands
  * the RAW data of each shot to the app instead of developing and storing it. Two modes:
  * "durchreiche" develops one shot with the default filter and stores it; "addition" adds
- * several shots with the RAW addition filter and stores the result. Everything is logged; a
+ * several shots with the RAW addition filter and stores the result; "hdr" takes three shots
+ * (0, -EV, +EV) and develops them with the HDR filter. Everything is logged; a
  * watchdog releases the sequence if no callback arrives.
  * Runs on the main thread (the sequence delivers its callbacks there).
  */
@@ -31,6 +32,13 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
         boolean captureSingle();
 
         boolean isCapturing();
+
+        /** Exposure compensation index and the size of one step in EV */
+        int evIndex();
+
+        float evStep();
+
+        boolean setEvIndex(int index);
     }
 
     private final Host host;
@@ -40,6 +48,10 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
     private int count;
     private int received;
     private DeviceMemory acc;
+    private final java.util.List<CameraSequence.RawData> hdrRaws = new java.util.ArrayList<CameraSequence.RawData>();
+    private int evBefore = Integer.MIN_VALUE;
+    private int hdrStep;
+    private int evSetFor = -1;
     private long t0;
     private String result = "noch nicht gestartet";
 
@@ -64,9 +76,18 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
             return "Kamera nicht offen";
         }
         this.mode = mode;
-        this.count = "addition".equals(mode) ? Math.max(2, Math.min(8, count)) : 1;
+        this.count = "addition".equals(mode) ? Math.max(2, Math.min(8, count)) : "hdr".equals(mode) ? 3 : 1;
         received = 0;
         acc = null;
+        hdrRaws.clear();
+        evSetFor = -1;
+        if ("hdr".equals(mode)) {
+            // count = EV distance of the outer shots (1..3), default 2
+            float step = host.evStep();
+            int ev = count >= 1 && count <= 3 ? count : 2;
+            hdrStep = step > 0 ? Math.round(ev / step) : 6;
+            evBefore = host.evIndex();
+        }
         host.stopLiveView();
         try {
             seq = CameraSequence.open(ex);
@@ -97,6 +118,20 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
                     shoot();
                 }
             }, 200);
+            return;
+        }
+        if ("hdr".equals(mode) && evSetFor != received) {
+            // Order 0, -, +; the camera needs a moment to take over the new value
+            int k = received;
+            evSetFor = k;
+            int idx = evBefore + (k == 0 ? 0 : k == 1 ? -hdrStep : hdrStep);
+            Log.info("rawlab hdr shot " + (k + 1) + " ev index " + idx + " -> " + host.setEvIndex(idx));
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    shoot();
+                }
+            }, 500);
             return;
         }
         if (!host.captureSingle()) {
@@ -140,6 +175,8 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
         try {
             if ("addition".equals(mode)) {
                 addition(raw, sequence);
+            } else if ("hdr".equals(mode)) {
+                hdr(raw, sequence);
             } else {
                 develop(raw, sequence);
             }
@@ -148,6 +185,10 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
             release(raw);
             release(acc);
             acc = null;
+            for (CameraSequence.RawData r : hdrRaws) {
+                release(r);
+            }
+            hdrRaws.clear();
             finish("Fehler: " + e);
         }
         Log.info("rawlab callback took " + (SystemClock.uptimeMillis() - t) + " ms");
@@ -228,6 +269,49 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
         }
     }
 
+    private void hdr(CameraSequence.RawData raw, CameraSequence sequence) {
+        hdrRaws.add(raw);
+        if (hdrRaws.size() < 3) {
+            next();
+            return;
+        }
+        restoreEv();
+        CameraSequence.HDRDevelopFilter f = new CameraSequence.HDRDevelopFilter();
+        try {
+            for (CameraSequence.RawData r : hdrRaws) {
+                f.addSource(r, true);
+            }
+            hdrRaws.clear();
+            long t = SystemClock.uptimeMillis();
+            boolean ok = f.execute();
+            Log.info("rawlab hdr execute=" + ok + " in " + (SystemClock.uptimeMillis() - t) + " ms, outputs=" + describe(f));
+            if (!ok) {
+                finish("HDR-Entwicklung fehlgeschlagen");
+                return;
+            }
+            DeviceMemory[] out = outputsOf(f);
+            if (out.length > 0 && out[0] instanceof OptimizedImage) {
+                OptimizedImage img = (OptimizedImage) out[0];
+                sequence.storeImage(img, true);
+                finish("HDR ok: " + img.getWidth() + "x" + img.getHeight() + " gespeichert");
+            } else {
+                for (DeviceMemory m : out) {
+                    release(m);
+                }
+                finish("HDR ohne Bild");
+            }
+        } finally {
+            f.release();
+        }
+    }
+
+    private void restoreEv() {
+        if (evBefore != Integer.MIN_VALUE) {
+            host.setEvIndex(evBefore);
+            evBefore = Integer.MIN_VALUE;
+        }
+    }
+
     private void next() {
         handler.postDelayed(new Runnable() {
             @Override
@@ -239,6 +323,7 @@ public class RawLab implements CameraSequence.ShutterSequenceCallback {
 
     private void finish(String text) {
         handler.removeCallbacks(watchdog);
+        restoreEv();
         result = text + " (" + (SystemClock.uptimeMillis() - t0) + " ms)";
         Log.info("rawlab end: " + result);
         if (seq != null) {

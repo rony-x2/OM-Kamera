@@ -37,6 +37,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private DebugServer debugServer;
     private Sequencer sequencer;
     private LiveAnalysis liveAnalysis;
+    private Processor processor;
     private final McpServer mcp = new McpServer(this);
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
@@ -183,8 +184,44 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             @Override
             public void onWritingChanged(boolean writing) {
                 ui.setWriting(writing);
+                if (!writing && processor != null) {
+                    processor.onCardWritten(ui.autoExport());
+                }
             }
         });
+        processor = new Processor(new Processor.Host() {
+            @Override
+            public TiffOut.Lens lens() {
+                return session.lensForFiles();
+            }
+
+            @Override
+            public String version() {
+                return BuildConfig.VERSION_NAME;
+            }
+
+            @Override
+            public void message(final String text, final boolean warn) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        ui.showMessage(text, warn);
+                        redraw();
+                    }
+                });
+            }
+
+            @Override
+            public void keepAwake() {
+                lastActivity = SystemClock.uptimeMillis();
+            }
+
+            @Override
+            public void redraw() {
+                overlay.postInvalidate();
+            }
+        });
+        ui.setProcessor(processor);
         debugServer = new DebugServer(new DebugServer.Provider() {
             @Override
             public DebugServer.Response handle(DebugServer.Request request) {

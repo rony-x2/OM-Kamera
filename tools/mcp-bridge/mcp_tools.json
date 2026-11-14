@@ -265,7 +265,7 @@
  },
  {
   "name": "rawtest",
-  "description": "Experiment Stufe 3c: übernimmt die RAW-Daten der nächsten Aufnahme(n) über Sonys Shutter-Sequence-Callback. modus 'durchreiche' entwickelt ein Bild mit dem Standardfilter und speichert es, 'addition' addiert 'anzahl' Bilder (2–8) mit dem RAW-Additionsfilter, 'status' liefert das Ergebnis des letzten Versuchs. Details stehen im Log (Zeilen 'rawlab').",
+  "description": "Experiment Stufe 3c: übernimmt die RAW-Daten der nächsten Aufnahme(n) über Sonys Shutter-Sequence-Callback. modus 'durchreiche' entwickelt ein Bild mit dem Standardfilter und speichert es, 'addition' addiert 'anzahl' Bilder (2–8) mit dem RAW-Additionsfilter, 'hdr' nimmt drei Bilder (0, −EV, +EV; anzahl = EV-Abstand 1–3, Standard 2) und entwickelt sie mit dem HDR-Filter, 'status' liefert das Ergebnis des letzten Versuchs. Details stehen im Log (Zeilen 'rawlab').",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -274,12 +274,44 @@
      "enum": [
       "status",
       "durchreiche",
-      "addition"
+      "addition",
+      "hdr"
      ]
     },
     "anzahl": {
      "type": "integer",
      "description": "Bilder für die Addition, Standard 2"
+    }
+   }
+  }
+ },
+ {
+  "name": "verarbeiten",
+  "description": "Stufe 3c: wandelt ARW-Dateien der Karte in der App um oder verrechnet mehrere. art 'dng' (verlustfrei, mit Objektivdaten), 'tiff' oder 'png' (16 Bit, einfache Entwicklung nach sRGB) für die neueste ARW oder 'datei'; 'mittel', 'summe', 'maximum' (Sternspuren) und 'fokus' (Fokus-Stacking) für die neuesten 'anzahl' ARWs, Ergebnis als DNG. 'status' zeigt Fortschritt und letztes Ergebnis, 'abbrechen' stoppt. Ergebnisse liegen in OMKAMERA auf der Karte.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "art": {
+     "type": "string",
+     "enum": [
+      "status",
+      "abbrechen",
+      "dng",
+      "tiff",
+      "png",
+      "mittel",
+      "summe",
+      "maximum",
+      "fokus"
+     ]
+    },
+    "datei": {
+     "type": "string",
+     "description": "Name oder Pfad einer ARW, z. B. DSC05935.ARW"
+    },
+    "anzahl": {
+     "type": "integer",
+     "description": "Anzahl der neuesten ARWs zum Verrechnen, Standard 3"
     }
    }
   }
