@@ -47,11 +47,21 @@ public class DebugServer {
         public final int code;
         public final String type;
         public final byte[] body;
+        /** Streamed instead of body (large files from the card) */
+        public final java.io.File file;
 
         public Response(int code, String type, byte[] body) {
             this.code = code;
             this.type = type;
             this.body = body;
+            this.file = null;
+        }
+
+        public Response(java.io.File file) {
+            this.code = 200;
+            this.type = "application/octet-stream";
+            this.body = new byte[0];
+            this.file = file;
         }
 
         public static Response text(int code, String type, String body) {
@@ -218,11 +228,24 @@ public class DebugServer {
             OutputStream out = socket.getOutputStream();
             String head = "HTTP/1.0 " + r.code + " " + (r.code == 200 ? "OK" : r.code == 202 ? "Accepted" : r.code == 400 ? "Bad Request" : r.code == 401 ? "Unauthorized" : r.code == 404 ? "Not Found" : r.code == 403 ? "Forbidden" : "Error") + "\r\n"
                     + "Content-Type: " + r.type + "\r\n"
-                    + "Content-Length: " + r.body.length + "\r\n"
+                    + "Content-Length: " + (r.file != null ? r.file.length() : r.body.length) + "\r\n"
                     + "Cache-Control: no-store\r\n"
                     + "Connection: close\r\n\r\n";
             out.write(head.getBytes("UTF-8"));
-            out.write(r.body);
+            if (r.file != null) {
+                java.io.FileInputStream fin = new java.io.FileInputStream(r.file);
+                try {
+                    byte[] buf = new byte[64 * 1024];
+                    int n;
+                    while ((n = fin.read(buf)) > 0) {
+                        out.write(buf, 0, n);
+                    }
+                } finally {
+                    fin.close();
+                }
+            } else {
+                out.write(r.body);
+            }
             out.flush();
         } catch (Throwable t) {
             Log.error("debug request", t);

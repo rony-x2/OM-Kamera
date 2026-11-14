@@ -125,27 +125,41 @@ public final class RawTools {
             o.write(head);
             int[] row = new int[m.rawWidth];
             byte[] b = new byte[w * 2];
+            long tRead = 0, tWrite = 0;
             for (int y = 0; y < h; y++) {
+                long t0 = System.nanoTime();
                 src.row(y, row);
+                long t1 = System.nanoTime();
                 for (int x = 0; x < w; x++) {
                     int v = row[x];
                     b[x * 2] = (byte) v;
                     b[x * 2 + 1] = (byte) (v >> 8);
                 }
                 o.write(b);
+                tRead += t1 - t0;
+                tWrite += System.nanoTime() - t1;
                 if (p != null && !p.step(y + 1, h)) {
                     throw new IOException("abgebrochen");
                 }
             }
+            long t2 = System.nanoTime();
+            o.close();
+            o = null;
+            timing = "lesen " + tRead / 1000000 + " ms, schreiben " + (tWrite + System.nanoTime() - t2) / 1000000 + " ms";
             ok = true;
         } finally {
-            o.close();
+            if (o != null) {
+                o.close();
+            }
             if (!ok) {
                 //noinspection ResultOfMethodCallIgnored
                 out.delete();
             }
         }
     }
+
+    /** Time split of the last DNG: reading/decoding versus writing to the card */
+    public static volatile String timing = "";
 
     private static String capitalize(String s) {
         String l = s.toLowerCase(java.util.Locale.US);

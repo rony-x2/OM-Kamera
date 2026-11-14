@@ -242,7 +242,7 @@ public class Processor {
             }
             long s = (SystemClock.uptimeMillis() - t0) / 1000;
             last = "OMKAMERA/" + name + " (" + (out.length() / (1024 * 1024)) + " MB, " + s + " s)";
-            Log.info("process done " + last);
+            Log.info("process done " + last + (j.kind == Kind.TIFF || j.kind == Kind.PNG ? "" : ", " + RawTools.timing));
             host.message(j.kind.label + " fertig: " + name, false);
         } catch (Throwable e) {
             Log.error("process " + j.kind, e);
