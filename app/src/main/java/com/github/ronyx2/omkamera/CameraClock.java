@@ -29,7 +29,8 @@ import java.util.TimeZone;
  * kept as an offset to Android's clock, and can set Sony's clock from an NTP server
  * (like a PC or phone does), including the EU summer time switch.
  *
- * Sony's calendar is in UTC; local time = UTC + gmtDiff + summerTimeDiff (minutes).
+ * Sony's calendar holds the local time (checked on the a6000);
+ * UTC = local − (gmtDiff + summerTimeDiff) minutes.
  */
 public final class CameraClock {
     private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
@@ -108,7 +109,7 @@ public final class CameraClock {
         Calendar u = new GregorianCalendar(UTC);
         u.clear();
         u.set(c.year, c.month - 1, c.day, c.hour, c.minute, c.second);
-        return u.getTimeInMillis();
+        return u.getTimeInMillis() - (gmtDiff + summerDiff) * 60000L;
     }
 
     /**
@@ -144,13 +145,14 @@ public final class CameraClock {
      * newSummer is the new summer time difference in minutes or -1 to leave the zone.
      * Returns 0 if the camera accepted it.
      */
-    private static int set(long trueUtc, long elapsed, int newSummer) throws InterruptedException {
+    private static int set(long trueUtc, long elapsed, int newSummer) throws Exception {
         long now = trueUtc + (SystemClock.elapsedRealtime() - elapsed);
         long next = (now / 1000 + 1) * 1000;
         Thread.sleep(Math.max(0, next - now));
         long target = trueUtc + (SystemClock.elapsedRealtime() - elapsed);
+        // The calendar is given in local time, like Sony's clock keeps it
         Calendar u = new GregorianCalendar(UTC);
-        u.setTimeInMillis(target);
+        u.setTimeInMillis(target + (gmtDiff + (newSummer >= 0 ? newSummer : summerDiff)) * 60000L);
         PlainCalendar c = new PlainCalendar();
         c.year = u.get(Calendar.YEAR);
         c.month = u.get(Calendar.MONTH) + 1;
@@ -164,12 +166,46 @@ public final class CameraClock {
             tz.gmtDiff = gmtDiff;
             tz.summerTimeDiff = newSummer;
         }
-        int r = new TimeUtil().setCurrentTime(c, tz);
+        int r = callSet(c, tz);
         Log.info("clock set " + c.year + "-" + c.month + "-" + c.day + " " + c.hour + ":" + c.minute + ":" + c.second
-                + " UTC" + (tz != null ? " summer " + newSummer : "") + " -> " + r);
+                + " lokal" + (tz != null ? " summer " + newSummer : "") + " via " + setter + " -> " + r);
         known = false;
         calibrate();
         return r;
+    }
+
+    /** How the clock is set: "public" (TimeUtil.setCurrentTime), "native" (TimeUtil.NativeSetTime) or "keine" */
+    private static String setter;
+    private static java.lang.reflect.Method setMethod;
+
+    /** Finds a way to set Sony's clock (by reflection, the a6000 lacks the public method of newer models) */
+    static String setter() {
+        if (setter == null) {
+            try {
+                setMethod = TimeUtil.class.getMethod("setCurrentTime", PlainCalendar.class, PlainTimeZone.class);
+                setter = "public";
+            } catch (Throwable t) {
+                try {
+                    setMethod = TimeUtil.class.getDeclaredMethod("NativeSetTime", PlainCalendar.class, PlainTimeZone.class);
+                    setMethod.setAccessible(true);
+                    setter = "native";
+                } catch (Throwable t2) {
+                    setter = "keine";
+                }
+            }
+            Log.info("clock setter " + setter);
+        }
+        return setter;
+    }
+
+    private static int callSet(PlainCalendar c, PlainTimeZone tz) throws Exception {
+        if ("keine".equals(setter())) {
+            return -100;
+        }
+        Object r = java.lang.reflect.Modifier.isStatic(setMethod.getModifiers())
+                ? setMethod.invoke(null, c, tz)
+                : setMethod.invoke(new TimeUtil(), c, tz);
+        return r instanceof Integer ? (Integer) r : 0;
     }
 
     /** EU rule: summer time from the last Sunday in March to the last Sunday in October, 01:00 UTC */
@@ -394,7 +430,7 @@ public final class CameraClock {
                         }
                         return;
                     }
-                    String r = apply(t.utc, t.elapsed, t.server + ", ±" + Math.max(1, t.rtt / 2) + " ms");
+                    String r = apply(t.utc, t.elapsed, t.server + ", ±" + Math.max(1, t.rtt / 2) + " ms", manual);
                     lastOk = SystemClock.elapsedRealtime();
                     if (manual || r.startsWith("gestellt")) {
                         host.message("Uhr " + r, false);
@@ -417,7 +453,7 @@ public final class CameraClock {
         }
         busy = true;
         try {
-            return apply(utcMs, SystemClock.elapsedRealtime(), source);
+            return apply(utcMs, SystemClock.elapsedRealtime(), source, true);
         } catch (Throwable e) {
             Log.error("clock from " + source, e);
             return "Fehler: " + e;
@@ -427,7 +463,7 @@ public final class CameraClock {
     }
 
     /** Compares with the real time and sets the clock if it is off by 1 s or more, or summer time differs */
-    private String apply(long trueUtc, long elapsed, String source) throws InterruptedException {
+    private String apply(long trueUtc, long elapsed, String source, boolean manual) throws Exception {
         calibrate();
         long real = trueUtc + (SystemClock.elapsedRealtime() - elapsed);
         long dev = nowUtc() - real;
@@ -444,12 +480,28 @@ public final class CameraClock {
             Log.info("clock ok " + dev + " ms, " + source);
             return state;
         }
+        if ("keine".equals(setter())) {
+            state = "Abweichung " + devText + ", diese Kamera bietet keine Funktion zum Stellen";
+            return state;
+        }
+        if ("native".equals(setter()) && !manual && !prefs.getBoolean("clock.native_ok", false)) {
+            state = "Abweichung " + devText + ", bitte einmal von Hand stellen (Prüfung des Weges)";
+            return state;
+        }
         int r = set(trueUtc, elapsed, newSummer);
         if (r != 0) {
             state = "Kamera hat das Stellen abgelehnt (Code " + r + ")";
             return state;
         }
         long after = nowUtc() - (trueUtc + (SystemClock.elapsedRealtime() - elapsed));
+        if (Math.abs(after) > 2000) {
+            state = "gestellt, aber zurückgelesen " + fmtDev(after) + " daneben (" + setter() + ")";
+            Log.info("clock " + state);
+            return state;
+        }
+        if ("native".equals(setter())) {
+            prefs.edit().putBoolean("clock.native_ok", true).apply();
+        }
         state = "gestellt um " + format("HH:mm") + ": war " + devText
                 + (newSummer >= 0 ? (newSummer > 0 ? ", Sommerzeit ein" : ", Sommerzeit aus") : "")
                 + ", jetzt " + fmtDev(after) + " (" + source + ")";

@@ -863,6 +863,48 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         return DebugServer.Response.text(200, "text/plain", body);
     }
 
+    private static String reflect(String name) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            Class<?> c = Class.forName(name);
+            sb.append(c).append(" extends ").append(c.getSuperclass()).append('\n');
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                sb.append("F ").append(java.lang.reflect.Modifier.toString(f.getModifiers())).append(' ')
+                        .append(f.getType().getName()).append(' ').append(f.getName()).append('\n');
+            }
+            for (java.lang.reflect.Constructor<?> k : c.getDeclaredConstructors()) {
+                sb.append("C ").append(k).append('\n');
+            }
+            for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                sb.append("M ").append(m).append('\n');
+            }
+            for (Class<?> i : c.getDeclaredClasses()) {
+                sb.append("K ").append(i.getName()).append('\n');
+            }
+        } catch (Throwable t) {
+            sb.append("Fehler: ").append(t).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String classList(String jar, String q) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            dalvik.system.DexFile d = new dalvik.system.DexFile(jar);
+            java.util.Enumeration<String> e = d.entries();
+            while (e.hasMoreElements()) {
+                String n = e.nextElement();
+                if (q == null || n.toLowerCase(java.util.Locale.US).contains(q.toLowerCase(java.util.Locale.US))) {
+                    sb.append(n).append('\n');
+                }
+            }
+            d.close();
+        } catch (Throwable t) {
+            sb.append("Fehler: ").append(t).append('\n');
+        }
+        return sb.length() > 0 ? sb.toString() : "keine Treffer\n";
+    }
+
     private static DebugServer.Response json(String body) {
         return DebugServer.Response.text(200, "application/json", body);
     }
@@ -918,6 +960,26 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         }
         if (ui.remoteCode() == null || !ui.remoteCode().equals(r.param("k"))) {
             return DebugServer.Response.text(403, "text/plain", "Code fehlt oder falsch");
+        }
+        if (path.equals("/api/reflect")) {
+            // Read-only: lists what a class on the camera offers (methods, fields), nothing is called
+            return DebugServer.Response.text(200, "text/plain; charset=utf-8", reflect(String.valueOf(r.param("cls"))));
+        }
+        if (path.equals("/api/classes")) {
+            // Read-only: class names in a framework jar/dex of the camera, filtered by 'q'
+            return DebugServer.Response.text(200, "text/plain; charset=utf-8",
+                    classList(String.valueOf(r.param("jar")), r.param("q")));
+        }
+        if (path.equals("/api/ls")) {
+            StringBuilder sb = new StringBuilder();
+            java.io.File[] fs = new java.io.File(String.valueOf(r.param("dir"))).listFiles();
+            if (fs != null) {
+                java.util.Arrays.sort(fs);
+                for (java.io.File f : fs) {
+                    sb.append(f.isDirectory() ? "d " : "- ").append(f.length()).append(' ').append(f.getName()).append('\n');
+                }
+            }
+            return DebugServer.Response.text(200, "text/plain; charset=utf-8", sb.length() > 0 ? sb.toString() : "leer oder nicht lesbar\n");
         }
         if (path.equals("/api/file")) {
             // A file from the card (film, DNG ...), streamed for checking it on the PC
