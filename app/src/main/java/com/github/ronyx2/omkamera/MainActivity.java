@@ -220,6 +220,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             public void redraw() {
                 overlay.postInvalidate();
             }
+
+            @Override
+            public int pngBits() {
+                return ui.pngBits();
+            }
         });
         ui.setProcessor(processor);
         debugServer = new DebugServer(new DebugServer.Provider() {

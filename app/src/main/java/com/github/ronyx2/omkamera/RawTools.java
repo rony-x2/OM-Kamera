@@ -14,7 +14,7 @@ import java.util.zip.Deflater;
  * image fits into the app's 24 MB heap:
  * - DNG: the sensor data unchanged, with black/white level, white balance, colour matrix and
  *   the EXIF data incl. lens; for single files and for combinations of several files
- * - TIFF and PNG with 16 bits per channel: a simple, neutral development (bilinear demosaic,
+ * - TIFF with 16 bits and PNG with 16 or 8 bits per channel: a simple, neutral development (bilinear demosaic,
  *   white balance as shot, camera matrix to sRGB, sRGB tone curve)
  * - Combinations of several ARW files: mean (noise reduction), sum, maximum (star trails)
  *   and focus stacking (per 2x2 block the sharpest file)
@@ -218,7 +218,7 @@ public final class RawTools {
             mat[i] = Math.round(rc[i] * 4096);
         }
         int[] gamma = srgbLut();
-        int stride = format == 1 ? 1 + w * 6 : w * 6;
+        int stride = format == 2 ? 1 + w * 3 : format == 1 ? 1 + w * 6 : w * 6;
 
         if (nativeOn()) {
             final int B = 32;
@@ -261,7 +261,7 @@ public final class RawTools {
             load(src, ry + 1, raw, next, m, scale, blk);
             int rowPhase = (ry & 1) * 2;
             int o = 0;
-            if (format == 1) {
+            if (format >= 1) {
                 line[o++] = 1;
             }
             int pr = 0, pg = 0, pb = 0;
@@ -296,6 +296,16 @@ public final class RawTools {
                 int R = gamma[clamp((mat[0] * r + mat[1] * g + mat[2] * b) >> 12)];
                 int G = gamma[clamp((mat[3] * r + mat[4] * g + mat[5] * b) >> 12)];
                 int B = gamma[clamp((mat[6] * r + mat[7] * g + mat[8] * b) >> 12)];
+                if (format == 2) {
+                    line[o] = (byte) ((R >> 8) - (pr >> 8));
+                    line[o + 1] = (byte) ((G >> 8) - (pg >> 8));
+                    line[o + 2] = (byte) ((B >> 8) - (pb >> 8));
+                    pr = R;
+                    pg = G;
+                    pb = B;
+                    o += 3;
+                    continue;
+                }
                 if (format == 1) {
                     // PNG filter Sub on bytes: each byte minus the same byte of the previous pixel
                     line[o] = (byte) ((R >> 8) - (pr >> 8));
@@ -447,6 +457,11 @@ public final class RawTools {
     // ---- PNG 16 bit ----
 
     public static void writePng(File out, Rows src, TiffOut.Lens lens, String software, Progress p) throws IOException {
+        writePng(out, src, 16, lens, software, p);
+    }
+
+    /** bits 16 or 8 per channel */
+    public static void writePng(File out, Rows src, final int bits, TiffOut.Lens lens, String software, Progress p) throws IOException {
         RawFile m = src.meta();
         final int w = m.cropW, h = m.cropH;
         final OutputStream o = open(out);
@@ -457,14 +472,14 @@ public final class RawTools {
             byte[] ihdr = new byte[13];
             be32(ihdr, 0, w);
             be32(ihdr, 4, h);
-            ihdr[8] = 16;
+            ihdr[8] = (byte) (bits == 8 ? 8 : 16);
             ihdr[9] = 2;
             chunk(o, "IHDR", ihdr, 0, 13);
             chunk(o, "sRGB", new byte[]{0}, 0, 1);
             byte[] exif = TiffOut.exifBlock(m, lens, software);
             chunk(o, "eXIf", exif, 0, exif.length);
             final byte[] buf = new byte[128 * 1024];
-            develop(src, 1, new ByteSink() {
+            develop(src, bits == 8 ? 2 : 1, new ByteSink() {
                 @Override
                 public void write(byte[] b, int len) throws IOException {
                     def.setInput(b, 0, len);

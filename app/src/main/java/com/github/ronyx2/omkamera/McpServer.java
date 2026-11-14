@@ -320,6 +320,9 @@ public class McpServer {
             } else {
                 files = Processor.newest(kind.ordinal() <= Processor.Kind.PNG.ordinal() ? 1 : Math.max(2, a.optInt("anzahl", 3)));
             }
+            if (kind == Processor.Kind.PNG && a.has("bit")) {
+                host.ui().setPngBits(a.optInt("bit", 16));
+            }
             return text(pr.add(kind, files));
         }
         if (name.equals("rawtest")) {

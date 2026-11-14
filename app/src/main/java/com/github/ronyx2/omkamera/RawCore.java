@@ -45,7 +45,7 @@ public final class RawCore {
 
     public static native void pack16(int[] row, int n, byte[] out);
 
-    /** Develops n rows from n + 2 sensor rows; format 0 TIFF (LE), 1 PNG rows with filter byte */
+    /** Develops n rows from n + 2 sensor rows; format 0 TIFF (LE), 1 PNG 16 bit, 2 PNG 8 bit (with filter byte) */
     public static native int develop(int[] cfa, int n, int fullW, int x0, int w, int y0, int[] pat, int[] blk,
                                      int[] scale, int[] mat, short[] lut, int format, byte[] out);
 

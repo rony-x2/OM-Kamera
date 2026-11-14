@@ -28,10 +28,13 @@ public class Processor {
         void keepAwake();
 
         void redraw();
+
+        /** Bits per channel for PNG: 16 or 8 */
+        int pngBits();
     }
 
     public enum Kind {
-        DNG("DNG", ".DNG"), TIFF("TIFF 16 Bit", ".TIF"), PNG("PNG 16 Bit", ".PNG"),
+        DNG("DNG", ".DNG"), TIFF("TIFF 16 Bit", ".TIF"), PNG("PNG", ".PNG"),
         MEAN("Mittelwert", ".DNG"), SUM("Summe", ".DNG"), MAX("Maximum", ".DNG"), FOCUS("Fokus-Stacking", ".DNG");
         public final String label, ext;
 
@@ -234,7 +237,7 @@ public class Processor {
                     RawTools.writeTiff(out, src, lens, sw, p);
                     break;
                 case PNG:
-                    RawTools.writePng(out, src, lens, sw, p);
+                    RawTools.writePng(out, src, host.pngBits(), lens, sw, p);
                     break;
                 default:
                     RawTools.writeDng(out, src, lens, sw, j.kind.combines() ? null : first.getName(), p);

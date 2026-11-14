@@ -262,6 +262,11 @@ public class Ui {
 
     public int combineCount() { return prefs.getInt("combinecount", 4); }
 
+    /** PNG bits per channel: 16 (full range) or 8 (smaller, faster) */
+    public int pngBits() { return prefs.getInt("pngbits", 16) == 8 ? 8 : 16; }
+
+    public void setPngBits(int bits) { prefs.edit().putInt("pngbits", bits == 8 ? 8 : 16).apply(); }
+
     public Sequencer sequencer() { return sequencer; }
     /** Setting changed by a custom key (state QUICK) */
     private Setting quick;
@@ -746,12 +751,19 @@ public class Ui {
         }
         out.add(Row.header("Verarbeitung (RAW)"));
         Processor.Kind auto = autoExport();
-        out.add(Row.action("Zusätzlich speichern als", auto == null ? "Aus" : auto.label, new Runnable() {
+        out.add(Row.action("Zusätzlich speichern als", auto == null ? "Aus"
+                : auto == Processor.Kind.PNG ? "PNG " + pngBits() + " Bit" : auto.label, new Runnable() {
             @Override
             public void run() {
                 int i = (prefs.getInt("autoexport", 0) + 1) % 4;
                 prefs.edit().putInt("autoexport", i).apply();
                 processor.markSeen();
+            }
+        }));
+        out.add(Row.action("PNG-Farbtiefe", pngBits() + " Bit", new Runnable() {
+            @Override
+            public void run() {
+                prefs.edit().putInt("pngbits", pngBits() == 16 ? 8 : 16).apply();
             }
         }));
         out.add(Row.sub("Letztes RAW umwandeln", "DNG, TIFF, PNG", new Sub() {
@@ -766,7 +778,8 @@ public class Ui {
                 List<java.io.File> last = Processor.newest(1);
                 r.add(Row.info("Datei", last.isEmpty() ? "keine ARW auf der Karte" : last.get(0).getName()));
                 for (final Processor.Kind k : new Processor.Kind[]{Processor.Kind.DNG, Processor.Kind.TIFF, Processor.Kind.PNG}) {
-                    r.add(Row.action("als " + k.label, k == Processor.Kind.DNG ? "verlustfrei" : "entwickelt, sRGB", new Runnable() {
+                    String lbl = k == Processor.Kind.PNG ? "PNG " + pngBits() + " Bit" : k.label;
+                    r.add(Row.action("als " + lbl, k == Processor.Kind.DNG ? "verlustfrei" : "entwickelt, sRGB", new Runnable() {
                         @Override
                         public void run() {
                             showMessage(processor.add(k, Processor.newest(1)), false);

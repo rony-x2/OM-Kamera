@@ -287,7 +287,7 @@
  },
  {
   "name": "verarbeiten",
-  "description": "Stufe 3c: wandelt ARW-Dateien der Karte in der App um oder verrechnet mehrere. art 'dng' (verlustfrei, mit Objektivdaten), 'tiff' oder 'png' (16 Bit, einfache Entwicklung nach sRGB) für die neueste ARW oder 'datei'; 'mittel', 'summe', 'maximum' (Sternspuren) und 'fokus' (Fokus-Stacking) für die neuesten 'anzahl' ARWs, Ergebnis als DNG. 'status' zeigt Fortschritt und letztes Ergebnis, 'abbrechen' stoppt. Ergebnisse liegen in OMKAMERA auf der Karte.",
+  "description": "Stufe 3c: wandelt ARW-Dateien der Karte in der App um oder verrechnet mehrere. art 'dng' (verlustfrei, mit Objektivdaten), 'tiff' (16 Bit) oder 'png' (16 oder 8 Bit, einfache Entwicklung nach sRGB) für die neueste ARW oder 'datei'; 'mittel', 'summe', 'maximum' (Sternspuren) und 'fokus' (Fokus-Stacking) für die neuesten 'anzahl' ARWs, Ergebnis als DNG. 'status' zeigt Fortschritt und letztes Ergebnis, 'abbrechen' stoppt. Ergebnisse liegen in OMKAMERA auf der Karte.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -312,6 +312,14 @@
     "anzahl": {
      "type": "integer",
      "description": "Anzahl der neuesten ARWs zum Verrechnen, Standard 3"
+    },
+    "bit": {
+     "type": "integer",
+     "enum": [
+      8,
+      16
+     ],
+     "description": "Farbtiefe für PNG, wird als Einstellung gemerkt"
     }
    }
   }
