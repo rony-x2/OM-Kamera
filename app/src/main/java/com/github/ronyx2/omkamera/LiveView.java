@@ -64,6 +64,10 @@ public class LiveView {
         }
     }
 
+    public synchronized String splitExposure() {
+        return HardwareProbe.splitExposure(sequence);
+    }
+
     /** Stops the sequence when no frame was requested for a while. */
     public synchronized void stopIfIdle() {
         if (sequence != null && System.currentTimeMillis() - lastRequest > IDLE_STOP_MS) {

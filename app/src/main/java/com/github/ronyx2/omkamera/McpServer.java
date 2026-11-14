@@ -465,6 +465,10 @@ public class McpServer {
         short[][] h = s.histogram();
         o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
         o.put("brennweite", Math.round(s.focalLength()));
+        java.util.Map<String, String> hw = s.hardwareProbe();
+        if (hw != null) {
+            o.put("rechenwerk", new JSONObject(hw));
+        }
         String lens = s.lensText();
         if (lens != null) {
             o.put("objektiv", lens);

@@ -134,6 +134,19 @@ public class CameraSession {
 
     private final LiveView liveView = new LiveView();
 
+    private java.util.Map<String, String> probe;
+
+    /** What image processing the camera offers (asked once, nothing is taken) */
+    public synchronized java.util.Map<String, String> hardwareProbe() {
+        if (probe == null && cameraEx != null) {
+            probe = HardwareProbe.run(cameraEx);
+            liveFrame();
+            probe.put("SplitExposure", liveView.splitExposure());
+            Log.info("hardware probe " + probe);
+        }
+        return probe;
+    }
+
     /** One JPEG frame of the live view (for the browser), or null. Callable from any thread. */
     public byte[] liveFrame() {
         return liveView.frame(cameraEx);
