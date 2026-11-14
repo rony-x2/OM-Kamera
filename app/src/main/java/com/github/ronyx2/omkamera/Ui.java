@@ -1069,7 +1069,7 @@ public class Ui {
             out.add(cycle("Startzeit Stunde", "tl.ath", range(0, 23), 20, new Fmt() {
                 public String f(int v) { return String.format(java.util.Locale.US, "%02d:%02d Uhr", v, q.get("tl.atm", 0)); }
             }));
-            out.add(cycle("Startzeit Minute", "tl.atm", new int[]{0, 15, 30, 45}, 0, new Fmt() {
+            out.add(cycle("Startzeit Minute", "tl.atm", new int[]{0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}, 0, new Fmt() {
                 public String f(int v) { return String.format(java.util.Locale.US, ":%02d", v); }
             }));
         }

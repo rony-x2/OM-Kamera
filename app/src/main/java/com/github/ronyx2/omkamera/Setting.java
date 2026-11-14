@@ -122,6 +122,9 @@ public abstract class Setting {
         }
         CameraSession.Result r = session.apply(edit);
         Log.info("set " + id + "=" + value + " -> " + (r.ok ? "ok" : "refused " + r.inhibition));
+        if (r.ok && "drive".equals(id)) {
+            Settings.rememberDrive(value);
+        }
         return r;
     }
 

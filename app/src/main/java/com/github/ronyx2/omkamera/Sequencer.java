@@ -150,6 +150,10 @@ public class Sequencer {
         return prefs.getInt("seq." + key, def);
     }
 
+    public void put(String key, int value) {
+        prefs.edit().putInt("seq." + key, value).apply();
+    }
+
     /** Next value of a list option */
     public void cycle(String key, int[] values, int def) {
         int cur = get(key, def);

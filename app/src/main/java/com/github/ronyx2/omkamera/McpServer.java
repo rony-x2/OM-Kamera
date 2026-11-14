@@ -365,6 +365,25 @@ public class McpServer {
         }
         if (name.equals("zeitraffer")) {
             final String act = a.optString("aktion", "status");
+            if ("setzen".equals(act)) {
+                // Time-lapse options like in the menu (values as stored there)
+                final String key = a.optString("schluessel");
+                final int val = a.optInt("wert", Integer.MIN_VALUE);
+                java.util.List<String> keys = java.util.Arrays.asList("interval", "count", "bulb", "at", "ath", "atm",
+                        "delay", "win", "wfrom", "wto", "wdays", "hg", "isomax", "isomin", "film", "rampto", "rampmin");
+                if (!keys.contains(key) || val == Integer.MIN_VALUE) {
+                    return text("schluessel einer von " + keys + ", wert als Zahl (interval in Zehntelsekunden, "
+                            + "at 0/1 = Verzögerung/Uhrzeit, win 0/1, wfrom/wto Stunde, wdays Bitmaske Mo=1, bulb Sekunden, hg 0/1/-1)");
+                }
+                return text(host.onMain(new Callable<String>() {
+                    @Override
+                    public String call() {
+                        host.ui().sequencer().put("tl." + key, val);
+                        host.redraw();
+                        return "tl." + key + " = " + val;
+                    }
+                }));
+            }
             final double ziel = a.optDouble("ziel", 15);
             final int minuten = a.optInt("minuten", 20);
             return text(host.onMain(new Callable<String>() {

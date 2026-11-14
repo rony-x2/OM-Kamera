@@ -298,6 +298,27 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         });
     }
 
+    /**
+     * The camera takes the drive mode from its own menu when the app starts and does not keep
+     * the one chosen in the app (other settings it keeps); the app puts its choice back.
+     */
+    private void restoreDrive() {
+        String want = Settings.savedDrive();
+        if (want == null) {
+            return;
+        }
+        try {
+            Setting d = Settings.get("drive");
+            String now = d.safeGet(session.current());
+            if (!want.equals(now) && d.safeValues(session.current()).contains(want)) {
+                Log.info("drive restore " + now + " -> " + want);
+                d.write(session, want);
+            }
+        } catch (Throwable t) {
+            Log.error("drive restore", t);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -323,6 +344,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (dial > 0) {
             ui.onModeDial(dial);
         }
+        restoreDrive();
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         applyNetwork();
         applyDisplay();

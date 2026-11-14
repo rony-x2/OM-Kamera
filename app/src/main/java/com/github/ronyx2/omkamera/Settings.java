@@ -729,6 +729,17 @@ public final class Settings {
         appTimer = p.getInt("apptimer", 0);
     }
 
+    /** Drive mode chosen in the app (the camera drops it when the app starts again) */
+    static String savedDrive() {
+        return prefs != null ? prefs.getString("drive", null) : null;
+    }
+
+    static void rememberDrive(String v) {
+        if (prefs != null && v != null) {
+            prefs.edit().putString("drive", v).apply();
+        }
+    }
+
     static void setAppTimer(int seconds) {
         appTimer = seconds;
         if (prefs != null) {
