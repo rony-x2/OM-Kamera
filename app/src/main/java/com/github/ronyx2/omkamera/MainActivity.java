@@ -38,6 +38,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private Sequencer sequencer;
     private LiveAnalysis liveAnalysis;
     private Processor processor;
+    private AutoIso autoIso;
     private final McpServer mcp = new McpServer(this);
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
@@ -227,6 +228,15 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
         });
         ui.setProcessor(processor);
+        autoIso = new AutoIso(session, getSharedPreferences("ui", MODE_PRIVATE), new AutoIso.Gate() {
+            @Override
+            public boolean allowed() {
+                Ui.State st = ui.state();
+                return (st == Ui.State.LIVE || st == Ui.State.QUICK || st == Ui.State.AF_MOVE) && !ui.aeLocked()
+                        && !sequencer.isRunning();
+            }
+        });
+        ui.setAutoIso(autoIso);
         debugServer = new DebugServer(new DebugServer.Provider() {
             @Override
             public DebugServer.Response handle(DebugServer.Request request) {
@@ -263,6 +273,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         applyNetwork();
         applyDisplay();
+        autoIso.apply();
         handler.post(cardTick);
         redraw();
     }
@@ -279,6 +290,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         handler.removeCallbacks(cardTick);
         stopLevel();
         liveAnalysis.stop();
+        autoIso.stop();
         sequencer.stop("abgebrochen (App beendet)");
         SonySystem.setAutoPowerOff(this, true);
         debugServer.stop();

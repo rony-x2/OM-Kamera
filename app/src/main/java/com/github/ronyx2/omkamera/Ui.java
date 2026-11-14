@@ -247,6 +247,11 @@ public class Ui {
     public void setSequencer(Sequencer s) { sequencer = s; }
 
     private Processor processor;
+    private AutoIso autoIso;
+
+    public void setAutoIso(AutoIso a) { autoIso = a; }
+
+    public AutoIso autoIso() { return autoIso; }
 
     public void setProcessor(Processor p) { processor = p; }
 
@@ -628,6 +633,7 @@ public class Ui {
                 break;
             case TAB_EXPOSURE:
                 group(out, "Belichtung", "iso", "ev");
+                autoIsoRows(out);
                 group(out, "Messung", "metering");
                 if (!Settings.flashReady) {
                     out.add(Row.header("Blitz"));
@@ -742,6 +748,61 @@ public class Ui {
         }));
         groupRows(out, null, "ev", "iso", "quality", "aspect", "drive", "flash", "metering", "wb", "dro", "look", "style",
                 "afmf", "afmode", "afarea");
+    }
+
+    /** ISO automatic with minimum shutter speed (ISO AUTO Min. SS of newer Sony bodies) */
+    private void autoIsoRows(List<Row> out) {
+        if (autoIso == null) {
+            return;
+        }
+        out.add(Row.header("ISO-Automatik mit Mindestzeit (App)"));
+        final int m = autoIso.mode();
+        out.add(Row.action("Mindestverschlusszeit", AutoIso.LABELS[m], new Runnable() {
+            @Override
+            public void run() {
+                autoIso.setMode((autoIso.mode() + 1) % AutoIso.LABELS.length);
+            }
+        }));
+        if (m == 0) {
+            out.add(Row.info("Grenze nach Brennweite", "1/(1,5 × Brennweite), Standard"));
+            return;
+        }
+        out.add(Row.info("Grenze jetzt", autoIso.limitText()
+                + (session.focalLength() > 0 ? " bei " + Math.round(session.focalLength()) + " mm" : "")));
+        out.add(Row.action("ISO mindestens", String.valueOf(autoIso.isoMin()), new Runnable() {
+            @Override
+            public void run() {
+                autoIso.setRange(nextIso(autoIso.isoMin(), autoIso.isoMax()), autoIso.isoMax());
+            }
+        }));
+        out.add(Row.action("ISO höchstens", String.valueOf(autoIso.isoMax()), new Runnable() {
+            @Override
+            public void run() {
+                int i = 0;
+                while (i < AutoIso.ISO_STEPS.length && AutoIso.ISO_STEPS[i] <= autoIso.isoMax()) {
+                    i++;
+                }
+                int n = AutoIso.ISO_STEPS[i % AutoIso.ISO_STEPS.length];
+                autoIso.setRange(autoIso.isoMin(), Math.max(n, autoIso.isoMin()));
+            }
+        }));
+        out.add(Row.action("Bildstabilisator (OSS) nutzen", autoIso.ossBonus() ? "1 Stufe länger" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                autoIso.setOssBonus(!autoIso.ossBonus());
+            }
+        }));
+        out.add(Row.info("Zustand", autoIso.state()));
+    }
+
+    /** Next ISO step for the minimum, wrapping to 100, never above the maximum */
+    private static int nextIso(int cur, int max) {
+        for (int v : AutoIso.ISO_STEPS) {
+            if (v > cur && v <= max) {
+                return v;
+            }
+        }
+        return AutoIso.ISO_STEPS[0];
     }
 
     /** Stage 3c: RAW files converted and combined by the app, experiments with the camera's filters */

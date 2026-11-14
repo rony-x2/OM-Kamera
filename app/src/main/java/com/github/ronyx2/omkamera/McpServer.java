@@ -526,6 +526,10 @@ public class McpServer {
         short[][] h = s.histogram();
         o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
         o.put("brennweite", Math.round(s.focalLength()));
+        AutoIso ai = host.ui().autoIso();
+        if (ai != null && ai.mode() != 0) {
+            o.put("iso_automatik", AutoIso.LABELS[ai.mode()] + ", " + ai.state());
+        }
         java.util.Map<String, String> hw = s.hardwareProbe();
         if (hw != null) {
             o.put("rechenwerk", new JSONObject(hw));

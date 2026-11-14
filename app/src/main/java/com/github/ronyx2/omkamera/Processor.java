@@ -164,6 +164,11 @@ public class Processor {
         return current != null;
     }
 
+    /** Progress of the current job 0..1 */
+    public float fraction() {
+        return percent / 100f;
+    }
+
     /** "DNG DSC05935 37 %" while working, otherwise null */
     public String progress() {
         String c = current;

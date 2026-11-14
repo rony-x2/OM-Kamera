@@ -108,6 +108,7 @@ public class OverlayView extends View {
             default:
                 break;
         }
+        drawProgressEdge(c);
         drawMessage(c);
         c.restore();
     }
@@ -539,8 +540,13 @@ public class OverlayView extends View {
         CameraSession s = ui.session();
         double sec = s.shutterSeconds();
         float focal = s.focalLength();
-        // Rule of thumb for APS-C: 1 / (1.5 × focal length), at least 1/30 s without lens data
+        // Rule of thumb for APS-C: 1 / (1.5 × focal length), at least 1/30 s without lens data;
+        // with the app's ISO automatic its own limit
         double limit = focal > 0 ? 1.0 / (1.5 * focal) : 1.0 / 30;
+        AutoIso ai = ui.autoIso();
+        if (ai != null && ai.mode() != 0) {
+            limit = ai.limit();
+        }
         if (sec > 0 && sec > limit * 1.01) {
             out.add("Verwacklungsgefahr");
         }
@@ -610,6 +616,26 @@ public class OverlayView extends View {
     }
 
     /** Progress of a running app sequence, centred under the status line */
+    /** Thin progress line along the top edge of the display, in every view, while the app processes */
+    private void drawProgressEdge(Canvas c) {
+        Processor pr = ui.processor();
+        if (pr == null || !pr.busy()) {
+            return;
+        }
+        float h = 4 * u;
+        float f = pr.fraction();
+        fill.setColor(0x334DA3FF);
+        c.drawRect(0, 0, vw, h, fill);
+        fill.setColor(0xE64DA3FF);
+        c.drawRect(0, 0, vw * f, h, fill);
+        // A soft light running along the filled part: the job is alive
+        float t = (android.os.SystemClock.uptimeMillis() % 1600) / 1600f;
+        float x = vw * f * t;
+        fill.setColor(0x80FFFFFF);
+        c.drawRect(Math.max(0, x - 24 * u), 0, x, h, fill);
+        postInvalidateDelayed(120);
+    }
+
     /** Small chip at the bottom while the app converts or combines RAW files */
     private void drawProcessing(Canvas c) {
         Processor pr = ui.processor();
@@ -847,7 +873,7 @@ public class OverlayView extends View {
             ui.session().shutterText(),
             ui.session().apertureText(),
             valueOf("ev", p),
-            "ISO " + valueOf("iso", p),
+            "ISO " + valueOf("iso", p) + (ui.autoIso() != null && ui.autoIso().mode() != 0 ? " A" : ""),
         };
         boolean[] active = {
             d1 == Ui.DialRole.SHUTTER || d2 == Ui.DialRole.SHUTTER || shift,
