@@ -103,6 +103,8 @@ public class Ui {
         public final Picker picker;
         public final Sub sub;
         public final boolean header;
+        /** Value changed with the dials or left/right after ENTER (number rows) */
+        public Stepper stepper;
 
         private Row(String label, Setting setting, Runnable action, String info, Picker picker, Sub sub, boolean header) {
             this.label = label;
@@ -112,6 +114,12 @@ public class Ui {
             this.picker = picker;
             this.sub = sub;
             this.header = header;
+        }
+
+        static Row step(String label, String info, Stepper stepper) {
+            Row r = new Row(label, null, null, info, null, null, false);
+            r.stepper = stepper;
+            return r;
         }
 
         static Row header(String title) {
@@ -137,6 +145,10 @@ public class Ui {
         static Row sub(String label, String info, Sub sub) {
             return new Row(label, null, null, info, null, sub, false);
         }
+    }
+
+    public interface Stepper {
+        void step(int dir);
     }
 
     /** Tabs like the camera's menu (a7 IV and newer): main list, then by topic */
@@ -626,7 +638,7 @@ public class Ui {
      * … 25" 30" | 40" 45" … 30' | BULB. Turning to longer times is a negative step.
      */
     private void turnShutter(int dir) {
-        int[] t = Sequencer.LONG_TIMES;
+        int[] t = sequencer != null ? sequencer.dialLongTimes() : Sequencer.LONG_TIMES;
         if (session.exposureMode() != CameraSession.ExposureMode.M) {
             session.adjustShutterSpeed(dir);
             return;
@@ -639,7 +651,7 @@ public class Ui {
         if (!session.isBulb()) {
             boolean at30 = "30\"".equals(session.shutterText());
             session.adjustShutterSpeed(dir);
-            if (dir < 0 && at30) {
+            if (dir < 0 && at30 && t.length > 0) {
                 // From 30" the camera goes to BULB: start with the first long time
                 setLongSecs(t[0]);
             }
@@ -657,7 +669,11 @@ public class Ui {
                 setLongSecs(i >= t.length - 1 ? 0 : t[i + 1]);
             }
         } else if (cur == 0) {
-            setLongSecs(t[t.length - 1]);
+            if (t.length > 0) {
+                setLongSecs(t[t.length - 1]);
+            } else {
+                session.adjustShutterSpeed(dir);
+            }
         } else if (i <= 0) {
             // Back from the first long time to the camera's 30"
             setLongSecs(0);
@@ -666,6 +682,69 @@ public class Ui {
         } else {
             setLongSecs(t[i - 1]);
         }
+    }
+
+    /** Sub list for the own long times after 30": each value with the dials, add, reset */
+    private Row longTimesRow() {
+        int[] t = sequencer != null ? sequencer.longTimes() : Sequencer.LONG_TIMES;
+        return Row.sub("Langzeiten nach 30\"", t.length + " Werte", new Sub() {
+            @Override
+            public String title() {
+                return "Langzeiten (mit BULB, Zeit von der App)";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                final int[] cur = sequencer.longTimes();
+                r.add(Row.info("Zum Ändern", "Wert wählen, ENTER, dann Rad"));
+                for (int i = 0; i < cur.length; i++) {
+                    final int idx = i;
+                    r.add(Row.step("Zeit " + (i + 1), CameraSession.longText(cur[i]), new Stepper() {
+                        @Override
+                        public void step(int dir) {
+                            int[] t = sequencer.longTimes();
+                            if (idx < t.length) {
+                                t[idx] = Sequencer.stepLongTime(t[idx], dir);
+                                sequencer.setLongTimes(t, false);
+                            }
+                        }
+                    }));
+                }
+                r.add(Row.action("Zeit hinzufügen", "", new Runnable() {
+                    @Override
+                    public void run() {
+                        int[] t = sequencer.longTimes();
+                        int[] n = java.util.Arrays.copyOf(t, t.length + 1);
+                        n[t.length] = t.length > 0 ? Sequencer.stepLongTime(t[t.length - 1], 1) : 40;
+                        showMessage(sequencer.setLongTimes(n, true), false);
+                    }
+                }));
+                r.add(Row.action("Sortieren und doppelte entfernen", "", new Runnable() {
+                    @Override
+                    public void run() {
+                        showMessage(sequencer.setLongTimes(sequencer.longTimes(), true), false);
+                    }
+                }));
+                if (cur.length > 0) {
+                    r.add(Row.action("Letzte Zeit entfernen", CameraSession.longText(cur[cur.length - 1]), new Runnable() {
+                        @Override
+                        public void run() {
+                            int[] t = sequencer.longTimes();
+                            showMessage(sequencer.setLongTimes(java.util.Arrays.copyOf(t, Math.max(0, t.length - 1)), true), false);
+                        }
+                    }));
+                }
+                r.add(Row.action("Standardliste", "", new Runnable() {
+                    @Override
+                    public void run() {
+                        showMessage(sequencer.setLongTimes(Sequencer.LONG_TIMES, true), false);
+                    }
+                }));
+                r.add(Row.info("Eingeben am PC", "Fernsteuerung oder Debug-Seite"));
+                return r;
+            }
+        });
     }
 
     /** One detent of the shutter dial, including the long times (for the remote tools) */
@@ -1630,6 +1709,8 @@ public class Ui {
                 nextDispView();
             }
         }));
+        out.add(Row.header("Belichtungszeit"));
+        out.add(longTimesRow());
         out.add(Row.header("Bedienung"));
         out.add(Row.sub("Benutzertasten", "", new Sub() {
             @Override
@@ -2337,8 +2418,10 @@ public class Ui {
         switch (focus) {
             case TABS:
                 switch (key) {
-                    case UP: case WHEEL_CCW: tab = (tab + TABS.length - 1) % TABS.length; row = 0; return true;
-                    case DOWN: case WHEEL_CW: tab = (tab + 1) % TABS.length; row = 0; return true;
+                    case UP: case WHEEL_CCW: case DIAL1_CCW: case DIAL2_CCW: case DIAL3_CCW:
+                        tab = (tab + TABS.length - 1) % TABS.length; row = 0; return true;
+                    case DOWN: case WHEEL_CW: case DIAL1_CW: case DIAL2_CW: case DIAL3_CW:
+                        tab = (tab + 1) % TABS.length; row = 0; return true;
                     case RIGHT: case ENTER: focus = MenuFocus.LIST; row = firstRow(rows()); return true;
                     case BACK: case LEFT: state = State.LIVE; return true;
                     default: return false;
@@ -2350,8 +2433,10 @@ public class Ui {
                     row = nextRow(rows, row, 1);
                 }
                 switch (key) {
-                    case UP: case WHEEL_CCW: row = nextRow(rows, row, -1); return true;
-                    case DOWN: case WHEEL_CW: row = nextRow(rows, row, 1); return true;
+                    case UP: case WHEEL_CCW: case DIAL1_CCW: case DIAL2_CCW: case DIAL3_CCW:
+                        row = nextRow(rows, row, -1); return true;
+                    case DOWN: case WHEEL_CW: case DIAL1_CW: case DIAL2_CW: case DIAL3_CW:
+                        row = nextRow(rows, row, 1); return true;
                     case LEFT: case BACK:
                         if (sub != null) {
                             sub = null;
@@ -2374,6 +2459,21 @@ public class Ui {
                 List<Row> rows = rows();
                 row = Math.max(0, Math.min(row, rows.size() - 1));
                 Setting s = rows.get(row).setting;
+                Stepper st = rows.get(row).stepper;
+                if (s == null && st != null) {
+                    int d = Keys.direction(key);
+                    if (key == Keys.Key.LEFT) d = -1;
+                    if (key == Keys.Key.RIGHT) d = 1;
+                    if (d != 0) {
+                        st.step(d);
+                        return true;
+                    }
+                    if (key == Keys.Key.ENTER || key == Keys.Key.BACK || key == Keys.Key.UP || key == Keys.Key.DOWN) {
+                        focus = MenuFocus.LIST;
+                        return true;
+                    }
+                    return false;
+                }
                 if (s == null) {
                     focus = MenuFocus.LIST;
                     return true;
@@ -2393,8 +2493,10 @@ public class Ui {
             }
             case PICK:
                 switch (key) {
-                    case UP: case WHEEL_CCW: pickIndex = (pickIndex + pickList.size()) % (pickList.size() + 1); return true;
-                    case DOWN: case WHEEL_CW: pickIndex = (pickIndex + 1) % (pickList.size() + 1); return true;
+                    case UP: case WHEEL_CCW: case DIAL1_CCW: case DIAL2_CCW: case DIAL3_CCW:
+                        pickIndex = (pickIndex + pickList.size()) % (pickList.size() + 1); return true;
+                    case DOWN: case WHEEL_CW: case DIAL1_CW: case DIAL2_CW: case DIAL3_CW:
+                        pickIndex = (pickIndex + 1) % (pickList.size() + 1); return true;
                     case ENTER: {
                         // Index pickList.size() is the entry "(leer)"
                         Setting chosen = pickIndex < pickList.size() ? pickList.get(pickIndex) : null;
@@ -2417,6 +2519,10 @@ public class Ui {
 
     private void enterRow(Row r) {
         if (r.header) {
+            return;
+        }
+        if (r.stepper != null) {
+            focus = MenuFocus.EDIT;
             return;
         }
         if (r.setting != null) {

@@ -13,6 +13,8 @@ import java.util.List;
 public class OverlayView extends View {
     private Ui ui;
     private float u = 1;
+    /** Size unit of the live view display and of menus / Fn grid */
+    private float hudU = 1, menuU = 1;
     /**
      * Drawing width in square pixels. The ILCE-6000 shows 640x480 pixels on a 16:9 panel,
      * so the canvas is compressed horizontally and everything is laid out on a wider virtual width.
@@ -50,8 +52,9 @@ public class OverlayView extends View {
         }
         // Menus and the Fn grid have their own size, the live view display another one
         Ui.State st = ui.state();
-        boolean menuLike = st == Ui.State.MENU || st == Ui.State.FN || st == Ui.State.FN_EDIT;
-        u = Theme.unit(getHeight()) * (menuLike ? ui.menuScale() : ui.hudScale());
+        hudU = Theme.unit(getHeight()) * ui.hudScale();
+        menuU = Theme.unit(getHeight()) * ui.menuScale();
+        u = st == Ui.State.MENU ? menuU : hudU;
         pixelAspect = ui.session().pixelAspect(getWidth(), getHeight());
         vw = getWidth() * pixelAspect;
         c.save();
@@ -79,9 +82,12 @@ public class OverlayView extends View {
                 break;
             case FN:
             case FN_EDIT:
+                // Battery and exposure line keep the live view size, the grid has the menu size
                 drawBattery(c);
                 drawExposureBar(c, p);
+                u = menuU;
                 drawFnGrid(c, p);
+                u = hudU;
                 break;
             case MENU:
                 drawMenu(c, p);
@@ -909,7 +915,8 @@ public class OverlayView extends View {
         float pad = Theme.PAD * u;
         float gap = 4 * u;
         float cellH = Theme.CELL_H * u;
-        float bottom = getHeight() - Theme.BAR * u - pad;
+        // Above the exposure line, which has the live view size
+        float bottom = getHeight() - Theme.BAR * hudU - pad;
         FnLayout fl = ui.fnLayout();
         int rows = fl.rows(), cols = fl.cols();
         float top = bottom - rows * cellH - (rows - 1) * gap;

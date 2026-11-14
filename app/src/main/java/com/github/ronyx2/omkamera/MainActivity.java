@@ -1099,6 +1099,19 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             return png != null ? new DebugServer.Response(200, "image/png", png)
                     : DebugServer.Response.text(503, "text/plain", "kein Bild");
         }
+        if (path.equals("/api/longtimes")) {
+            // Own exposure times after 30" ("40, 45, 1:30, 5m"); without v only the list
+            String msg = null;
+            if (r.param("v") != null) {
+                msg = sequencer.setLongTimes(Sequencer.parseLongTimes(r.param("v")), true);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int x : sequencer.dialLongTimes()) {
+                sb.append(sb.length() > 0 ? ", " : "").append(x);
+            }
+            return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(msg == null ? "" : msg)
+                    + ",\"longtimes\":" + org.json.JSONObject.quote(sb.toString()) + "}");
+        }
         if (path.equals("/api/ftp")) {
             // FTP settings from the remote page; without parameters only the current state
             if (r.param("host") != null || r.param("on") != null || r.param("test") != null) {

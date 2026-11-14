@@ -1212,6 +1212,105 @@ public class Sequencer {
     /** Times offered after 30" on the shutter dial; taken with BULB, timed by the app */
     public static final int[] LONG_TIMES = {40, 45, 50, 60, 70, 80, 90, 120, 150, 180, 240, 300, 420, 600, 900, 1200, 1800};
 
+    /** The own long times (from the menu or the PC), sorted; the default list if none are set */
+    public int[] longTimes() {
+        String v = prefs.getString("seq.longtimes", null);
+        if (v == null) {
+            return LONG_TIMES.clone();
+        }
+        return parseLongTimes(v);
+    }
+
+    /** Sorted, without doubles and values outside 31 s … 60 min: the order on the shutter dial */
+    public int[] dialLongTimes() {
+        java.util.TreeSet<Integer> set = new java.util.TreeSet<Integer>();
+        for (int x : longTimes()) {
+            if (x > 30 && x <= 3600) {
+                set.add(x);
+            }
+        }
+        int[] r = new int[set.size()];
+        int i = 0;
+        for (int x : set) {
+            r[i++] = x;
+        }
+        return r;
+    }
+
+    static int[] parseLongTimes(String v) {
+        java.util.List<Integer> l = new java.util.ArrayList<Integer>();
+        for (String p : v.split("[,;\\s]+")) {
+            p = p.trim();
+            if (p.length() == 0) {
+                continue;
+            }
+            try {
+                int secs;
+                if (p.contains(":")) {
+                    // 1:30 = 90 s
+                    String[] ms = p.split(":");
+                    secs = Integer.parseInt(ms[0].trim()) * 60 + Integer.parseInt(ms[1].trim());
+                } else if (p.endsWith("m") || p.endsWith("'")) {
+                    secs = Integer.parseInt(p.substring(0, p.length() - 1).trim()) * 60;
+                } else {
+                    secs = Integer.parseInt(p.replace("s", "").replace("\"", "").trim());
+                }
+                l.add(secs);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        int[] r = new int[l.size()];
+        for (int i = 0; i < r.length; i++) {
+            r[i] = l.get(i);
+        }
+        return r;
+    }
+
+    /**
+     * Stores the long times. With clean = true they are sorted, doubles and values outside
+     * 31 s … 60 min dropped (the menu edits values in place and cleans up on leaving).
+     */
+    public String setLongTimes(int[] t, boolean clean) {
+        int[] v = t;
+        if (clean) {
+            java.util.TreeSet<Integer> set = new java.util.TreeSet<Integer>();
+            for (int x : t) {
+                if (x > 30 && x <= 3600) {
+                    set.add(x);
+                }
+            }
+            v = new int[Math.min(set.size(), 30)];
+            int i = 0;
+            for (int x : set) {
+                if (i < v.length) {
+                    v[i++] = x;
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int x : v) {
+            sb.append(sb.length() > 0 ? "," : "").append(x);
+        }
+        prefs.edit().putString("seq.longtimes", sb.toString()).apply();
+        Log.info("long times " + sb);
+        StringBuilder txt = new StringBuilder();
+        for (int x : v) {
+            txt.append(txt.length() > 0 ? " " : "").append(CameraSession.longText(x));
+        }
+        return v.length == 0 ? "keine Langzeiten, nach 30\" folgt BULB" : "Langzeiten: " + txt;
+    }
+
+    /** Next value when turning: 1 s up to 1 min, 5 s up to 5 min, 30 s up to 20 min, then 1 min */
+    static int stepLongTime(int v, int dir) {
+        int step = v < 60 || (v == 60 && dir < 0) ? 1 : v < 300 || (v == 300 && dir < 0) ? 5
+                : v < 1200 || (v == 1200 && dir < 0) ? 30 : 60;
+        int n = v + dir * step;
+        if (dir > 0 && n % step != 0) {
+            n -= n % step;
+        }
+        return Math.max(31, Math.min(3600, n));
+    }
+
     /** One picture with the long time from the shutter dial (40" … 30') */
     public String startLongExposure() {
         if (running != Mode.OFF) {

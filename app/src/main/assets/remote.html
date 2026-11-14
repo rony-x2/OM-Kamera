@@ -157,6 +157,14 @@
       <h2>Einstellungen</h2>
       <div class="settings" id="settings"></div>
     </div>
+    <div class="card">
+      <h2>Langzeiten nach 30"</h2>
+      <form class="settings ftp" id="ltform" autocomplete="off">
+        <label class="wide">Sekunden, mit Komma getrennt (auch 1:30 oder 5m)<input name="v" placeholder="40, 45, 60, 90, 120"></label>
+        <div class="ftpbtns wide"><button type="submit">Speichern</button></div>
+        <div class="ftpstate wide">Im Modus M folgen diese Zeiten auf dem Zeitrad nach 30" und vor BULB; belichtet wird mit BULB, die Zeit misst die App.</div>
+      </form>
+    </div>
     <div class="card" id="ftpcard">
       <h2>FTP-Übertragung</h2>
       <form class="settings ftp" id="ftpform" autocomplete="off">
@@ -275,6 +283,20 @@
   $('ftpform').onsubmit = function (e) { e.preventDefault(); ftpPost({}); };
   $('ftptest').onclick = function () { $('ftpstate').textContent = 'Stand: wird geprüft …'; ftpPost({ test: '1' }); };
   $('ftpon').onclick = function () { ftpPost({ on: ftpOn ? '0' : '1' }); };
+  function ltPost(v) {
+    var p = new URLSearchParams();
+    if (v !== undefined) p.append('v', v);
+    return fetch('/api/longtimes?k=' + encodeURIComponent(code), {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: p.toString()
+    }).then(function (r) { if (r.status === 403) { askCode(); throw new Error('403'); } return r.json(); })
+      .then(function (j) {
+        var f = $('ltform');
+        if (!(document.activeElement === f.v)) f.v.value = j.longtimes || '';
+        if (j.text) toast(j.text);
+      });
+  }
+  $('ltform').onsubmit = function (e) { e.preventDefault(); ltPost($('ltform').v.value); };
+
   function ftpLoad() {
     fetch('/api/ftp?k=' + encodeURIComponent(code), { method: 'POST' }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) { if (j) ftpShow(j.ftp); }).catch(function () {});
@@ -442,6 +464,7 @@
   setInterval(loadState, 1000);
   ftpLoad();
   setInterval(ftpLoad, 5000);
+  ltPost().catch(function () {});
   nextFrame();
 })();
 </script>
