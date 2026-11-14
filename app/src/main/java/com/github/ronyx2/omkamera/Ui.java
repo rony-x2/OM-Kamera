@@ -542,12 +542,20 @@ public class Ui {
 
     public int batteryMillivolts() { return batteryMv; }
 
-    /** Battery display: percent, voltage, or hidden (dummy battery on a mains adapter) */
-    public static final String[] BATTERY_MODES = {"Prozent", "Spannung", "ausblenden"};
+    /**
+     * Battery display: percent or hidden (dummy battery on a mains adapter). The camera hands a
+     * fixed 4000 mV to Android, so a voltage display would say nothing.
+     */
+    public static final String[] BATTERY_MODES = {"Prozent", "ausblenden"};
 
+    /** 0 = percent, 2 = hidden (the value 2 is kept for the stored setting of 0.15.4) */
     public int batteryMode() {
         int m = prefs.getInt("bat.mode", 0);
-        return m < 0 || m >= BATTERY_MODES.length ? 0 : m;
+        return m == 1 || m == 2 ? 2 : 0;
+    }
+
+    private int batteryModeIndex() {
+        return batteryMode() == 2 ? 1 : 0;
     }
 
     public int batteryLevel() { return batteryLevel; }
@@ -1756,16 +1764,16 @@ public class Ui {
                 nextDispView();
             }
         }));
-        Row bat = Row.action("Akkuanzeige", BATTERY_MODES[batteryMode()], new Runnable() {
+        Row bat = Row.action("Akkuanzeige", BATTERY_MODES[batteryModeIndex()], new Runnable() {
             @Override
             public void run() {
-                prefs.edit().putInt("bat.mode", (batteryMode() + 1) % BATTERY_MODES.length).apply();
+                prefs.edit().putInt("bat.mode", batteryMode() == 2 ? 0 : 2).apply();
             }
         });
         bat.stepper = new Stepper() {
             @Override
             public void step(int dir) {
-                prefs.edit().putInt("bat.mode", (batteryMode() + dir + BATTERY_MODES.length) % BATTERY_MODES.length).apply();
+                prefs.edit().putInt("bat.mode", batteryMode() == 2 ? 0 : 2).apply();
             }
         };
         bat.stepperOnly = false;

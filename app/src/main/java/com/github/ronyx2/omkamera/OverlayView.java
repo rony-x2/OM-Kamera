@@ -200,9 +200,7 @@ public class OverlayView extends View {
         int mode = ui.batteryMode();
         textSize(Theme.TEXT_SMALL);
         text.setTypeface(Typeface.DEFAULT_BOLD);
-        int mv = ui.batteryMillivolts();
-        String t = mode == 1 && mv > 0 ? String.format(java.util.Locale.GERMANY, "%.2f V", mv / 1000f)
-                : level >= 0 ? level + "%" : "?";
+        String t = level >= 0 ? level + "%" : "?";
         float y = pad;
         float l = vw - pad + 6 * u;
         if (mode != 2) {
