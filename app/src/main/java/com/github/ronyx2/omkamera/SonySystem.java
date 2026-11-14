@@ -21,6 +21,14 @@ public final class SonySystem {
      * Keys listed in pullingBackKeys end the app and are then handled by the camera itself.
      */
     public static void notifyAppInfo(Context context) {
+        notifyAppInfo(context, false);
+    }
+
+    /**
+     * resumePlay: also names the playback key as resume key (experiment: the camera may then
+     * return to the app when playback is left with this key).
+     */
+    public static void notifyAppInfo(Context context, boolean resumePlay) {
         try {
             Intent intent = new Intent(ACTION_APP_INFO);
             intent.putExtra("package_name", context.getPackageName());
@@ -28,7 +36,7 @@ public final class SonySystem {
             intent.putExtra("large_category", "CATEGORY_REC");
             intent.putExtra("small_category", "STILL");
             intent.putExtra("pullingback_key", new String[] {"KEY_PLAY", "KEY_MOVREC"});
-            intent.putExtra("resume_key", new String[0]);
+            intent.putExtra("resume_key", resumePlay ? new String[] {"KEY_PLAY"} : new String[0]);
             context.sendBroadcast(intent);
         } catch (Throwable t) {
             Log.error("notifyAppInfo", t);

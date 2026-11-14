@@ -365,7 +365,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     protected void onResume() {
         super.onResume();
         Log.info("onResume");
-        SonySystem.notifyAppInfo(this);
+        SonySystem.notifyAppInfo(this, ui.resumePlay());
+        Log.info("app info, Wiedergabe-Taste zurück in die App: " + ui.resumePlay());
         lastActivity = SystemClock.uptimeMillis();
         apoState = null;
         applyStandby();

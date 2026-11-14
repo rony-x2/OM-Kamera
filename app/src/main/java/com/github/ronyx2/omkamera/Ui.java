@@ -376,6 +376,9 @@ public class Ui {
 
     public int standbyMinutes() { return standbyMinutes; }
 
+    /** Experiment: playback key as resume key (back from playback into the app) */
+    public boolean resumePlay() { return prefs.getBoolean("resume.play", false); }
+
     public Beep.Mode beepMode() { return beepMode; }
 
     /** Remote control in the browser: live view, settings, shutter. Protected by a code shown on the camera. */
@@ -1872,6 +1875,14 @@ public class Ui {
                 standbyMinutes = STANDBY_STEPS[(i + 1) % STANDBY_STEPS.length];
                 prefs.edit().putInt("standby", standbyMinutes).apply();
                 host.applyStandby();
+            }
+        }));
+
+        out.add(Row.action("Wiedergabe-Taste", resumePlay() ? "Rückweg in die App" : "nur Wiedergabe", new Runnable() {
+            @Override
+            public void run() {
+                prefs.edit().putBoolean("resume.play", !resumePlay()).apply();
+                showMessage("Gilt ab dem nächsten Start der App", false);
             }
         }));
 
