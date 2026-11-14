@@ -35,7 +35,8 @@ public class Processor {
 
     public enum Kind {
         DNG("DNG", ".DNG"), TIFF("TIFF 16 Bit", ".TIF"), PNG("PNG", ".PNG"),
-        HEIC("HEIC (Versuch)", ".HEIC"), AVIF("AVIF (Versuch)", ".AVIF"),
+        // The card only takes 8.3 names: .HIF (as Canon uses for HEIF) and .AVF; rename to .heic/.avif on the PC if needed
+        HEIC("HEIC (Versuch)", ".HIF"), AVIF("AVIF (Versuch)", ".AVF"),
         MEAN("Mittelwert", ".DNG"), SUM("Summe", ".DNG"), MAX("Maximum", ".DNG"), FOCUS("Fokus-Stacking", ".DNG");
         public final String label, ext;
 
