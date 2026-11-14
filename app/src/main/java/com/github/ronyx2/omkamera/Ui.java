@@ -1878,6 +1878,17 @@ public class Ui {
             }
         }));
 
+        out.add(Row.action("Menü Applikation", prefs.getBoolean(AppListReceiver.PREF_ON, false)
+                ? "startet OM Kamera" : "zeigt App-Liste", new Runnable() {
+            @Override
+            public void run() {
+                boolean on = !prefs.getBoolean(AppListReceiver.PREF_ON, false);
+                prefs.edit().putBoolean(AppListReceiver.PREF_ON, on).apply();
+                if (on) {
+                    showMessage("App-Liste: nach dem Beenden innerhalb 20 s Applikation öffnen", false);
+                }
+            }
+        }));
         out.add(Row.action("Wiedergabe-Taste", resumePlay() ? "Rückweg in die App" : "nur Wiedergabe", new Runnable() {
             @Override
             public void run() {

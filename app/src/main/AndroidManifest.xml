@@ -19,6 +19,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Direct start when the camera opens its app list (switch in the menu, off by default) -->
+        <receiver android:name=".AppListReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.android.server.DAConnectionManagerService.BootCompleted" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

@@ -401,6 +401,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     protected void onPause() {
         Log.info("onPause");
+        AppListReceiver.markLeft(this);
         try {
             unregisterReceiver(batteryReceiver);
         } catch (Throwable ignored) {
