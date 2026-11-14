@@ -55,6 +55,9 @@ public class Ui {
         /** Camera clock with NTP setting */
         CameraClock clock();
 
+        /** Sending pictures to an FTP server */
+        FtpUpload ftp();
+
         /** Starts or stops histogram and level sensor according to the settings */
         void applyDisplay();
 
@@ -232,7 +235,12 @@ public class Ui {
     /** Exposure held with the AEL key */
     private boolean aeLocked;
     private int fnIndex = 0;
-    private boolean infoVisible = true;
+    /**
+     * Views of the DISP button like on Sony cameras: all info, with histogram, with level,
+     * no info (only frames and grid)
+     */
+    public static final String[] DISP_VIEWS = {"Alle Infos", "Histogramm", "Neigung", "Daten n. anz."};
+    private int dispView;
 
     private int tab = 0;
     private int row = 0;
@@ -338,6 +346,8 @@ public class Ui {
         grid = Grid.values()[Math.max(0, Math.min(Grid.values().length - 1, g))];
         histo = Histo.values()[Math.max(0, Math.min(Histo.values().length - 1, prefs.getInt("histo", 0)))];
         levelEnabled = prefs.getBoolean("level", false);
+        dispView = Math.max(0, Math.min(DISP_VIEWS.length - 1, prefs.getInt("disp", 0)));
+        session.setLongSecs(prefs.getInt("longsecs", 0));
         warningsEnabled = prefs.getBoolean("warnings", true);
         shotsEnabled = prefs.getBoolean("shots", true);
         zebraIdx = clamp(prefs.getInt("zebra", 0), ZEBRA_IRE.length);
@@ -447,8 +457,14 @@ public class Ui {
         showMessage("Fokus-Peaking: " + PEAK_LABELS[peakIdx], false);
         host.applyDisplay();
     }
-    public Histo histo() { return histo; }
-    public boolean levelEnabled() { return levelEnabled; }
+    public Histo histo() {
+        // The DISP view "Histogramm" shows it even when it is switched off in the menu
+        if (dispView == 1 && histo == Histo.OFF) {
+            return Histo.values()[Math.max(1, prefs.getInt("histolast", 1))];
+        }
+        return histo;
+    }
+    public boolean levelEnabled() { return levelEnabled || dispView == 2; }
     public boolean warningsEnabled() { return warningsEnabled; }
     public boolean shotsEnabled() { return shotsEnabled; }
     public float roll() { return roll; }
@@ -492,6 +508,8 @@ public class Ui {
     public boolean wifiConnected() { return host.wifiConnected(); }
 
     public CameraClock clock() { return host.clock(); }
+
+    public FtpUpload ftp() { return host.ftp(); }
     public boolean debugEnabled() { return debugEnabled; }
 
     public void setBattery(int level, boolean plugged) {
@@ -598,9 +616,60 @@ public class Ui {
         }
     }
 
+    /**
+     * Shutter dial with the app's long times between 30" and BULB:
+     * … 25" 30" | 40" 45" … 30' | BULB. Turning to longer times is a negative step.
+     */
+    private void turnShutter(int dir) {
+        int[] t = Sequencer.LONG_TIMES;
+        if (session.exposureMode() != CameraSession.ExposureMode.M) {
+            session.adjustShutterSpeed(dir);
+            return;
+        }
+        if (!session.isBulb()) {
+            boolean at30 = "30\"".equals(session.shutterText());
+            session.adjustShutterSpeed(dir);
+            if (dir < 0 && at30) {
+                // From 30" the camera goes to BULB: start with the first long time
+                setLongSecs(t[0]);
+            }
+            return;
+        }
+        int cur = session.longSecs();
+        int i = -1;
+        for (int k = 0; k < t.length; k++) {
+            if (t[k] == cur) {
+                i = k;
+            }
+        }
+        if (dir < 0) {
+            if (cur > 0) {
+                setLongSecs(i >= t.length - 1 ? 0 : t[i + 1]);
+            }
+        } else if (cur == 0) {
+            setLongSecs(t[t.length - 1]);
+        } else if (i <= 0) {
+            // Back from the first long time to the camera's 30"
+            setLongSecs(0);
+            session.adjustShutterSpeed(dir);
+        } else {
+            setLongSecs(t[i - 1]);
+        }
+    }
+
+    /** One detent of the shutter dial, including the long times (for the remote tools) */
+    public void stepShutter(int dir) {
+        turnShutter(dir);
+    }
+
+    private void setLongSecs(int secs) {
+        session.setLongSecs(secs);
+        prefs.edit().putInt("longsecs", secs).apply();
+    }
+
     private void turn(DialRole role, int dir) {
         switch (role) {
-            case SHUTTER: session.adjustShutterSpeed(dir); break;
+            case SHUTTER: turnShutter(dir); break;
             case APERTURE: session.adjustAperture(dir); break;
             case SHIFT: session.adjustProgramShift(dir); break;
             case EV: stepSetting(Settings.get("ev"), dir); break;
@@ -623,7 +692,33 @@ public class Ui {
 
     public State state() { return state; }
     public int fnIndex() { return fnIndex; }
-    public boolean infoVisible() { return infoVisible; }
+    public boolean infoVisible() { return dispView != 3; }
+
+    public int dispView() { return dispView; }
+
+    /** Sizes for the live view display and for menus (incl. Fn grid), as factors */
+    public static final float[] SCALES = {0.8f, 0.9f, 1.0f, 1.1f, 1.2f, 1.35f};
+
+    private static String scaleLabel(int i) {
+        return Math.round(SCALES[i] * 100) + " %";
+    }
+
+    private int scaleIndex(String key) {
+        int i = prefs.getInt(key, 2);
+        return i < 0 || i >= SCALES.length ? 2 : i;
+    }
+
+    public float hudScale() { return SCALES[scaleIndex("hud.scale")]; }
+
+    public float menuScale() { return SCALES[scaleIndex("menu.scale")]; }
+
+    /** Next view of the DISP button, with a short note which one */
+    public void nextDispView() {
+        dispView = (dispView + 1) % DISP_VIEWS.length;
+        prefs.edit().putInt("disp", dispView).apply();
+        host.applyDisplay();
+        showMessage(DISP_VIEWS[dispView], false);
+    }
     public int tab() { return tab; }
     public int row() { return row; }
     public MenuFocus focus() { return focus; }
@@ -1344,6 +1439,7 @@ public class Ui {
                 out.add(Row.info("IP-Adresse", d[4]));
             }
         }
+        ftpRows(out);
         out.add(Row.header("Fernzugriff"));
         out.add(Row.action("Fernsteuerung (Browser)", remoteEnabled ? "Ein · Code " + remoteCode : "Aus", new Runnable() {
             @Override
@@ -1404,6 +1500,63 @@ public class Ui {
         }));
     }
 
+    /** FTP: switched and checked here, set up on the remote page (no keyboard on the camera) */
+    private void ftpRows(List<Row> out) {
+        final FtpUpload f = host.ftp();
+        if (f == null) {
+            return;
+        }
+        out.add(Row.header("FTP-Übertragung"));
+        if (!f.configured()) {
+            out.add(Row.info("Einrichten", "in der Fernsteuerung (Browser)"));
+            return;
+        }
+        out.add(Row.info("Server", f.server() + (f.port() != 21 ? ":" + f.port() : "") + " " + f.dir()));
+        out.add(Row.action("Neue Bilder senden", f.on() ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                f.setOn(!f.on());
+                if (f.on() && !wifiEnabled) {
+                    wifiEnabled = true;
+                    prefs.edit().putBoolean("wifi", true).apply();
+                    host.applyNetwork();
+                }
+            }
+        }));
+        out.add(Row.action("Welche Bilder", FtpUpload.WHAT[f.what()], new Runnable() {
+            @Override
+            public void run() {
+                f.setWhat(f.what() + 1);
+            }
+        }));
+        out.add(Row.action("Auch Ergebnisse (OMKAMERA)", f.results() ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                f.setResults(!f.results());
+            }
+        }));
+        out.add(Row.action("Verbindung prüfen", "", new Runnable() {
+            @Override
+            public void run() {
+                showMessage("FTP wird geprüft …", false);
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        final String r = f.test();
+                        host.later(new Runnable() {
+                            @Override
+                            public void run() {
+                                showMessage(r, !r.startsWith("FTP-Verbindung in Ordnung"));
+                                host.redraw();
+                            }
+                        }, 0);
+                    }
+                }, "ftp-test").start();
+            }
+        }));
+        out.add(Row.info("Stand", f.summary()));
+    }
+
     /** Camera clock: shown, set by NTP, EU summer time */
     private void clockRows(List<Row> out) {
         final CameraClock c = host.clock();
@@ -1442,6 +1595,25 @@ public class Ui {
 
     private void setupRows(List<Row> out) {
         clockRows(out);
+        out.add(Row.header("Größe der Anzeige"));
+        out.add(Row.action("Live-Bild-Anzeige", scaleLabel(scaleIndex("hud.scale")), new Runnable() {
+            @Override
+            public void run() {
+                prefs.edit().putInt("hud.scale", (scaleIndex("hud.scale") + 1) % SCALES.length).apply();
+            }
+        }));
+        out.add(Row.action("Menü und Fn-Raster", scaleLabel(scaleIndex("menu.scale")), new Runnable() {
+            @Override
+            public void run() {
+                prefs.edit().putInt("menu.scale", (scaleIndex("menu.scale") + 1) % SCALES.length).apply();
+            }
+        }));
+        out.add(Row.action("Ansicht (Taste DISP)", DISP_VIEWS[dispView], new Runnable() {
+            @Override
+            public void run() {
+                nextDispView();
+            }
+        }));
         out.add(Row.header("Bedienung"));
         out.add(Row.sub("Benutzertasten", "", new Sub() {
             @Override
@@ -1479,10 +1651,17 @@ public class Ui {
             @Override
             public List<Row> rows() {
                 List<Row> r = new ArrayList<Row>();
-                for (int i = 0; i < FnLayout.SIZE; i++) {
+                r.add(Row.action("Größe", FnLayout.sizeLabel(fn.sizeIndex()), new Runnable() {
+                    @Override
+                    public void run() {
+                        fn.setSizeIndex(fn.sizeIndex() + 1);
+                        fnIndex = 0;
+                    }
+                }));
+                for (int i = 0; i < fn.size(); i++) {
                     final int slot = i;
                     Setting cur = fn.get(i);
-                    String pos = (i / FnLayout.COLS == 0 ? "Oben " : "Unten ") + (i % FnLayout.COLS + 1);
+                    String pos = "Reihe " + (i / fn.cols() + 1) + ", Feld " + (i % fn.cols() + 1);
                     r.add(Row.pick(pos, cur != null ? cur.label : "(leer)", new Picker() {
                         @Override
                         public Setting current() {
@@ -1758,7 +1937,9 @@ public class Ui {
                 openMenu();
                 return true;
             case DISP:
-                infoVisible = !infoVisible;
+            case UP:
+                // On the a6000 the top of the control wheel is the DISP button and arrives as "up"
+                nextDispView();
                 return true;
             case DIAL1_CW: case DIAL1_CCW:
                 turn(dial1Role(), Keys.direction(key));
@@ -1775,12 +1956,17 @@ public class Ui {
     }
 
     private boolean onFnKey(Keys.Key key) {
-        int r = fnIndex / FnLayout.COLS;
-        int c = fnIndex % FnLayout.COLS;
+        int cols = fn.cols(), rowsN = fn.rows();
+        if (fnIndex >= fn.size()) {
+            fnIndex = 0;
+        }
+        int r = fnIndex / cols;
+        int c = fnIndex % cols;
         switch (key) {
-            case LEFT: c = (c + FnLayout.COLS - 1) % FnLayout.COLS; break;
-            case RIGHT: c = (c + 1) % FnLayout.COLS; break;
-            case UP: case DOWN: r = 1 - r; break;
+            case LEFT: c = (c + cols - 1) % cols; break;
+            case RIGHT: c = (c + 1) % cols; break;
+            case UP: r = (r + rowsN - 1) % rowsN; break;
+            case DOWN: r = (r + 1) % rowsN; break;
             case ENTER:
                 if (fn.get(fnIndex) != null) {
                     state = State.FN_EDIT;
@@ -1797,7 +1983,7 @@ public class Ui {
             default:
                 return false;
         }
-        fnIndex = r * FnLayout.COLS + c;
+        fnIndex = r * cols + c;
         return true;
     }
 
@@ -1848,6 +2034,15 @@ public class Ui {
                     state = State.AF_MOVE;
                 } else {
                     showMessage("Nur mit Fokusfeld „Flex. Spot“", true);
+                }
+                return true;
+            case STANDARD:
+                // Like the camera's "Standard": move the flexible spot, otherwise follow the
+                // subject in the middle (centre lock-on AF)
+                if (isFlexSpot()) {
+                    state = State.AF_MOVE;
+                } else {
+                    showMessage(session.toggleCenterTracking(), false);
                 }
                 return true;
             case AF_CENTER:

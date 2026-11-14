@@ -40,6 +40,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private Processor processor;
     private AutoIso autoIso;
     private CameraClock clock;
+    private FtpUpload ftp;
     private final McpServer mcp = new McpServer(this);
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
@@ -258,6 +259,32 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
         });
         ui.setAutoIso(autoIso);
+        ftp = new FtpUpload(getSharedPreferences("ui", MODE_PRIVATE), new FtpUpload.Host() {
+            @Override
+            public boolean wifiConnected() {
+                return network.ip() != null;
+            }
+
+            @Override
+            public void message(final String text, final boolean warn) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        ui.showMessage(text, warn);
+                    }
+                });
+            }
+
+            @Override
+            public void redraw() {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        MainActivity.this.redraw();
+                    }
+                });
+            }
+        });
         clock = new CameraClock(getSharedPreferences("ui", MODE_PRIVATE), new CameraClock.Host() {
             @Override
             public boolean wifiConnected() {
@@ -350,6 +377,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         applyDisplay();
         autoIso.apply();
         clock.start();
+        ftp.start();
         handler.post(cardTick);
         redraw();
     }
@@ -368,6 +396,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         liveAnalysis.stop();
         autoIso.stop();
         clock.stop();
+        ftp.stop();
         sequencer.stop("abgebrochen (App beendet)");
         SonySystem.setAutoPowerOff(this, true);
         debugServer.stop();
@@ -442,6 +471,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                 if (sequencer.mode() != Sequencer.Mode.OFF || sequencer.isRunning()) {
                     // A selected sequence starts (or stops) instead of a single picture
                     sequencer.onFullPress();
+                    redraw();
+                } else if (session.longSecs() > 0) {
+                    // A time beyond 30" from the shutter dial: BULB timed by the app
+                    ui.showMessage(sequencer.startLongExposure(), false);
                     redraw();
                 } else {
                     session.capture(isBurst());
@@ -812,6 +845,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     }
 
     @Override
+    public FtpUpload ftp() {
+        return ftp;
+    }
+
+    @Override
     public boolean wifiConnected() {
         return network.ip() != null;
     }
@@ -893,6 +931,25 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
 
     private static DebugServer.Response text(String body) {
         return DebugServer.Response.text(200, "text/plain", body);
+    }
+
+    /** FTP settings for the remote page, without the password */
+    private String ftpJson() {
+        try {
+            org.json.JSONObject o = new org.json.JSONObject();
+            o.put("host", ftp.server());
+            o.put("port", ftp.port());
+            o.put("user", ftp.user());
+            o.put("pass", ftp.hasPassword());
+            o.put("dir", ftp.dir());
+            o.put("what", ftp.what());
+            o.put("results", ftp.results());
+            o.put("on", ftp.on());
+            o.put("state", ftp.summary());
+            return "\"ftp\":" + o.toString();
+        } catch (org.json.JSONException e) {
+            return "\"ftp\":null";
+        }
     }
 
     private static String reflect(String name) {
@@ -1036,6 +1093,30 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             return png != null ? new DebugServer.Response(200, "image/png", png)
                     : DebugServer.Response.text(503, "text/plain", "kein Bild");
         }
+        if (path.equals("/api/ftp")) {
+            // FTP settings from the remote page; without parameters only the current state
+            if (r.param("host") != null || r.param("on") != null || r.param("test") != null) {
+                Integer port = null, what = null;
+                try {
+                    port = r.param("port") != null && r.param("port").length() > 0 ? Integer.valueOf(r.param("port")) : null;
+                    what = r.param("what") != null ? Integer.valueOf(r.param("what")) : null;
+                } catch (NumberFormatException ignored) {
+                }
+                Boolean results = r.param("results") != null ? Boolean.valueOf("1".equals(r.param("results"))) : null;
+                ftp.configure(r.param("host"), port, r.param("user"), r.param("pass"), r.param("dir"), what, results);
+                String msg = "gespeichert";
+                if (r.param("test") != null) {
+                    msg = ftp.test();
+                }
+                if (r.param("on") != null) {
+                    ftp.setOn("1".equals(r.param("on")));
+                }
+                Log.info("remote /api/ftp " + ftp.server() + ":" + ftp.port() + " " + ftp.dir() + " on=" + ftp.on() + " -> " + msg);
+                redraw();
+                return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(msg) + "," + ftpJson() + "}");
+            }
+            return json("{\"result\":\"ok\"," + ftpJson() + "}");
+        }
         if (path.equals("/api/clock")) {
             // Takes the browser's time for the camera clock (when there is no time server)
             long t;
@@ -1075,7 +1156,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             int dir = "-1".equals(r.param("dir")) ? -1 : 1;
             String what = r.param("what");
             if ("shutter".equals(what)) {
-                session.adjustShutterSpeed(dir);
+                ui.stepShutter(dir);
             } else if ("aperture".equals(what)) {
                 session.adjustAperture(dir);
             } else if ("shift".equals(what)) {

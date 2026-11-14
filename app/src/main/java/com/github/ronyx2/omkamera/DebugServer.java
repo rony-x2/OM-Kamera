@@ -34,8 +34,30 @@ public class DebugServer {
             this.body = body;
         }
 
+        private Map<String, String> form;
+
+        /** Query parameter or, for a form POST, a field of the body (passwords stay out of URLs) */
         public String param(String name) {
-            return query.get(name);
+            String v = query.get(name);
+            if (v != null) {
+                return v;
+            }
+            if (form == null) {
+                form = new java.util.HashMap<String, String>();
+                String type = header("content-type");
+                if (body != null && body.length() > 0 && type != null && type.contains("form-urlencoded")) {
+                    for (String pair : body.split("&")) {
+                        int i = pair.indexOf('=');
+                        try {
+                            String k = java.net.URLDecoder.decode(i < 0 ? pair : pair.substring(0, i), "UTF-8");
+                            String val = i < 0 ? "" : java.net.URLDecoder.decode(pair.substring(i + 1), "UTF-8");
+                            form.put(k, val);
+                        } catch (java.io.UnsupportedEncodingException ignored) {
+                        }
+                    }
+                }
+            }
+            return form.get(name);
         }
 
         public String header(String name) {

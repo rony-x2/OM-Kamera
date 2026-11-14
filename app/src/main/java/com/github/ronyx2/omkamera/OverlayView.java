@@ -48,7 +48,10 @@ public class OverlayView extends View {
         if (ui == null) {
             return;
         }
-        u = Theme.unit(getHeight());
+        // Menus and the Fn grid have their own size, the live view display another one
+        Ui.State st = ui.state();
+        boolean menuLike = st == Ui.State.MENU || st == Ui.State.FN || st == Ui.State.FN_EDIT;
+        u = Theme.unit(getHeight()) * (menuLike ? ui.menuScale() : ui.hudScale());
         pixelAspect = ui.session().pixelAspect(getWidth(), getHeight());
         vw = getWidth() * pixelAspect;
         c.save();
@@ -907,12 +910,14 @@ public class OverlayView extends View {
         float gap = 4 * u;
         float cellH = Theme.CELL_H * u;
         float bottom = getHeight() - Theme.BAR * u - pad;
-        float top = bottom - FnLayout.ROWS * cellH - (FnLayout.ROWS - 1) * gap;
-        float cellW = (vw - 2 * pad - (FnLayout.COLS - 1) * gap) / FnLayout.COLS;
+        FnLayout fl = ui.fnLayout();
+        int rows = fl.rows(), cols = fl.cols();
+        float top = bottom - rows * cellH - (rows - 1) * gap;
+        float cellW = (vw - 2 * pad - (cols - 1) * gap) / cols;
 
-        for (int i = 0; i < FnLayout.SIZE; i++) {
-            int r = i / FnLayout.COLS;
-            int col = i % FnLayout.COLS;
+        for (int i = 0; i < fl.size(); i++) {
+            int r = i / cols;
+            int col = i % cols;
             float l = pad + col * (cellW + gap);
             float t = top + r * (cellH + gap);
             Setting s = ui.fnLayout().get(i);
@@ -1001,9 +1006,14 @@ public class OverlayView extends View {
         fill.setColor(Theme.PANEL_SOLID);
         c.drawRect(0, 0, vw, getHeight(), fill);
 
-        float tabW = 200 * u;
+        float tabW = 220 * u;
         float rowH = 44 * u;
         float pad = Theme.PAD * u;
+        int tabColor = Theme.TAB_COLORS[ui.tab() % Theme.TAB_COLORS.length];
+        // The list side takes on the colour of the tab, very lightly
+        fill.setColor((tabColor & 0x00FFFFFF) | 0x12000000);
+        c.drawRect(tabW + pad, 0, vw, getHeight(), fill);
+        float iconS = 22 * u;
 
         // Tabs
         float tabH = Math.min(rowH + 4 * u, (getHeight() - 2 * pad) / Ui.TABS.length);
@@ -1016,15 +1026,20 @@ public class OverlayView extends View {
             }
             fill.setColor(color);
             c.drawRect(pad, t + 6 * u, pad + 5 * u, t + tabH - 10 * u, fill);
+            float tx = pad + 14 * u;
+            if (MenuIcons.draw(c, MenuIcons.forTab(Ui.TABS[i]), tx + iconS / 2, t + (tabH - 4 * u) / 2, iconS,
+                    sel ? color : Theme.TEXT_DIM)) {
+                tx += iconS + 8 * u;
+            }
             text.setTypeface(sel ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
             // Long names like "Belichtung/Farbe" get a slightly smaller font instead of "…"
             float size = Theme.TEXT_NORMAL;
             textSize(size);
-            while (size > 15 && text.measureText(Ui.TABS[i]) > tabW - pad - 20 * u) {
+            while (size > 14 && text.measureText(Ui.TABS[i]) > tabW - tx - 4 * u) {
                 size -= 1;
                 textSize(size);
             }
-            drawFitted(c, Ui.TABS[i], pad + 14 * u, t + tabH - 17 * u, tabW - pad - 18 * u, sel ? Theme.TEXT : Theme.TEXT_DIM);
+            drawFitted(c, Ui.TABS[i], tx, t + tabH - 17 * u, tabW - tx - 4 * u, sel ? Theme.TEXT : Theme.TEXT_DIM);
         }
         text.setTypeface(Typeface.DEFAULT);
         stroke.setColor(Theme.LINE);
@@ -1058,11 +1073,16 @@ public class OverlayView extends View {
                 textSize(Theme.TEXT_SMALL);
                 text.setTypeface(Typeface.DEFAULT_BOLD);
                 int color = Theme.TAB_COLORS[ui.tab() % Theme.TAB_COLORS.length];
-                drawText(c, row.label, left + 6 * u, t + rowH - 14 * u, color);
+                float hx = left + 6 * u;
+                float hs = 18 * u;
+                if (MenuIcons.draw(c, MenuIcons.forHeading(row.label), hx + hs / 2, t + rowH - 20 * u, hs, color)) {
+                    hx += hs + 7 * u;
+                }
+                drawText(c, row.label, hx, t + rowH - 14 * u, color);
                 float tw = text.measureText(row.label);
                 stroke.setColor(0x33FFFFFF);
                 stroke.setStrokeWidth(1);
-                c.drawLine(left + 16 * u + tw, t + rowH - 20 * u, right, t + rowH - 20 * u, stroke);
+                c.drawLine(hx + 10 * u + tw, t + rowH - 20 * u, right, t + rowH - 20 * u, stroke);
                 text.setTypeface(Typeface.DEFAULT);
                 continue;
             }
@@ -1086,9 +1106,17 @@ public class OverlayView extends View {
             if (value != null && value.length() > 0) {
                 text.setTypeface(editing ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
                 valueW = Math.min(text.measureText(value), (right - left) * 0.55f);
-                drawFitted(c, value, right - 10 * u - valueW, t + rowH - 14 * u, valueW + 1,
-                        editing ? Theme.ACCENT : available ? Theme.TEXT_DIM : Theme.TEXT_DISABLED);
+                int vc = editing ? Theme.ACCENT : available ? Theme.TEXT_DIM : Theme.TEXT_DISABLED;
+                drawFitted(c, value, right - 10 * u - valueW, t + rowH - 14 * u, valueW + 1, vc);
                 text.setTypeface(Typeface.DEFAULT);
+                // Icon of the current value next to it, where the setting has one (drive, WB …)
+                if (row.setting != null && available) {
+                    float is = 24 * u;
+                    if (Icons.draw(c, row.setting.id, row.setting.safeGet(p), right - 18 * u - valueW - is / 2,
+                            t + rowH / 2, is, vc)) {
+                        valueW += is + 8 * u;
+                    }
+                }
             }
             drawFitted(c, row.label, left + 10 * u, t + rowH - 13 * u, right - left - valueW - 34 * u, labelColor);
         }

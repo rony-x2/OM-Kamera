@@ -1209,12 +1209,26 @@ public class Sequencer {
 
     // ---- BULB timer ----
 
+    /** Times offered after 30" on the shutter dial; taken with BULB, timed by the app */
+    public static final int[] LONG_TIMES = {40, 45, 50, 60, 70, 80, 90, 120, 150, 180, 240, 300, 420, 600, 900, 1200, 1800};
+
+    /** One picture with the long time from the shutter dial (40" … 30') */
+    public String startLongExposure() {
+        if (running != Mode.OFF) {
+            return "Ablauf läuft bereits";
+        }
+        return startBulb(session.longSecs());
+    }
+
     private String startBulb() {
+        return startBulb(get("bt.time", 60));
+    }
+
+    private String startBulb(int secs) {
         if (!session.isBulb()) {
             host.message("Für den BULB-Timer Modus M und Verschlusszeit BULB einstellen", true);
             return "Verschlusszeit steht nicht auf BULB";
         }
-        int secs = get("bt.time", 60);
         if (!session.startBulb()) {
             host.message("BULB konnte nicht gestartet werden", true);
             return "BULB nicht gestartet";
@@ -1242,6 +1256,8 @@ public class Sequencer {
                     @Override
                     public void run() {
                         if (running == Mode.BULB) {
+                            // The a6000 reports the picture at the opening only
+                            done = Math.max(done, 1);
                             stop("fertig");
                         }
                     }

@@ -1533,6 +1533,33 @@ public class CameraSession {
         return setFocusPoint(0, 0);
     }
 
+    /**
+     * Centre lock-on AF ("Mittel-AF-Verriegelung") on or off: the camera follows the subject
+     * that is in the middle when focusing starts. Returns a short text for the screen.
+     */
+    public String toggleCenterTracking() {
+        try {
+            Params cur = current();
+            java.util.List<?> modes = cur.mod.getSupportedTrackingFocusModes();
+            if (modes == null || !modes.contains(CameraEx.ParametersModifier.TRACKING_FOCUS_ON)) {
+                return "Mittel-AF-Verriegelung gibt es hier nicht";
+            }
+            boolean on = CameraEx.ParametersModifier.TRACKING_FOCUS_ON.equals(cur.mod.getTrackingFocus());
+            Params edit = createEdit();
+            edit.mod.setTrackingFocus(on ? CameraEx.ParametersModifier.TRACKING_FOCUS_OFF
+                    : CameraEx.ParametersModifier.TRACKING_FOCUS_ON);
+            Result r = apply(edit);
+            Log.info("tracking " + (on ? "off" : "on") + " -> " + (r.ok ? "ok" : "refused " + r.inhibition));
+            if (!r.ok) {
+                return "Mittel-AF-Verriegelung gerade nicht möglich";
+            }
+            return on ? "Mittel-AF-Verriegelung aus" : "Mittel-AF-Verriegelung: Motiv in die Mitte, Auslöser halb drücken";
+        } catch (Throwable t) {
+            Log.error("tracking", t);
+            return "Mittel-AF-Verriegelung gibt es hier nicht";
+        }
+    }
+
     public Result setFocusPoint(int x, int y) {
         try {
             Params edit = createEdit();
@@ -1604,9 +1631,28 @@ public class CameraSession {
 
     // ---- display helpers ----
 
+    /** Exposure time set in the app beyond 30" (seconds, 0 = plain BULB); taken with BULB */
+    private volatile int longSecs;
+
+    public int longSecs() {
+        return isBulb() ? longSecs : 0;
+    }
+
+    public void setLongSecs(int secs) {
+        longSecs = secs;
+    }
+
+    /** 40", 1'30", 2' */
+    public static String longText(int secs) {
+        if (secs < 60) {
+            return secs + "\"";
+        }
+        return secs / 60 + "'" + (secs % 60 != 0 ? String.format(java.util.Locale.US, "%02d\"", secs % 60) : "");
+    }
+
     public String shutterText() {
         if (isBulb()) {
-            return "BULB";
+            return longSecs > 0 ? longText(longSecs) : "BULB";
         }
         if (shutterN <= 0 || shutterD <= 0) {
             return "--";

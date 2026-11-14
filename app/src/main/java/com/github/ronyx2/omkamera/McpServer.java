@@ -165,7 +165,7 @@ public class McpServer {
                     public String call() {
                         String v = session.shutterText() + " " + session.apertureText();
                         if (was.equals("zeit")) {
-                            session.adjustShutterSpeed(dir);
+                            host.ui().stepShutter(dir);
                         } else if (was.equals("blende")) {
                             session.adjustAperture(dir);
                         } else if (was.equals("shift")) {
@@ -634,6 +634,10 @@ public class McpServer {
         o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
         o.put("brennweite", Math.round(s.focalLength()));
         o.put("uhr", CameraClock.describe());
+        FtpUpload ftp = host.ui().ftp();
+        if (ftp != null && ftp.configured()) {
+            o.put("ftp", ftp.summary());
+        }
         o.put("sony_uhr", CameraClock.describeCamera());
         AutoIso ai = host.ui().autoIso();
         if (ai != null && ai.mode() != 0) {

@@ -780,6 +780,9 @@ public final class Settings {
         return out;
     }
 
+    /** Further cells when the Fn grid is larger than 2 x 6 */
+    public static final String[] MORE_FN = {"look", "aspect", "size", "face", "lenr", "colorspace"};
+
     /** Default Fn grid: 2 rows with 6 cells, like the camera's own Fn menu. */
     public static final String[] DEFAULT_FN = {
         "drive", "afmf", "afmode", "afarea", "iso", "ev",

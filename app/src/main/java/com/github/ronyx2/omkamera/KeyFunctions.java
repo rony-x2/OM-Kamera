@@ -13,6 +13,7 @@ public final class KeyFunctions {
         AEL_HOLD("AEL halten", null),
         AEL_TOGGLE("AEL umschalten", null),
         MAGNIFY("Fokuslupe", null),
+        STANDARD("Standard (Fokusfeld / Mittel-AF-Verriegelung)", null),
         AF_MOVE("Fokusfeld verschieben", null),
         AF_CENTER("Fokusfeld zur Mitte", null),
         AF_MF("AF/MF umschalten", null),
@@ -72,7 +73,7 @@ public final class KeyFunctions {
             case C2: return Function.AF_CENTER;
             case DELETE: return Function.AF_CENTER;
             case AEL: return Function.AEL_HOLD;
-            case ENTER: return Function.AF_MOVE;
+            case ENTER: return Function.STANDARD;
             case LEFT: return Function.DRIVE;
             case RIGHT: return Function.ISO;
             case DOWN: return Function.EV;
