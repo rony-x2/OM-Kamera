@@ -400,16 +400,16 @@ public class McpServer {
                 for (int i = 0; i < 80 && c.busy(); i++) {
                     Thread.sleep(100);
                 }
-                return text(c.state() + "\nKamerazeit: " + CameraClock.describe());
+                return text(c.state() + "\nUhrzeit: " + CameraClock.describe() + "\nSony-Uhr: " + CameraClock.describeCamera());
             }
             if ("setzen".equals(act)) {
                 long ms = a.optLong("zeit_ms", 0);
                 if (ms < 1500000000000L) {
                     return text("zeit_ms fehlt (Millisekunden seit 1970, UTC)");
                 }
-                return text(c.syncFrom(ms, "vom PC") + "\nKamerazeit: " + CameraClock.describe());
+                return text(c.syncFrom(ms, "vom PC") + "\nUhrzeit: " + CameraClock.describe() + "\nSony-Uhr: " + CameraClock.describeCamera());
             }
-            return text("Kamerazeit: " + CameraClock.describe() + "\nAbgleich: " + c.state()
+            return text("Uhrzeit: " + CameraClock.describe() + "\nSony-Uhr: " + CameraClock.describeCamera() + "\nAbgleich: " + c.state()
                     + "\nautomatisch: " + (c.auto() ? "ein" : "aus") + ", Zeitserver: " + CameraClock.SERVERS[c.server()]
                     + ", Sommerzeit automatisch: " + (c.autoSummer() ? "ein" : "aus"));
         }
@@ -615,6 +615,7 @@ public class McpServer {
         o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
         o.put("brennweite", Math.round(s.focalLength()));
         o.put("uhr", CameraClock.describe());
+        o.put("sony_uhr", CameraClock.describeCamera());
         AutoIso ai = host.ui().autoIso();
         if (ai != null && ai.mode() != 0) {
             o.put("iso_automatik", AutoIso.LABELS[ai.mode()] + ", " + ai.state());

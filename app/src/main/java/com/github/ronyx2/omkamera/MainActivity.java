@@ -270,6 +270,16 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
 
             @Override
+            public void redraw() {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        MainActivity.this.redraw();
+                    }
+                });
+            }
+
+            @Override
             public void message(final String text, final boolean warn) {
                 handler.post(new Runnable() {
                     @Override
@@ -887,24 +897,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         return sb.toString();
     }
 
-    private static String classList(String jar, String q) {
-        StringBuilder sb = new StringBuilder();
-        try {
-            dalvik.system.DexFile d = new dalvik.system.DexFile(jar);
-            java.util.Enumeration<String> e = d.entries();
-            while (e.hasMoreElements()) {
-                String n = e.nextElement();
-                if (q == null || n.toLowerCase(java.util.Locale.US).contains(q.toLowerCase(java.util.Locale.US))) {
-                    sb.append(n).append('\n');
-                }
-            }
-            d.close();
-        } catch (Throwable t) {
-            sb.append("Fehler: ").append(t).append('\n');
-        }
-        return sb.length() > 0 ? sb.toString() : "keine Treffer\n";
-    }
-
     private static DebugServer.Response json(String body) {
         return DebugServer.Response.text(200, "application/json", body);
     }
@@ -964,11 +956,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (path.equals("/api/reflect")) {
             // Read-only: lists what a class on the camera offers (methods, fields), nothing is called
             return DebugServer.Response.text(200, "text/plain; charset=utf-8", reflect(String.valueOf(r.param("cls"))));
-        }
-        if (path.equals("/api/classes")) {
-            // Read-only: class names in a framework jar/dex of the camera, filtered by 'q'
-            return DebugServer.Response.text(200, "text/plain; charset=utf-8",
-                    classList(String.valueOf(r.param("jar")), r.param("q")));
         }
         if (path.equals("/api/ls")) {
             StringBuilder sb = new StringBuilder();

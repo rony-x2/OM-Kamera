@@ -1411,14 +1411,15 @@ public class Ui {
             return;
         }
         out.add(Row.header("Uhr"));
-        out.add(Row.info("Kamerazeit", CameraClock.describe()));
-        out.add(Row.action("Jetzt stellen (Zeitserver)", "", new Runnable() {
+        out.add(Row.info("Uhrzeit", CameraClock.describe()));
+        out.add(Row.info("Sony-Uhr (EXIF)", CameraClock.describeCamera()));
+        out.add(Row.action("Jetzt abgleichen (Zeitserver)", "", new Runnable() {
             @Override
             public void run() {
                 showMessage(c.syncNtp(true), false);
             }
         }));
-        out.add(Row.action("Automatisch stellen im WLAN", c.auto() ? "Ein" : "Aus", new Runnable() {
+        out.add(Row.action("Automatisch abgleichen im WLAN", c.auto() ? "Ein" : "Aus", new Runnable() {
             @Override
             public void run() {
                 c.setAuto(!c.auto());

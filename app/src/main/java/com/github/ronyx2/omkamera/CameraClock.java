@@ -26,8 +26,10 @@ import java.util.TimeZone;
  * - Android's system clock, which is never set on these cameras and cannot be set by an app.
  *
  * The app therefore takes all wall times (log, timed start, daily window) from Sony's clock,
- * kept as an offset to Android's clock, and can set Sony's clock from an NTP server
- * (like a PC or phone does), including the EU summer time switch.
+ * kept as an offset to Android's clock. An NTP query (or the time of the PC/browser) gives
+ * the real time: where the model can set its clock (newer firmware), the app sets it;
+ * on the a6000 there is no such function, so the app keeps a correction to Sony's clock and
+ * works with the real time itself. Summer time follows the EU rule if switched on.
  *
  * Sony's calendar holds the local time (checked on the a6000);
  * UTC = local − (gmtDiff + summerTimeDiff) minutes.
@@ -49,8 +51,14 @@ public final class CameraClock {
 
     // ---- reading ----
 
-    /** Current UTC time by the camera's clock, in ms */
-    public static long nowUtc() {
+    /** Real time minus Sony's clock (UTC, ms), from the last comparison with a time server */
+    private static volatile long corrMs;
+    private static volatile boolean corrKnown;
+    /** Local time follows the EU summer time rule instead of the camera's setting */
+    private static volatile boolean euAuto = true;
+
+    /** Sony's clock as UTC in ms (what ends up in EXIF, converted to UTC) */
+    public static long cameraUtc() {
         if (!known && !missing) {
             try {
                 long u = readUtc();
@@ -64,13 +72,26 @@ public final class CameraClock {
         return System.currentTimeMillis() + offsetMs;
     }
 
-    /** Time zone of the camera (fixed offset including summer time) */
-    public static TimeZone zone() {
-        nowUtc();
-        return new SimpleTimeZone((gmtDiff + summerDiff) * 60000, "Kamera");
+    /** Best known real time (UTC, ms): Sony's clock plus the correction from the time server */
+    public static long nowUtc() {
+        return cameraUtc() + corrMs;
     }
 
-    /** Local calendar by the camera's clock */
+    /** Offset of the local time in minutes: camera zone, summer time by EU rule if switched on */
+    private static int localOffset(long utc) {
+        if (euAuto && (gmtDiff == 0 || gmtDiff == 60 || gmtDiff == 120)) {
+            return gmtDiff + (euSummer(utc) ? 60 : 0);
+        }
+        return gmtDiff + summerDiff;
+    }
+
+    /** Local time zone (fixed offset at this moment) */
+    public static TimeZone zone() {
+        long u = nowUtc();
+        return new SimpleTimeZone(localOffset(u) * 60000, "Ortszeit");
+    }
+
+    /** Local calendar with the real time */
     public static Calendar now() {
         Calendar c = new GregorianCalendar(zone());
         c.setTimeInMillis(nowUtc());
@@ -83,11 +104,38 @@ public final class CameraClock {
         return f.format(new Date(nowUtc()));
     }
 
-    /** "14.11.2026 11:42:07 · UTC+1" with a note on summer time */
+    private static String zoneText(int z, boolean summer) {
+        return "UTC" + (z >= 0 ? "+" : "−") + Math.abs(z / 60) + (z % 60 != 0 ? ":" + Math.abs(z % 60) : "")
+                + (summer ? " Sommerzeit" : "");
+    }
+
+    /** "14.11.2026 11:42:07 · UTC+1" – the time the app works with */
     public static String describe() {
-        int z = gmtDiff + summerDiff;
-        String zs = "UTC" + (z >= 0 ? "+" : "−") + Math.abs(z / 60) + (z % 60 != 0 ? ":" + Math.abs(z % 60) : "");
-        return format("dd.MM.yyyy HH:mm:ss") + " · " + zs + (summerDiff != 0 ? " (Sommerzeit)" : "");
+        long u = nowUtc();
+        int z = localOffset(u);
+        return format("dd.MM.yyyy HH:mm:ss") + " · " + zoneText(z, z != gmtDiff)
+                + (corrKnown ? "" : " (nicht abgeglichen)");
+    }
+
+    /** Sony's clock as shown by the camera, with its deviation from the real local time */
+    public static String describeCamera() {
+        long cam = cameraUtc();
+        int cz = gmtDiff + summerDiff;
+        SimpleDateFormat f = new SimpleDateFormat("HH:mm:ss", Locale.GERMANY);
+        f.setTimeZone(new SimpleTimeZone(cz * 60000, "Kamera"));
+        String t = f.format(new Date(cam)) + " · " + zoneText(cz, summerDiff != 0);
+        if (!corrKnown) {
+            return t;
+        }
+        long dev = cameraDeviation();
+        return t + (Math.abs(dev) < 1000 ? " · stimmt" : " · geht " + fmtDev(dev).substring(1)
+                + (dev > 0 ? " vor" : " nach"));
+    }
+
+    /** How far Sony's local display is off from the real local time (ms, + = ahead) */
+    public static long cameraDeviation() {
+        long real = nowUtc();
+        return (cameraUtc() + (gmtDiff + summerDiff) * 60000L) - (real + localOffset(real) * 60000L);
     }
 
     public static int gmtDiff() {
@@ -310,6 +358,8 @@ public final class CameraClock {
         String gateway();
 
         void message(String text, boolean warn);
+
+        void redraw();
     }
 
     private final SharedPreferences prefs;
@@ -323,6 +373,11 @@ public final class CameraClock {
     public CameraClock(SharedPreferences prefs, Host host) {
         this.prefs = prefs;
         this.host = host;
+        euAuto = autoSummer();
+        // The correction from the last run is a good guess until the next comparison
+        if (prefs.contains("clock.corr")) {
+            corrMs = prefs.getLong("clock.corr", 0);
+        }
     }
 
     public boolean auto() {
@@ -340,6 +395,7 @@ public final class CameraClock {
 
     public void setAutoSummer(boolean on) {
         prefs.edit().putBoolean("clock.dst", on).apply();
+        euAuto = on;
     }
 
     public int server() {
@@ -435,6 +491,7 @@ public final class CameraClock {
                     if (manual || r.startsWith("gestellt")) {
                         host.message("Uhr " + r, false);
                     }
+                    host.redraw();
                 } catch (Throwable e) {
                     state = "Fehler: " + e;
                     Log.error("clock sync", e);
@@ -466,7 +523,7 @@ public final class CameraClock {
     private String apply(long trueUtc, long elapsed, String source, boolean manual) throws Exception {
         calibrate();
         long real = trueUtc + (SystemClock.elapsedRealtime() - elapsed);
-        long dev = nowUtc() - real;
+        long dev = cameraUtc() - real;
         int newSummer = -1;
         if (autoSummer() && (gmtDiff == 0 || gmtDiff == 60 || gmtDiff == 120)) {
             int want = euSummer(real) ? 60 : 0;
@@ -475,13 +532,24 @@ public final class CameraClock {
             }
         }
         String devText = fmtDev(dev);
-        if (Math.abs(dev) < 1000 && newSummer < 0) {
-            state = "stimmt (" + devText + ", " + source + ") um " + format("HH:mm");
-            Log.info("clock ok " + dev + " ms, " + source);
+        if ("keine".equals(setter())) {
+            // a6000: Sony's clock cannot be set by an app; work with the real time instead
+            corrMs = -dev;
+            corrKnown = true;
+            prefs.edit().putLong("clock.corr", corrMs).apply();
+            long show = cameraDeviation();
+            state = "abgeglichen um " + format("HH:mm") + " (" + source + "); "
+                    + (Math.abs(show) < 1000 ? "Sony-Uhr stimmt"
+                    : "Sony-Uhr geht " + fmtDev(show).substring(1) + (show > 0 ? " vor" : " nach")
+                    + " – App rechnet mit der richtigen Zeit");
+            Log.info("clock " + state + " (corr " + corrMs + " ms)");
             return state;
         }
-        if ("keine".equals(setter())) {
-            state = "Abweichung " + devText + ", diese Kamera bietet keine Funktion zum Stellen";
+        if (Math.abs(dev) < 1000 && newSummer < 0) {
+            corrMs = 0;
+        corrKnown = true;
+        state = "stimmt (" + devText + ", " + source + ") um " + format("HH:mm");
+            Log.info("clock ok " + dev + " ms, " + source);
             return state;
         }
         if ("native".equals(setter()) && !manual && !prefs.getBoolean("clock.native_ok", false)) {
@@ -493,7 +561,7 @@ public final class CameraClock {
             state = "Kamera hat das Stellen abgelehnt (Code " + r + ")";
             return state;
         }
-        long after = nowUtc() - (trueUtc + (SystemClock.elapsedRealtime() - elapsed));
+        long after = cameraUtc() - (trueUtc + (SystemClock.elapsedRealtime() - elapsed));
         if (Math.abs(after) > 2000) {
             state = "gestellt, aber zurückgelesen " + fmtDev(after) + " daneben (" + setter() + ")";
             Log.info("clock " + state);
@@ -502,6 +570,9 @@ public final class CameraClock {
         if ("native".equals(setter())) {
             prefs.edit().putBoolean("clock.native_ok", true).apply();
         }
+        corrMs = 0;
+        corrKnown = true;
+        prefs.edit().putLong("clock.corr", 0).apply();
         state = "gestellt um " + format("HH:mm") + ": war " + devText
                 + (newSummer >= 0 ? (newSummer > 0 ? ", Sommerzeit ein" : ", Sommerzeit aus") : "")
                 + ", jetzt " + fmtDev(after) + " (" + source + ")";

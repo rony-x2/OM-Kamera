@@ -376,7 +376,7 @@
  },
  {
   "name": "uhr",
-  "description": "Uhr der Kamera (gilt für EXIF, Dateizeiten, Zeitraffer-Startzeit und Zeitfenster). aktion 'status' zeigt Kamerazeit, Zeitzone und letzten Abgleich; 'ntp' stellt sie über den Zeitserver (Router oder pool.ntp.org) inklusive EU-Sommerzeit; 'setzen' übernimmt die Zeit 'zeit_ms' (Millisekunden seit 1970, UTC) vom PC.",
+  "description": "Uhr: 'status' zeigt die Uhrzeit, mit der die App rechnet (Log, Zeitraffer-Startzeit, Zeitfenster), und die Sony-Uhr der Kamera (EXIF, Ordnernamen) mit ihrer Abweichung. 'ntp' gleicht mit dem Zeitserver ab (Router oder pool.ntp.org, EU-Sommerzeit); 'setzen' übernimmt 'zeit_ms' (ms seit 1970, UTC) vom PC. Die a6000 lässt ihre Sony-Uhr von Apps nicht stellen; die App merkt sich dann die Abweichung und rechnet mit der richtigen Zeit.",
   "inputSchema": {
    "type": "object",
    "properties": {
