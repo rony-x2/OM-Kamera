@@ -187,7 +187,7 @@ public final class RawTools {
     // ---- development to 16 bit RGB ----
 
     /** Receives developed bytes: TIFF rows (LE) or PNG rows with filter byte */
-    interface ByteSink {
+    public interface ByteSink {
         void write(byte[] b, int len) throws IOException;
     }
 
@@ -204,7 +204,7 @@ public final class RawTools {
      * curve. format 0: TIFF rows, 16 bit little endian; 1: PNG rows, 16 bit big endian with
      * filter Sub. Uses the native library (all cores) when it is loaded.
      */
-    static void develop(Rows src, int format, ByteSink sink, Progress p) throws IOException {
+    public static void develop(Rows src, int format, ByteSink sink, Progress p) throws IOException {
         RawFile m = src.meta();
         int w = m.cropW, h = m.cropH, x0 = m.cropX, y0 = m.cropY;
         int fullW = m.width;
@@ -218,7 +218,7 @@ public final class RawTools {
             mat[i] = Math.round(rc[i] * 4096);
         }
         int[] gamma = srgbLut();
-        int stride = format == 2 ? 1 + w * 3 : format == 1 ? 1 + w * 6 : w * 6;
+        int stride = format == 3 ? w * 3 : format == 2 ? 1 + w * 3 : format == 1 ? 1 + w * 6 : w * 6;
 
         if (nativeOn()) {
             final int B = 32;
@@ -261,7 +261,7 @@ public final class RawTools {
             load(src, ry + 1, raw, next, m, scale, blk);
             int rowPhase = (ry & 1) * 2;
             int o = 0;
-            if (format >= 1) {
+            if (format == 1 || format == 2) {
                 line[o++] = 1;
             }
             int pr = 0, pg = 0, pb = 0;
@@ -296,6 +296,13 @@ public final class RawTools {
                 int R = gamma[clamp((mat[0] * r + mat[1] * g + mat[2] * b) >> 12)];
                 int G = gamma[clamp((mat[3] * r + mat[4] * g + mat[5] * b) >> 12)];
                 int B = gamma[clamp((mat[6] * r + mat[7] * g + mat[8] * b) >> 12)];
+                if (format == 3) {
+                    line[o] = (byte) (R >> 8);
+                    line[o + 1] = (byte) (G >> 8);
+                    line[o + 2] = (byte) (B >> 8);
+                    o += 3;
+                    continue;
+                }
                 if (format == 2) {
                     line[o] = (byte) ((R >> 8) - (pr >> 8));
                     line[o + 1] = (byte) ((G >> 8) - (pg >> 8));

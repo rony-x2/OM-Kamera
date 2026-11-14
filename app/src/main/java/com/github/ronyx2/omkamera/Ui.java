@@ -838,9 +838,12 @@ public class Ui {
                 List<Row> r = new ArrayList<Row>();
                 List<java.io.File> last = Processor.newest(1);
                 r.add(Row.info("Datei", last.isEmpty() ? "keine ARW auf der Karte" : last.get(0).getName()));
-                for (final Processor.Kind k : new Processor.Kind[]{Processor.Kind.DNG, Processor.Kind.TIFF, Processor.Kind.PNG}) {
+                for (final Processor.Kind k : new Processor.Kind[]{Processor.Kind.DNG, Processor.Kind.TIFF, Processor.Kind.PNG,
+                        Processor.Kind.HEIC, Processor.Kind.AVIF}) {
                     String lbl = k == Processor.Kind.PNG ? "PNG " + pngBits() + " Bit" : k.label;
-                    r.add(Row.action("als " + lbl, k == Processor.Kind.DNG ? "verlustfrei" : "entwickelt, sRGB", new Runnable() {
+                    String hint = k == Processor.Kind.DNG ? "verlustfrei" : k == Processor.Kind.HEIC || k == Processor.Kind.AVIF
+                            ? "8 Bit, dauert Minuten" : "entwickelt, sRGB";
+                    r.add(Row.action("als " + lbl, hint, new Runnable() {
                         @Override
                         public void run() {
                             showMessage(processor.add(k, Processor.newest(1)), false);

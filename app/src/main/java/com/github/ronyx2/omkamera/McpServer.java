@@ -298,6 +298,10 @@ public class McpServer {
                 kind = Processor.Kind.TIFF;
             } else if ("png".equals(art)) {
                 kind = Processor.Kind.PNG;
+            } else if ("heic".equals(art)) {
+                kind = Processor.Kind.HEIC;
+            } else if ("avif".equals(art)) {
+                kind = Processor.Kind.AVIF;
             } else if ("mittel".equals(art)) {
                 kind = Processor.Kind.MEAN;
             } else if ("summe".equals(art)) {
@@ -311,14 +315,14 @@ public class McpServer {
             }
             java.util.List<java.io.File> files;
             String datei = a.optString("datei", "");
-            if (datei.length() > 0 && !kind.name().equals("MEAN") && kind.ordinal() <= Processor.Kind.PNG.ordinal()) {
+            if (datei.length() > 0 && !kind.combines()) {
                 java.io.File f = Processor.find(datei);
                 if (f == null) {
                     return error("Datei " + datei + " nicht gefunden");
                 }
                 files = java.util.Collections.singletonList(f);
             } else {
-                files = Processor.newest(kind.ordinal() <= Processor.Kind.PNG.ordinal() ? 1 : Math.max(2, a.optInt("anzahl", 3)));
+                files = Processor.newest(!kind.combines() ? 1 : Math.max(2, a.optInt("anzahl", 3)));
             }
             if (kind == Processor.Kind.PNG && a.has("bit")) {
                 host.ui().setPngBits(a.optInt("bit", 16));

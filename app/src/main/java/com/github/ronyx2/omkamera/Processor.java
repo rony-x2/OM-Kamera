@@ -35,6 +35,7 @@ public class Processor {
 
     public enum Kind {
         DNG("DNG", ".DNG"), TIFF("TIFF 16 Bit", ".TIF"), PNG("PNG", ".PNG"),
+        HEIC("HEIC (Versuch)", ".HEIC"), AVIF("AVIF (Versuch)", ".AVIF"),
         MEAN("Mittelwert", ".DNG"), SUM("Summe", ".DNG"), MAX("Maximum", ".DNG"), FOCUS("Fokus-Stacking", ".DNG");
         public final String label, ext;
 
@@ -43,7 +44,7 @@ public class Processor {
             this.ext = ext;
         }
 
-        boolean combines() {
+        public boolean combines() {
             return ordinal() >= MEAN.ordinal();
         }
     }
@@ -244,13 +245,19 @@ public class Processor {
                 case PNG:
                     RawTools.writePng(out, src, host.pngBits(), lens, sw, p);
                     break;
+                case HEIC:
+                    Heif.write(out, src, Heif.HEIC, 80, 4, lens, sw, p);
+                    break;
+                case AVIF:
+                    Heif.write(out, src, Heif.AVIF, 80, 2, lens, sw, p);
+                    break;
                 default:
                     RawTools.writeDng(out, src, lens, sw, j.kind.combines() ? null : first.getName(), p);
                     break;
             }
             long s = (SystemClock.uptimeMillis() - t0) / 1000;
             last = "OMKAMERA/" + name + " (" + (out.length() / (1024 * 1024)) + " MB, " + s + " s)";
-            Log.info("process done " + last + (j.kind == Kind.TIFF || j.kind == Kind.PNG ? "" : ", " + RawTools.timing));
+            Log.info("process done " + last + (j.kind == Kind.DNG || j.kind.combines() ? ", " + RawTools.timing : ""));
             host.message(j.kind.label + " fertig: " + name, false);
         } catch (Throwable e) {
             Log.error("process " + j.kind, e);

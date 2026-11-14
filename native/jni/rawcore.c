@@ -278,7 +278,7 @@ static void *dev_worker(void *arg)
 {
     devjob_t *d = (devjob_t *) arg;
     int y, x;
-    int stride = d->format == 2 ? 1 + d->w * 3 : d->format == 1 ? 1 + d->w * 6 : d->w * 6;
+    int stride = d->format == 3 ? d->w * 3 : d->format == 2 ? 1 + d->w * 3 : d->format == 1 ? 1 + d->w * 6 : d->w * 6;
     for (y = d->r0; y < d->r1; y++) {
         int ry = d->y0 + y;
         const int *prev = d->cfa + (size_t) y * d->fullW;
@@ -286,7 +286,7 @@ static void *dev_worker(void *arg)
         const int *next = cur + d->fullW;
         unsigned char *o = d->out + (size_t) y * stride;
         int pr = 0, pg = 0, pb = 0;
-        if (d->format >= 1) {
+        if (d->format == 1 || d->format == 2) {
             *o++ = 1;
         }
         for (x = 0; x < d->w; x++) {
@@ -325,6 +325,14 @@ static void *dev_worker(void *arg)
                 int R = d->lut[clamp16((m[0] * r + m[1] * g + m[2] * b) >> 12)];
                 int G = d->lut[clamp16((m[3] * r + m[4] * g + m[5] * b) >> 12)];
                 int B = d->lut[clamp16((m[6] * r + m[7] * g + m[8] * b) >> 12)];
+                if (d->format == 3) {
+                    /* plain 8 bit RGB for the HEIF encoders */
+                    o[0] = (unsigned char) (R >> 8);
+                    o[1] = (unsigned char) (G >> 8);
+                    o[2] = (unsigned char) (B >> 8);
+                    o += 3;
+                    continue;
+                }
                 if (d->format == 2) {
                     /* 8 bit PNG, filter Sub: each byte minus the byte 3 positions earlier */
                     o[0] = (unsigned char) ((R >> 8) - (pr >> 8));
@@ -380,7 +388,7 @@ Java_com_github_ronyx2_omkamera_RawCore_develop(JNIEnv *env, jclass cls, jintArr
     jint *mat = (*env)->GetIntArrayElements(env, jmat, NULL);
     jshort *lut = (*env)->GetShortArrayElements(env, jlut, NULL);
     jint *cfa = (*env)->GetIntArrayElements(env, jcfa, NULL);
-    int stride = format == 2 ? 1 + w * 3 : format == 1 ? 1 + w * 6 : w * 6;
+    int stride = format == 3 ? w * 3 : format == 2 ? 1 + w * 3 : format == 1 ? 1 + w * 6 : w * 6;
     unsigned char *out = (unsigned char *) malloc((size_t) n * stride);
     if (!out) {
         nt = 0;

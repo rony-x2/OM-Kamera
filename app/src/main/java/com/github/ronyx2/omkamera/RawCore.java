@@ -55,6 +55,20 @@ public final class RawCore {
      */
     public static native int deflate(byte[] in, int len, int level, boolean last, byte[] out, long[] adler);
 
+    // ---- HEIC/AVIF tile encoder (libomkheif, loaded by Heif.load()) ----
+
+    public static native long heifNew(int format, int width, int tile, int quality, int threads);
+
+    public static native void heifRows(long h, byte[] rows, int at, int n);
+
+    public static native int heifEncode(long h, int rows);
+
+    public static native byte[] heifTile(long h, int col);
+
+    public static native byte[] heifConfig(long h);
+
+    public static native void heifFree(long h);
+
     /** True if the library is loaded; false on the PC tests without it */
     public static boolean on() {
         return AVAILABLE && RawFile.useNative;
