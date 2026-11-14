@@ -278,6 +278,20 @@ public class McpServer {
                 }
             }));
         }
+        if (name.equals("rawtest")) {
+            final String mode = a.optString("modus", "status");
+            final int n = a.optInt("anzahl", 2);
+            return text(host.onMain(new Callable<String>() {
+                @Override
+                public String call() {
+                    RawLab lab = host.session().rawLab();
+                    if ("status".equals(mode)) {
+                        return lab.result();
+                    }
+                    return lab.start(mode, n);
+                }
+            }));
+        }
         if (name.equals("jpeg_test")) {
             return text(JpegProbe.run(a.optString("datei", null), a.optJSONArray("stufen"), a.optBoolean("loeschen", true)));
         }

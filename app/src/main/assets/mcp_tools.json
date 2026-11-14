@@ -1,266 +1,287 @@
 [
-  {
-    "name": "status",
-    "description": "Aktueller Zustand der Kamera: Modell, Belichtungsmodus, Zeit, Blende, Belichtungskorrektur, ISO, Akku, ob gerade geschrieben wird, Fokusergebnis, Bedienzustand der App (LIVE, FN, MENU, AF_MOVE), Position des flexiblen Spots, AE-Speicher und alle derzeit sichtbaren Einstellungen mit ihrem Wert.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    }
-  },
-  {
-    "name": "einstellungen",
-    "description": "Listet Einstellungen mit internem Wert, Anzeigetext und allen möglichen Werten. Ohne Angaben nur die gerade sinnvollen Einstellungen. Die id und ein Wert aus 'werte' werden für einstellung_setzen gebraucht.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "gruppe": {
-          "type": "string",
-          "description": "Nur eine Gruppe: Aufnahme, Belichtung, Bild, Fokus oder Blitz"
-        },
-        "alle": {
-          "type": "boolean",
-          "description": "Auch Einstellungen zeigen, die gerade keine Rolle spielen oder nicht verfügbar sind"
-        }
-      }
-    }
-  },
-  {
-    "name": "einstellung_setzen",
-    "description": "Setzt eine Einstellung. 'wert' ist der interne Wert oder der Anzeigetext (z. B. 'burst-high' oder 'Serie Hi'). Gibt zurück, ob die Kamera den Wert angenommen hat, und den Wert danach.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Kennung der Einstellung, z. B. iso, ev, wb, drive, dro, afarea"
-        },
-        "wert": {
-          "type": "string",
-          "description": "Neuer Wert"
-        }
-      },
-      "required": [
-        "id",
-        "wert"
-      ]
-    }
-  },
-  {
-    "name": "belichtung",
-    "description": "Verstellt Zeit, Blende, Programmverschiebung oder Belichtungskorrektur um ganze Stufen, so wie die Einstellräder. Was möglich ist, hängt vom Modus ab (z. B. Zeit nur in S und M).",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "was": {
-          "type": "string",
-          "enum": [
-            "zeit",
-            "blende",
-            "shift",
-            "ev"
-          ]
-        },
-        "schritte": {
-          "type": "integer",
-          "description": "Rastungen wie am Rad, positiv im Uhrzeigersinn, negativ dagegen; -10 bis 10"
-        }
-      },
-      "required": [
-        "was",
-        "schritte"
-      ]
-    }
-  },
-  {
-    "name": "fokus",
-    "description": "Stellt scharf wie ein halb gedrückter Auslöser und meldet das Ergebnis (OK, FAILED oder NONE). Mit halten=true bleibt der Auslöser halb gedrückt, bis fokus_loesen aufgerufen wird.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "halten": {
-          "type": "boolean"
-        }
-      }
-    }
-  },
-  {
-    "name": "fokus_loesen",
-    "description": "Lässt den halb gedrückten Auslöser los.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    }
-  },
-  {
-    "name": "ausloesen",
-    "description": "Stellt scharf und nimmt ein Bild auf, wie ein ganz gedrückter Auslöser. Funktioniert nur mit der Auslöser-Steuerung durch die App.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    }
-  },
-  {
-    "name": "taste",
-    "description": "Drückt eine Kamerataste in der App, z. B. um das Fn-Raster oder das Menü zu bedienen. Danach zeigt bild mit quelle 'anzeige', was zu sehen ist.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "enum": [
-            "UP",
-            "DOWN",
-            "LEFT",
-            "RIGHT",
-            "ENTER",
-            "MENU",
-            "FN",
-            "DISP",
-            "DELETE",
-            "C1",
-            "C2",
-            "C3",
-            "WHEEL_CW",
-            "WHEEL_CCW",
-            "DIAL1_CW",
-            "DIAL1_CCW",
-            "DIAL2_CW",
-            "DIAL2_CCW",
-            "DIAL3_CW",
-            "DIAL3_CCW"
-          ]
-        },
-        "anzahl": {
-          "type": "integer",
-          "description": "Wie oft gedrückt wird, Standard 1, höchstens 20"
-        }
-      },
-      "required": [
-        "name"
-      ]
-    }
-  },
-  {
-    "name": "fokusfeld",
-    "description": "Verschiebt den flexiblen Spot (Fokusfeld 'Flex. Spot'). dx/dy in Rasterschritten (17 × 11 wie an der Kamera), oder mitte=true, oder x/y direkt im Bereich -1000 bis 1000 bezogen auf das Bild.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "dx": {
-          "type": "integer"
-        },
-        "dy": {
-          "type": "integer"
-        },
-        "mitte": {
-          "type": "boolean"
-        },
-        "x": {
-          "type": "integer"
-        },
-        "y": {
-          "type": "integer"
-        }
-      }
-    }
-  },
-  {
-    "name": "ael",
-    "description": "AE-Speicher: an=true hält die aktuelle Belichtung, an=false gibt sie frei.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "an": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "an"
-      ]
-    }
-  },
-  {
-    "name": "bild",
-    "description": "Liefert Bilder: 'live' ist das Sucherbild als JPEG, 'anzeige' die Oberfläche der App (Statuszeile, Fn-Raster, Menüs) als PNG im richtigen Seitenverhältnis, 'beides' beide Bilder.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "quelle": {
-          "type": "string",
-          "enum": [
-            "live",
-            "anzeige",
-            "beides"
-          ]
-        }
-      }
-    }
-  },
-  {
-    "name": "log",
-    "description": "Letzte Zeilen des App-Logs (Tasten, Einstellungen, Fehler, Antworten der Kamera).",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "zeilen": {
-          "type": "integer",
-          "description": "Standard 60, höchstens 400"
-        }
-      }
-    }
-  },
-  {
-    "name": "parameter",
-    "description": "Diagnose: liest die rohen Kameraparameter (Schlüssel=Wert) und setzt sie auf Wunsch direkt, ohne die Prüfungen der App. 'filter' grenzt die Ausgabe auf Schlüssel ein, die den Text enthalten. 'setzen' ist ein Objekt Schlüssel → Wert. Die Antwort meldet, ob die Kamera angenommen hat, und die Werte danach.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "filter": {
-          "type": "string"
-        },
-        "setzen": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      }
-    }
-  },
-  {
-    "name": "dateien",
-    "description": "Listet Dateien auf der Speicherkarte: 'OMKAMERA' (Zeitrafferfilme, Einstellungen), 'DCIM' (neuester Bildordner) oder ein Unterordner wie 'DCIM/10061114'.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "ordner": {
-          "type": "string"
-        }
-      }
-    }
-  },
-  {
-    "name": "jpeg_test",
-    "description": "Diagnose: kodiert ein JPEG von der Speicherkarte mit Sonys Hardware-JpegExporter in mehreren Qualitätsstufen neu und meldet Dateigröße und Fehler je Stufe. Ohne 'datei' wird das neueste JPEG im DCIM-Ordner genommen. Die Testdateien landen in OMKTEST auf der Karte und können mit loeschen=true wieder entfernt werden.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "datei": {
-          "type": "string",
-          "description": "Pfad auf der Karte, z. B. /mnt/sdcard/DCIM/100MSDCF/DSC01234.JPG"
-        },
-        "stufen": {
-          "type": "array",
-          "items": {
-            "type": "integer"
-          },
-          "description": "Werte für die Qualität des Exporters, Standard 1, 2, 3"
-        },
-        "loeschen": {
-          "type": "boolean",
-          "description": "Testdateien nach dem Messen löschen, Standard true"
-        }
-      }
-    }
+ {
+  "name": "status",
+  "description": "Aktueller Zustand der Kamera: Modell, Belichtungsmodus, Zeit, Blende, Belichtungskorrektur, ISO, Akku, ob gerade geschrieben wird, Fokusergebnis, Bedienzustand der App (LIVE, FN, MENU, AF_MOVE), Position des flexiblen Spots, AE-Speicher und alle derzeit sichtbaren Einstellungen mit ihrem Wert.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {}
   }
+ },
+ {
+  "name": "einstellungen",
+  "description": "Listet Einstellungen mit internem Wert, Anzeigetext und allen möglichen Werten. Ohne Angaben nur die gerade sinnvollen Einstellungen. Die id und ein Wert aus 'werte' werden für einstellung_setzen gebraucht.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "gruppe": {
+     "type": "string",
+     "description": "Nur eine Gruppe: Aufnahme, Belichtung, Bild, Fokus oder Blitz"
+    },
+    "alle": {
+     "type": "boolean",
+     "description": "Auch Einstellungen zeigen, die gerade keine Rolle spielen oder nicht verfügbar sind"
+    }
+   }
+  }
+ },
+ {
+  "name": "einstellung_setzen",
+  "description": "Setzt eine Einstellung. 'wert' ist der interne Wert oder der Anzeigetext (z. B. 'burst-high' oder 'Serie Hi'). Gibt zurück, ob die Kamera den Wert angenommen hat, und den Wert danach.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Kennung der Einstellung, z. B. iso, ev, wb, drive, dro, afarea"
+    },
+    "wert": {
+     "type": "string",
+     "description": "Neuer Wert"
+    }
+   },
+   "required": [
+    "id",
+    "wert"
+   ]
+  }
+ },
+ {
+  "name": "belichtung",
+  "description": "Verstellt Zeit, Blende, Programmverschiebung oder Belichtungskorrektur um ganze Stufen, so wie die Einstellräder. Was möglich ist, hängt vom Modus ab (z. B. Zeit nur in S und M).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "was": {
+     "type": "string",
+     "enum": [
+      "zeit",
+      "blende",
+      "shift",
+      "ev"
+     ]
+    },
+    "schritte": {
+     "type": "integer",
+     "description": "Rastungen wie am Rad, positiv im Uhrzeigersinn, negativ dagegen; -10 bis 10"
+    }
+   },
+   "required": [
+    "was",
+    "schritte"
+   ]
+  }
+ },
+ {
+  "name": "fokus",
+  "description": "Stellt scharf wie ein halb gedrückter Auslöser und meldet das Ergebnis (OK, FAILED oder NONE). Mit halten=true bleibt der Auslöser halb gedrückt, bis fokus_loesen aufgerufen wird.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "halten": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ {
+  "name": "fokus_loesen",
+  "description": "Lässt den halb gedrückten Auslöser los.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "ausloesen",
+  "description": "Stellt scharf und nimmt ein Bild auf, wie ein ganz gedrückter Auslöser. Funktioniert nur mit der Auslöser-Steuerung durch die App.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "taste",
+  "description": "Drückt eine Kamerataste in der App, z. B. um das Fn-Raster oder das Menü zu bedienen. Danach zeigt bild mit quelle 'anzeige', was zu sehen ist.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string",
+     "enum": [
+      "UP",
+      "DOWN",
+      "LEFT",
+      "RIGHT",
+      "ENTER",
+      "MENU",
+      "FN",
+      "DISP",
+      "DELETE",
+      "C1",
+      "C2",
+      "C3",
+      "WHEEL_CW",
+      "WHEEL_CCW",
+      "DIAL1_CW",
+      "DIAL1_CCW",
+      "DIAL2_CW",
+      "DIAL2_CCW",
+      "DIAL3_CW",
+      "DIAL3_CCW"
+     ]
+    },
+    "anzahl": {
+     "type": "integer",
+     "description": "Wie oft gedrückt wird, Standard 1, höchstens 20"
+    }
+   },
+   "required": [
+    "name"
+   ]
+  }
+ },
+ {
+  "name": "fokusfeld",
+  "description": "Verschiebt den flexiblen Spot (Fokusfeld 'Flex. Spot'). dx/dy in Rasterschritten (17 × 11 wie an der Kamera), oder mitte=true, oder x/y direkt im Bereich -1000 bis 1000 bezogen auf das Bild.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "dx": {
+     "type": "integer"
+    },
+    "dy": {
+     "type": "integer"
+    },
+    "mitte": {
+     "type": "boolean"
+    },
+    "x": {
+     "type": "integer"
+    },
+    "y": {
+     "type": "integer"
+    }
+   }
+  }
+ },
+ {
+  "name": "ael",
+  "description": "AE-Speicher: an=true hält die aktuelle Belichtung, an=false gibt sie frei.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "an": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "an"
+   ]
+  }
+ },
+ {
+  "name": "bild",
+  "description": "Liefert Bilder: 'live' ist das Sucherbild als JPEG, 'anzeige' die Oberfläche der App (Statuszeile, Fn-Raster, Menüs) als PNG im richtigen Seitenverhältnis, 'beides' beide Bilder.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "quelle": {
+     "type": "string",
+     "enum": [
+      "live",
+      "anzeige",
+      "beides"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "log",
+  "description": "Letzte Zeilen des App-Logs (Tasten, Einstellungen, Fehler, Antworten der Kamera).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "zeilen": {
+     "type": "integer",
+     "description": "Standard 60, höchstens 400"
+    }
+   }
+  }
+ },
+ {
+  "name": "parameter",
+  "description": "Diagnose: liest die rohen Kameraparameter (Schlüssel=Wert) und setzt sie auf Wunsch direkt, ohne die Prüfungen der App. 'filter' grenzt die Ausgabe auf Schlüssel ein, die den Text enthalten. 'setzen' ist ein Objekt Schlüssel → Wert. Die Antwort meldet, ob die Kamera angenommen hat, und die Werte danach.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "filter": {
+     "type": "string"
+    },
+    "setzen": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "dateien",
+  "description": "Listet Dateien auf der Speicherkarte: 'OMKAMERA' (Zeitrafferfilme, Einstellungen), 'DCIM' (neuester Bildordner) oder ein Unterordner wie 'DCIM/10061114'.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ordner": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "jpeg_test",
+  "description": "Diagnose: kodiert ein JPEG von der Speicherkarte mit Sonys Hardware-JpegExporter in mehreren Qualitätsstufen neu und meldet Dateigröße und Fehler je Stufe. Ohne 'datei' wird das neueste JPEG im DCIM-Ordner genommen. Die Testdateien landen in OMKTEST auf der Karte und können mit loeschen=true wieder entfernt werden.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "datei": {
+     "type": "string",
+     "description": "Pfad auf der Karte, z. B. /mnt/sdcard/DCIM/100MSDCF/DSC01234.JPG"
+    },
+    "stufen": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     },
+     "description": "Werte für die Qualität des Exporters, Standard 1, 2, 3"
+    },
+    "loeschen": {
+     "type": "boolean",
+     "description": "Testdateien nach dem Messen löschen, Standard true"
+    }
+   }
+  }
+ },
+ {
+  "name": "rawtest",
+  "description": "Experiment Stufe 3c: übernimmt die RAW-Daten der nächsten Aufnahme(n) über Sonys Shutter-Sequence-Callback. modus 'durchreiche' entwickelt ein Bild mit dem Standardfilter und speichert es, 'addition' addiert 'anzahl' Bilder (2–8) mit dem RAW-Additionsfilter, 'status' liefert das Ergebnis des letzten Versuchs. Details stehen im Log (Zeilen 'rawlab').",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "modus": {
+     "type": "string",
+     "enum": [
+      "status",
+      "durchreiche",
+      "addition"
+     ]
+    },
+    "anzahl": {
+     "type": "integer",
+     "description": "Bilder für die Addition, Standard 2"
+    }
+   }
+  }
+ }
 ]

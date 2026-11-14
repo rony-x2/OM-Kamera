@@ -149,7 +149,41 @@ public class CameraSession {
 
     /** One JPEG frame of the live view (for the browser), or null. Callable from any thread. */
     public byte[] liveFrame() {
+        if (rawLab != null && rawLab.running()) {
+            // The RAW experiment owns the camera sequence
+            return null;
+        }
         return liveView.frame(cameraEx);
+    }
+
+    private volatile RawLab rawLab;
+
+    /** Experiments with the RAW pipeline (stage 3c); call on the main thread */
+    public RawLab rawLab() {
+        if (rawLab == null) {
+            rawLab = new RawLab(new RawLab.Host() {
+                @Override
+                public CameraEx cameraEx() {
+                    return cameraEx;
+                }
+
+                @Override
+                public void stopLiveView() {
+                    liveView.stop();
+                }
+
+                @Override
+                public boolean captureSingle() {
+                    return CameraSession.this.captureSingle();
+                }
+
+                @Override
+                public boolean isCapturing() {
+                    return capturing;
+                }
+            });
+        }
+        return rawLab;
     }
 
     public void open() {
