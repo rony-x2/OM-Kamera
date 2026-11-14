@@ -494,10 +494,15 @@ public class CameraSession {
         return out;
     }
 
+    /** f-number × 10 as "F2,8" or "F22" (no ",0" for whole numbers) */
+    private static String fNumber(int tenths) {
+        return tenths % 10 == 0 ? "F" + tenths / 10 : "F" + tenths / 10 + "," + tenths % 10;
+    }
+
     private String fRange(CameraEx.WideTele v) {
         // Aperture values come as f-number × 10
-        String w = String.format(java.util.Locale.US, "F%.1f", v.wide / 10.0).replace('.', ',');
-        String t = String.format(java.util.Locale.US, "F%.1f", v.tele / 10.0).replace('.', ',');
+        String w = fNumber(v.wide);
+        String t = fNumber(v.tele);
         return v.wide == v.tele ? w : w + "–" + t.substring(1);
     }
 
