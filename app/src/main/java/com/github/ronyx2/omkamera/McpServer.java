@@ -407,6 +407,12 @@ public class McpServer {
                 }
             }));
         }
+        if (name.equals("system")) {
+            // Fixed read-only queries with root rights on the camera's Linux host
+            String was = a.optString("was", "system");
+            return text(RootShell.title(was) + " (" + RootShell.status() + ")\n\n"
+                    + RootShell.run((android.content.Context) host, was, 15000));
+        }
         if (name.equals("uhr")) {
             CameraClock c = ui.clock();
             if (c == null) {

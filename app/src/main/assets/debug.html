@@ -18,6 +18,10 @@
   label { color: var(--mute); font-size: 14px; }
   #setup { display: none; max-width: 760px; }
   #setup.on { display: block; }
+  #sys { display: none; }
+  #sys.on { display: block; }
+  #sys .btns { margin: 0 0 12px; }
+  #sys .btns button.on { border-color: var(--accent); color: var(--accent); }
   .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
   .box h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); margin: 0 0 10px; font-weight: 600; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 12px; }
@@ -42,6 +46,7 @@
     <button data-p="/params">Parameter</button>
     <button data-p="/log">Log</button>
     <button data-s="1">Einrichtung</button>
+    <button data-r="1">System</button>
     <a class="remote" href="/remote">Fernsteuerung</a>
   </nav>
   <label><input type="checkbox" id="auto" checked> automatisch aktualisieren</label>
@@ -77,6 +82,16 @@
     <p class="note">Im Modus M folgen diese Zeiten auf dem Zeitrad nach 30" und vor BULB. Belichtet wird mit BULB, die Zeit misst die App.</p>
   </form>
 </div>
+<div id="sys">
+  <p class="note" style="margin:0 0 8px">Feste Abfragen mit root-Rechten auf der Linux-Seite der Kamera, nur lesend. Braucht den Code der Fernsteuerung (unter Einrichtung).</p>
+  <div class="btns">
+    <button data-q="system">System</button>
+    <button data-q="speicher">Arbeitsspeicher</button>
+    <button data-q="prozesse">Prozesse</button>
+    <button data-q="cpu">Prozessor</button>
+    <button data-q="log">Android-Log</button>
+  </div>
+</div>
 <pre id="out">…</pre>
 <script>
   var cur = '/status';
@@ -85,6 +100,7 @@
     cur = p;
     setupOn = false;
     document.getElementById('setup').classList.remove('on');
+    document.getElementById('sys').classList.remove('on');
     document.getElementById('out').style.display = '';
     document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.p === p); });
     fetch(p).then(function (r) { return r.text(); }).then(function (t) {
@@ -94,7 +110,28 @@
     }).catch(function () {});
   }
   document.querySelectorAll('nav button').forEach(function (b) {
-    b.onclick = function () { if (b.dataset.s) openSetup(); else show(b.dataset.p); };
+    b.onclick = function () { if (b.dataset.s) openSetup(); else if (b.dataset.r) openSys(); else show(b.dataset.p); };
+  });
+  // ---- System: fixed root queries, chosen by name only ----
+  function openSys() {
+    setupOn = true;
+    document.getElementById('setup').classList.remove('on');
+    document.getElementById('sys').classList.add('on');
+    document.getElementById('out').style.display = '';
+    document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', !!b.dataset.r); });
+    document.getElementById('out').textContent = 'Abfrage wählen.';
+  }
+  document.querySelectorAll('#sys button').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('#sys button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      var o = document.getElementById('out');
+      o.textContent = 'läuft …';
+      var code = '';
+      try { code = sessionStorage.getItem('omk.code') || document.getElementById('code').value.trim(); } catch (e) {}
+      fetch('/api/system?was=' + b.dataset.q + '&k=' + encodeURIComponent(code)).then(function (r) { return r.text(); })
+        .then(function (t) { o.textContent = t; if (b.dataset.q === 'log') window.scrollTo(0, document.body.scrollHeight); })
+        .catch(function (e) { o.textContent = 'Fehler: ' + e; });
+    };
   });
   setInterval(function () { if (!setupOn && document.getElementById('auto').checked) show(cur); }, 2000);
 
@@ -156,6 +193,7 @@
     setupOn = true;
     document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', !!b.dataset.s); });
     $('setup').classList.add('on');
+    $('sys').classList.remove('on');
     $('out').style.display = 'none';
     load();
   }

@@ -9,6 +9,14 @@ LOCAL_CFLAGS := -O3 -Wall -fno-strict-aliasing -fno-stack-protector
 
 include $(BUILD_SHARED_LIBRARY)
 
+# Root commands on the camera's Linux host (see rootshell.c)
+include $(CLEAR_VARS)
+LOCAL_MODULE := omkroot
+LOCAL_SRC_FILES := rootshell.c
+LOCAL_LDLIBS := -ldl
+LOCAL_CFLAGS := -O2 -Wall
+include $(BUILD_SHARED_LIBRARY)
+
 # ---- HEIC/AVIF encoder (proof of concept), third party code built outside the repo ----
 # Kvazaar (BSD 3-clause) and libaom 3.2.0 (BSD 2-clause), see native/THIRD_PARTY.md
 THIRD := /home/claude/thirdparty

@@ -1053,6 +1053,15 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (ui.remoteCode() == null || !ui.remoteCode().equals(r.param("k"))) {
             return DebugServer.Response.text(403, "text/plain", "Code fehlt oder falsch");
         }
+        if (path.equals("/api/system")) {
+            // Fixed read-only queries with root rights on the camera's Linux host; no free commands
+            String was = String.valueOf(r.param("was"));
+            if (r.param("was") == null) {
+                return DebugServer.Response.text(200, "text/plain; charset=utf-8",
+                        "root: " + RootShell.status() + "\nAbfragen: " + android.text.TextUtils.join(", ", RootShell.names()) + "\n");
+            }
+            return DebugServer.Response.text(200, "text/plain; charset=utf-8", RootShell.run(this, was, 15000));
+        }
         if (path.equals("/api/reflect")) {
             // Read-only: lists what a class on the camera offers (methods, fields), nothing is called
             return DebugServer.Response.text(200, "text/plain; charset=utf-8", reflect(String.valueOf(r.param("cls"))));

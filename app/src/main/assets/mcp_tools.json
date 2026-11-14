@@ -401,5 +401,24 @@
     }
    }
   }
+ },
+ {
+  "name": "system",
+  "description": "Systemdiagnose mit root-Rechten auf der Linux-Seite der Kamera, nur lesend und nur feste Abfragen: 'system' (Kernel, Laufzeit, Last, Speicher, Kerne und Takt), 'speicher' (/proc/meminfo), 'prozesse' (alle Prozesse nach Speicherbedarf), 'log' (letzte 400 Zeilen Android-Log), 'cpu' (Prozessor).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "was": {
+     "type": "string",
+     "enum": [
+      "system",
+      "speicher",
+      "prozesse",
+      "log",
+      "cpu"
+     ]
+    }
+   }
+  }
  }
 ]
