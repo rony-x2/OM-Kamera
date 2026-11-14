@@ -909,7 +909,7 @@ public class Ui {
                         setHeif(0, (heifSizeIndex() + 1) % HEIF_SIZES.length, 0);
                     }
                 }));
-                r.add(Row.action("Kerne für AVIF", avifThreads() == 4 ? "4 (mehr Speicher)" : "2", new Runnable() {
+                r.add(Row.action("Kerne für AVIF", avifThreads() == 4 ? "4 (kaum schneller)" : "2", new Runnable() {
                     @Override
                     public void run() {
                         setHeif(0, -1, avifThreads() == 4 ? 2 : 4);

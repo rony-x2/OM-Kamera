@@ -180,11 +180,11 @@ public class Processor {
     public int estimateMinutes(Kind kind) {
         double base = kind == Kind.HEIC ? 12 : 10.5;
         double enc = base - 1.5;
-        if (kind == Kind.AVIF && host.avifThreads() >= 4) {
-            enc *= 0.6;
-        }
+        // Measured: AVIF 6 MP with 4 cores 4.9 min; 4 cores are hardly faster than 2 here,
+        // and the downscaling adds about a minute
         double s = host.heifScale();
-        return (int) Math.max(1, Math.round(1.5 + enc * s * s));
+        double dev = s < 0.999 ? 2.5 : 1.5;
+        return (int) Math.max(1, Math.round(dev + enc * s * s));
     }
 
     public synchronized void cancelAll() {
@@ -287,7 +287,9 @@ public class Processor {
                     break;
             }
             long s = (SystemClock.uptimeMillis() - t0) / 1000;
-            last = "OMKAMERA/" + name + " (" + (out.length() / (1024 * 1024)) + " MB, " + s + " s)";
+            long bytes = out.length();
+            last = "OMKAMERA/" + name + " (" + (bytes >= 1024 * 1024 ? bytes / (1024 * 1024) + " MB" : bytes / 1024 + " KB")
+                    + ", " + s + " s)";
             Log.info("process done " + last + (j.kind == Kind.DNG || j.kind.combines() ? ", " + RawTools.timing : ""));
             host.message(j.kind.label + " fertig: " + name, false);
         } catch (Throwable e) {
