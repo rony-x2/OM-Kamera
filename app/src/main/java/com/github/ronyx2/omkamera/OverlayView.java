@@ -197,46 +197,52 @@ public class OverlayView extends View {
         int level = ui.batteryLevel();
         float h = Theme.ICON * u + 4 * u;
         float pad = Theme.PAD * u;
+        int mode = ui.batteryMode();
         textSize(Theme.TEXT_SMALL);
         text.setTypeface(Typeface.DEFAULT_BOLD);
-        String t = level >= 0 ? level + "%" : "?";
-        float bodyW = 30 * u;
-        float w = bodyW + 6 * u + text.measureText(t) + 2 * pad;
-        float r = vw - pad;
-        float l = r - w;
+        int mv = ui.batteryMillivolts();
+        String t = mode == 1 && mv > 0 ? String.format(java.util.Locale.GERMANY, "%.2f V", mv / 1000f)
+                : level >= 0 ? level + "%" : "?";
         float y = pad;
-        roundRect(c, l, y, r, y + h, Theme.PANEL);
-        // Battery body with fill level
-        float bl = l + pad;
-        float bt = y + h / 2 - 8 * u;
-        float bb = y + h / 2 + 8 * u;
-        int color = level >= 0 && level <= 15 ? Theme.WARN : ui.batteryPlugged() ? Theme.AF_OK : Theme.TEXT;
-        outline(c, bl, bt, bl + bodyW - 4 * u, bb, color, 2 * u);
-        fill.setColor(color);
-        c.drawRect(bl + bodyW - 4 * u, bt + 5 * u, bl + bodyW - 1 * u, bb - 5 * u, fill);
-        if (level > 0) {
-            float inner = (bodyW - 10 * u) * Math.min(100, level) / 100f;
-            c.drawRect(bl + 3 * u, bt + 3 * u, bl + 3 * u + inner, bb - 3 * u, fill);
-        }
-        drawText(c, t, bl + bodyW + 6 * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, color);
-        text.setTypeface(Typeface.DEFAULT);
-        if (ui.batteryPlugged()) {
-            // Charging: lightning bolt over the battery body
-            bolt.reset();
-            float cx = bl + (bodyW - 4 * u) / 2, cy = y + h / 2;
-            bolt.moveTo(cx + 2 * u, cy - 9 * u);
-            bolt.lineTo(cx - 5 * u, cy + 1 * u);
-            bolt.lineTo(cx, cy + 1 * u);
-            bolt.lineTo(cx - 2 * u, cy + 9 * u);
-            bolt.lineTo(cx + 5 * u, cy - 1 * u);
-            bolt.lineTo(cx, cy - 1 * u);
-            bolt.close();
-            fill.setColor(Theme.PANEL_SOLID);
-            stroke.setColor(Theme.PANEL_SOLID);
-            stroke.setStrokeWidth(3 * u);
-            c.drawPath(bolt, stroke);
-            fill.setColor(0xFFFFD040);
-            c.drawPath(bolt, fill);
+        float l = vw - pad + 6 * u;
+        if (mode != 2) {
+            float bodyW = 30 * u;
+            float w = bodyW + 6 * u + text.measureText(t) + 2 * pad;
+            float r = vw - pad;
+            l = r - w;
+            roundRect(c, l, y, r, y + h, Theme.PANEL);
+            // Battery body with fill level
+            float bl = l + pad;
+            float bt = y + h / 2 - 8 * u;
+            float bb = y + h / 2 + 8 * u;
+            int color = level >= 0 && level <= 15 ? Theme.WARN : ui.batteryPlugged() ? Theme.AF_OK : Theme.TEXT;
+            outline(c, bl, bt, bl + bodyW - 4 * u, bb, color, 2 * u);
+            fill.setColor(color);
+            c.drawRect(bl + bodyW - 4 * u, bt + 5 * u, bl + bodyW - 1 * u, bb - 5 * u, fill);
+            if (level > 0) {
+                float inner = (bodyW - 10 * u) * Math.min(100, level) / 100f;
+                c.drawRect(bl + 3 * u, bt + 3 * u, bl + 3 * u + inner, bb - 3 * u, fill);
+            }
+            drawText(c, t, bl + bodyW + 6 * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, color);
+            text.setTypeface(Typeface.DEFAULT);
+            if (ui.batteryPlugged()) {
+                // Charging: lightning bolt over the battery body
+                bolt.reset();
+                float cx = bl + (bodyW - 4 * u) / 2, cy = y + h / 2;
+                bolt.moveTo(cx + 2 * u, cy - 9 * u);
+                bolt.lineTo(cx - 5 * u, cy + 1 * u);
+                bolt.lineTo(cx, cy + 1 * u);
+                bolt.lineTo(cx - 2 * u, cy + 9 * u);
+                bolt.lineTo(cx + 5 * u, cy - 1 * u);
+                bolt.lineTo(cx, cy - 1 * u);
+                bolt.close();
+                fill.setColor(Theme.PANEL_SOLID);
+                stroke.setColor(Theme.PANEL_SOLID);
+                stroke.setStrokeWidth(3 * u);
+                c.drawPath(bolt, stroke);
+                fill.setColor(0xFFFFD040);
+                c.drawPath(bolt, fill);
+            }
         }
 
         float leftEdge = l;
@@ -591,7 +597,7 @@ public class OverlayView extends View {
             out.add("Lichter überbelichtet");
         }
         int bat = ui.batteryLevel();
-        if (bat >= 0 && bat <= 10 && !ui.batteryPlugged()) {
+        if (bat >= 0 && bat <= 10 && !ui.batteryPlugged() && ui.batteryMode() != 2) {
             out.add("Akku fast leer");
         }
         int shots = ui.remainingShots();

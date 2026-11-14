@@ -531,10 +531,23 @@ public class Ui {
     public FtpUpload ftp() { return host.ftp(); }
     public boolean debugEnabled() { return debugEnabled; }
 
-    public void setBattery(int level, boolean plugged) {
+    public void setBattery(int level, boolean plugged, int millivolts) {
         batteryLevel = level;
         batteryPlugged = plugged;
+        batteryMv = millivolts;
         host.redraw();
+    }
+
+    private int batteryMv = -1;
+
+    public int batteryMillivolts() { return batteryMv; }
+
+    /** Battery display: percent, voltage, or hidden (dummy battery on a mains adapter) */
+    public static final String[] BATTERY_MODES = {"Prozent", "Spannung", "ausblenden"};
+
+    public int batteryMode() {
+        int m = prefs.getInt("bat.mode", 0);
+        return m < 0 || m >= BATTERY_MODES.length ? 0 : m;
     }
 
     public int batteryLevel() { return batteryLevel; }
@@ -1743,6 +1756,20 @@ public class Ui {
                 nextDispView();
             }
         }));
+        Row bat = Row.action("Akkuanzeige", BATTERY_MODES[batteryMode()], new Runnable() {
+            @Override
+            public void run() {
+                prefs.edit().putInt("bat.mode", (batteryMode() + 1) % BATTERY_MODES.length).apply();
+            }
+        });
+        bat.stepper = new Stepper() {
+            @Override
+            public void step(int dir) {
+                prefs.edit().putInt("bat.mode", (batteryMode() + dir + BATTERY_MODES.length) % BATTERY_MODES.length).apply();
+            }
+        };
+        bat.stepperOnly = false;
+        out.add(bat);
         out.add(Row.header("Belichtungszeit"));
         out.add(longTimesRow());
         out.add(Row.header("Bedienung"));
@@ -2507,6 +2534,12 @@ public class Ui {
                     case DELETE:
                         if (sub == null && tab == TAB_MYMENU && rows.get(row).setting != null) {
                             removeFromMyMenu(rows.get(row).setting);
+                            return true;
+                        }
+                        if (rows.get(row).picker != null) {
+                            // Delete key empties a slot (Fn menu) without scrolling to "(leer)"
+                            rows.get(row).picker.picked(null);
+                            showMessage(rows.get(row).label + " geleert", false);
                             return true;
                         }
                         return false;

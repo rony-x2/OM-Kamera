@@ -49,10 +49,25 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 0);
             int level = scale > 0 ? intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / scale : -1;
             boolean plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
-            ui.setBattery(level, plugged);
+            int mv = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
+            // Raw values once per change of level or plugged state (to understand dummy batteries)
+            String raw = level + "/" + plugged;
+            if (!raw.equals(lastBatteryRaw)) {
+                lastBatteryRaw = raw;
+                StringBuilder sb = new StringBuilder("battery");
+                android.os.Bundle b = intent.getExtras();
+                if (b != null) {
+                    for (String k : b.keySet()) {
+                        sb.append(' ').append(k).append('=').append(b.get(k));
+                    }
+                }
+                Log.info(sb.toString());
+            }
+            ui.setBattery(level, plugged, mv);
         }
     };
 
+    private String lastBatteryRaw;
     private long lastActivity;
     /** Last auto power off state sent to the camera, null = not sent yet */
     private Boolean apoState;
