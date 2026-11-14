@@ -920,6 +920,13 @@ public class OverlayView extends View {
         float left = 16 * u + bw;
         float slot = (vw - left) / items.length;
         for (int i = 0; i < items.length; i++) {
+            // Large display: a value that does not fit its slot gets a smaller font
+            float size = Theme.TEXT_LARGE;
+            textSize(size);
+            while (size > 12 && text.measureText(items[i]) > slot - 8 * u) {
+                size -= 1;
+                textSize(size);
+            }
             float tw = text.measureText(items[i]);
             float x = left + slot * i + (slot - tw) / 2;
             drawText(c, items[i], x, getHeight() - 17 * u, Theme.TEXT);
