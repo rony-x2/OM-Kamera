@@ -495,7 +495,7 @@ public class McpServer {
         });
         StringBuilder b = new StringBuilder(dir.getPath()).append(" (").append(files.length).append(" Dateien)\n");
         for (int i = Math.max(0, files.length - 40); i < files.length; i++) {
-            b.append(files[i].getName()).append("  ").append(files[i].isDirectory() ? "Ordner" : files[i].length() / 1024 + " KB").append('\n');
+            b.append(files[i].getName()).append("  ").append(files[i].isDirectory() ? "Ordner" : files[i].length() < 1024 ? files[i].length() + " Bytes" : files[i].length() / 1024 + " KB").append('\n');
         }
         return b.toString();
     }

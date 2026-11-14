@@ -384,6 +384,7 @@ public class Sequencer {
         }
         int fps = get("iv.film", 25);
         film = null;
+        runNumber = -1;
         if (fps > 0) {
             try {
                 filmFile = nextFilmFile();
@@ -429,6 +430,7 @@ public class Sequencer {
     private long tlStartWall;
     private String tlPause;
     private boolean tlBulbOpen;
+    private boolean tlWinPaused;
     private long tlBulbEnd;
     private volatile boolean measuring;
     private String lastImage;
@@ -503,6 +505,7 @@ public class Sequencer {
         }
         int fps = get("tl.film", 0);
         film = null;
+        runNumber = -1;
         if (fps > 0) {
             try {
                 filmFile = nextFilmFile();
@@ -512,6 +515,8 @@ public class Sequencer {
                 Log.error("film", e);
             }
         }
+        tlWinPaused = false;
+        tlPause = null;
         tlOpenCsv();
         tlLog("start intervall " + iv + " s, bilder " + (total == 0 ? "unbegrenzt" : total) + ", holy grail "
                 + (grail == null ? "aus" : grail.direction > 0 ? "sonnenuntergang" : "sonnenaufgang") + ", bulb " + bulb);
@@ -532,7 +537,19 @@ public class Sequencer {
             if (tlBulbOpen && now >= tlBulbEnd) {
                 tlBulbOpen = false;
                 session.stopBulb();
+                tlLog("bulb zu nach " + get("tl.bulb", 0) + " s");
+                // The a6000 reports the picture when the shutter opens, not after closing:
+                // if no report follows, the shot counts as done a moment after closing
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (running == Mode.TIMELAPSE && waitingShot && !tlBulbOpen) {
+                            onShot();
+                        }
+                    }
+                }, 1000);
             }
+            boolean wasPaused = tlPause != null;
             tlPause = null;
             if (now < tlStartAt) {
                 tlPause = "Start in " + duration((int) ((tlStartAt - now + 999) / 1000));
@@ -542,7 +559,19 @@ public class Sequencer {
                 if (wait > 0) {
                     tlPause = wait == Long.MAX_VALUE ? "kein Wochentag gewählt" : "Pause bis Zeitfenster, " + duration((int) (wait / 1000));
                     nextAt = now + Math.min(wait, 60000);
+                    if (!tlWinPaused) {
+                        tlWinPaused = true;
+                        tlLog("pause, zeitfenster " + get("tl.wfrom", 8) + "–" + get("tl.wto", 18) + " uhr, weiter in " + duration((int) (wait / 1000)));
+                    }
                 }
+            }
+            if (tlPause == null && tlWinPaused) {
+                tlWinPaused = false;
+                tlLog("weiter, zeitfenster offen");
+            }
+            // After a pause (start time, window) the next picture is due at once
+            if (wasPaused && tlPause == null && nextAt > now) {
+                nextAt = now;
             }
             if (tlPause == null && now >= nextAt && !waitingShot && !tlBulbOpen && !measuring && (total == 0 || done < total)) {
                 boolean ok;
@@ -846,13 +875,10 @@ public class Sequencer {
             File dir = new File(Environment.getExternalStorageDirectory(), "OMKAMERA");
             //noinspection ResultOfMethodCallIgnored
             dir.mkdirs();
-            File f = null;
-            for (int i = 1; i < 10000; i++) {
-                f = new File(dir, String.format(Locale.US, "ZR%04d.LOG", i));
-                if (!f.exists()) {
-                    break;
-                }
+            if (runNumber < 0) {
+                runNumber = nextRunNumber();
             }
+            File f = new File(dir, String.format(Locale.US, "ZR%04d.LOG", runNumber));
             new java.io.FileOutputStream(f).close();
             tlCsv = f;
         } catch (Exception e) {
@@ -925,15 +951,28 @@ public class Sequencer {
         }
     };
 
-    private File nextFilmFile() {
+    /** Number for the next run: free for the film and the log, so both carry the same one */
+    private int runNumber = -1;
+
+    private int nextRunNumber() {
         File dir = new File(Environment.getExternalStorageDirectory(), "OMKAMERA");
         for (int i = 1; i < 10000; i++) {
-            File f = new File(dir, String.format(Locale.US, "ZR%04d.AVI", i));
-            if (!f.exists()) {
-                return f;
+            if (!new File(dir, String.format(Locale.US, "ZR%04d.AVI", i)).exists()
+                    && !new File(dir, String.format(Locale.US, "ZR%04d.LOG", i)).exists()) {
+                return i;
             }
         }
-        return new File(dir, "ZR9999.AVI");
+        return 9999;
+    }
+
+    private File nextFilmFile() {
+        File dir = new File(Environment.getExternalStorageDirectory(), "OMKAMERA");
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        if (runNumber < 0) {
+            runNumber = nextRunNumber();
+        }
+        return new File(dir, String.format(Locale.US, "ZR%04d.AVI", runNumber));
     }
 
     private String closeFilm() {
