@@ -8,10 +8,7 @@ import android.content.SharedPreferences;
  * (later also exported, imported and shared between cameras).
  */
 public class FnLayout {
-    /** Grid sizes to choose from (rows x columns); 2 x 6 is the camera's own Fn menu */
-    public static final int[][] SIZES = {{1, 4}, {1, 6}, {2, 4}, {2, 5}, {2, 6}, {2, 7}, {3, 5}, {3, 6}};
-    public static final int DEFAULT_SIZE = 4;
-    /** Cells kept in storage; a smaller grid keeps the assignment of the hidden cells */
+    /** Slots; empty ones are not shown, the grid arranges itself (up to 3 rows of 6) */
     public static final int MAX = 18;
     /** Marker for an empty cell */
     public static final String EMPTY = "";
@@ -21,7 +18,7 @@ public class FnLayout {
 
     private final SharedPreferences prefs;
     private final String[] cells = new String[MAX];
-    private int sizeIndex;
+
 
     public FnLayout(Context context) {
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -35,10 +32,7 @@ public class FnLayout {
             String id = parts != null && i < parts.length ? parts[i] : defaultCell(i);
             cells[i] = EMPTY.equals(id) || Settings.get(id) != null ? id : EMPTY;
         }
-        sizeIndex = prefs.getInt("size", DEFAULT_SIZE);
-        if (sizeIndex < 0 || sizeIndex >= SIZES.length) {
-            sizeIndex = DEFAULT_SIZE;
-        }
+
     }
 
     private void save() {
@@ -73,33 +67,47 @@ public class FnLayout {
         if (i < Settings.DEFAULT_FN.length) {
             return Settings.DEFAULT_FN[i];
         }
-        int j = i - Settings.DEFAULT_FN.length;
-        String id = j < Settings.MORE_FN.length ? Settings.MORE_FN[j] : EMPTY;
-        return Settings.get(id) != null ? id : EMPTY;
+        return EMPTY;
     }
 
+    /** Slots that hold a function, in their order: only these are shown */
+    public int[] visible() {
+        int n = 0;
+        for (int i = 0; i < MAX; i++) {
+            if (get(i) != null) {
+                n++;
+            }
+        }
+        int[] r = new int[n];
+        n = 0;
+        for (int i = 0; i < MAX; i++) {
+            if (get(i) != null) {
+                r[n++] = i;
+            }
+        }
+        return r;
+    }
+
+    /** The function at a position of the shown grid, or null */
+    public Setting visibleSetting(int pos) {
+        int[] v = visible();
+        return pos >= 0 && pos < v.length ? get(v[pos]) : null;
+    }
+
+    /** Rows of the shown grid: up to 6 cells per row, like the camera's Fn menu */
     public int rows() {
-        return SIZES[sizeIndex][0];
+        int n = visible().length;
+        return n <= 6 ? 1 : n <= 12 ? 2 : 3;
     }
 
+    /** Cells per row, spread evenly (7 functions: 4 + 3) */
     public int cols() {
-        return SIZES[sizeIndex][1];
+        int n = Math.max(1, visible().length);
+        return (n + rows() - 1) / rows();
     }
 
     public int size() {
-        return rows() * cols();
+        return visible().length;
     }
 
-    public int sizeIndex() {
-        return sizeIndex;
-    }
-
-    public static String sizeLabel(int i) {
-        return SIZES[i][0] + " × " + SIZES[i][1] + " (" + SIZES[i][0] * SIZES[i][1] + " Felder)";
-    }
-
-    public void setSizeIndex(int i) {
-        sizeIndex = (i + SIZES.length) % SIZES.length;
-        prefs.edit().putInt("size", sizeIndex).apply();
-    }
 }

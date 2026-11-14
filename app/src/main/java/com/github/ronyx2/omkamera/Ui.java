@@ -790,21 +790,48 @@ public class Ui {
 
     public int dispView() { return dispView; }
 
-    /** Sizes for the live view display and for menus (incl. Fn grid), as factors */
-    public static final float[] SCALES = {0.8f, 0.9f, 1.0f, 1.1f, 1.2f, 1.35f};
+    /** Sizes for the live view display and for menus (incl. Fn grid), in percent */
+    public static final int[] SCALES = {50, 60, 70, 80, 90, 100, 110, 120, 125, 130, 135, 140, 145, 150};
 
     private static String scaleLabel(int i) {
-        return Math.round(SCALES[i] * 100) + " %";
+        return SCALES[i] + " %";
     }
 
     private int scaleIndex(String key) {
-        int i = prefs.getInt(key, 2);
-        return i < 0 || i >= SCALES.length ? 2 : i;
+        int pct = prefs.getInt(key + ".pct", 100);
+        for (int i = 0; i < SCALES.length; i++) {
+            if (SCALES[i] == pct) {
+                return i;
+            }
+        }
+        return 5;
     }
 
-    public float hudScale() { return SCALES[scaleIndex("hud.scale")]; }
+    private void stepScale(String key, int dir) {
+        int i = (scaleIndex(key) + dir + SCALES.length) % SCALES.length;
+        prefs.edit().putInt(key + ".pct", SCALES[i]).apply();
+    }
 
-    public float menuScale() { return SCALES[scaleIndex("menu.scale")]; }
+    private Row scaleRow(String label, final String key) {
+        Row r = Row.action(label, scaleLabel(scaleIndex(key)), new Runnable() {
+            @Override
+            public void run() {
+                stepScale(key, 1);
+            }
+        });
+        r.stepper = new Stepper() {
+            @Override
+            public void step(int dir) {
+                stepScale(key, dir);
+            }
+        };
+        r.stepperOnly = false;
+        return r;
+    }
+
+    public float hudScale() { return SCALES[scaleIndex("hud.scale")] / 100f; }
+
+    public float menuScale() { return SCALES[scaleIndex("menu.scale")] / 100f; }
 
     /** Next view of the DISP button, with a short note which one */
     public void nextDispView() {
@@ -1708,18 +1735,8 @@ public class Ui {
     private void setupRows(List<Row> out) {
         clockRows(out);
         out.add(Row.header("Größe der Anzeige"));
-        out.add(Row.action("Live-Bild-Anzeige", scaleLabel(scaleIndex("hud.scale")), new Runnable() {
-            @Override
-            public void run() {
-                prefs.edit().putInt("hud.scale", (scaleIndex("hud.scale") + 1) % SCALES.length).apply();
-            }
-        }));
-        out.add(Row.action("Menü und Fn-Raster", scaleLabel(scaleIndex("menu.scale")), new Runnable() {
-            @Override
-            public void run() {
-                prefs.edit().putInt("menu.scale", (scaleIndex("menu.scale") + 1) % SCALES.length).apply();
-            }
-        }));
+        out.add(scaleRow("Live-Bild-Anzeige", "hud.scale"));
+        out.add(scaleRow("Menü und Fn-Menü", "menu.scale"));
         out.add(Row.action("Ansicht (Taste DISP)", DISP_VIEWS[dispView], new Runnable() {
             @Override
             public void run() {
@@ -1756,26 +1773,19 @@ public class Ui {
                 return r;
             }
         }));
-        out.add(Row.sub("Fn-Raster einrichten", "", new Sub() {
+        out.add(Row.sub("Fn-Menü einrichten", fn.size() + " belegt", new Sub() {
             @Override
             public String title() {
-                return "Fn-Raster";
+                return "Fn-Menü (leere Plätze werden ausgeblendet)";
             }
 
             @Override
             public List<Row> rows() {
                 List<Row> r = new ArrayList<Row>();
-                r.add(Row.action("Größe", FnLayout.sizeLabel(fn.sizeIndex()), new Runnable() {
-                    @Override
-                    public void run() {
-                        fn.setSizeIndex(fn.sizeIndex() + 1);
-                        fnIndex = 0;
-                    }
-                }));
-                for (int i = 0; i < fn.size(); i++) {
+                for (int i = 0; i < FnLayout.MAX; i++) {
                     final int slot = i;
                     Setting cur = fn.get(i);
-                    String pos = "Reihe " + (i / fn.cols() + 1) + ", Feld " + (i % fn.cols() + 1);
+                    String pos = "Platz " + (i + 1);
                     r.add(Row.pick(pos, cur != null ? cur.label : "(leer)", new Picker() {
                         @Override
                         public Setting current() {
@@ -1792,7 +1802,8 @@ public class Ui {
                     @Override
                     public void run() {
                         fn.reset();
-                        showMessage("Fn-Raster zurückgesetzt", false);
+                        fnIndex = 0;
+                        showMessage("Fn-Menü zurückgesetzt", false);
                     }
                 }));
                 return r;
@@ -2045,7 +2056,7 @@ public class Ui {
         }
         switch (key) {
             case FN:
-                state = State.FN;
+                openFn();
                 return true;
             case MENU:
                 openMenu();
@@ -2070,26 +2081,33 @@ public class Ui {
     }
 
     private boolean onFnKey(Keys.Key key) {
-        int cols = fn.cols(), rowsN = fn.rows();
-        if (fnIndex >= fn.size()) {
+        int n = fn.size();
+        if (n == 0) {
+            state = State.LIVE;
+            return true;
+        }
+        int cols = fn.cols();
+        if (fnIndex >= n) {
             fnIndex = 0;
         }
-        int r = fnIndex / cols;
-        int c = fnIndex % cols;
         switch (key) {
-            case LEFT: c = (c + cols - 1) % cols; break;
-            case RIGHT: c = (c + 1) % cols; break;
-            case UP: r = (r + rowsN - 1) % rowsN; break;
-            case DOWN: r = (r + 1) % rowsN; break;
+            case LEFT: fnIndex = (fnIndex + n - 1) % n; return true;
+            case RIGHT: fnIndex = (fnIndex + 1) % n; return true;
+            case UP:
+                fnIndex = fnIndex - cols >= 0 ? fnIndex - cols : Math.min(n - 1, fnIndex + cols * (fn.rows() - 1));
+                return true;
+            case DOWN:
+                fnIndex = fnIndex + cols < n ? fnIndex + cols : fnIndex % cols;
+                return true;
             case ENTER:
-                if (fn.get(fnIndex) != null) {
+                if (fn.visibleSetting(fnIndex) != null) {
                     state = State.FN_EDIT;
                 }
                 return true;
             case WHEEL_CW: case WHEEL_CCW: case DIAL1_CW: case DIAL1_CCW:
             case DIAL2_CW: case DIAL2_CCW: case DIAL3_CW: case DIAL3_CCW:
                 // Like on the camera: a dial changes the selected cell directly
-                stepSetting(fn.get(fnIndex), Keys.direction(key));
+                stepSetting(fn.visibleSetting(fnIndex), Keys.direction(key));
                 return true;
             case FN: case MENU: case BACK:
                 state = State.LIVE;
@@ -2097,8 +2115,15 @@ public class Ui {
             default:
                 return false;
         }
-        fnIndex = r * cols + c;
-        return true;
+    }
+
+    /** Opens the Fn menu; with no function in it a hint where to set it up */
+    private void openFn() {
+        if (fn.size() == 0) {
+            showMessage("Fn-Menü ist leer: unter Einstellung → Fn-Menü einrichten belegen", true);
+            return;
+        }
+        state = State.FN;
     }
 
     private boolean onFnEditKey(Keys.Key key) {
@@ -2106,7 +2131,7 @@ public class Ui {
         if (key == Keys.Key.LEFT) dir = -1;
         if (key == Keys.Key.RIGHT) dir = 1;
         if (dir != 0) {
-            stepSetting(fn.get(fnIndex), dir);
+            stepSetting(fn.visibleSetting(fnIndex), dir);
             return true;
         }
         switch (key) {
@@ -2175,7 +2200,7 @@ public class Ui {
                 return true;
             }
             case FN_MENU:
-                state = State.FN;
+                openFn();
                 return true;
             case MY_MENU:
                 openMenu();

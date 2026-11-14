@@ -53,6 +53,7 @@ public class OverlayView extends View {
         // Menus and the Fn grid have their own size, the live view display another one
         Ui.State st = ui.state();
         hudU = Theme.unit(getHeight()) * ui.hudScale();
+        statusBottom = 0;
         menuU = Theme.unit(getHeight()) * ui.menuScale();
         u = st == Ui.State.MENU ? menuU : hudU;
         pixelAspect = ui.session().pixelAspect(getWidth(), getHeight());
@@ -127,42 +128,68 @@ public class OverlayView extends View {
     private static final String[] CHIP_SETTINGS = {"drive", "flash", "afmf", "afmode", "afarea", "wb", "metering", "quality"};
 
     /** Status line at the top: an icon where one exists, otherwise the value as text. */
+    /** Lower edge of the status chips (one or two rows), for what is shown below them */
+    private float statusBottom;
+
+    /** Top edge for chips and messages below the status line */
+    private float belowStatus() {
+        float one = Theme.PAD * u + Theme.ICON * u + 4 * u;
+        return Math.max(one, statusBottom) + 8 * u;
+    }
+
     private void drawStatusChips(Canvas c, CameraSession.Params p) {
-        float x = Theme.PAD * u;
-        float y = Theme.PAD * u;
+        float pad = Theme.PAD * u;
+        float x = pad;
+        float y = pad;
         float h = Theme.ICON * u + 4 * u;
+        float limit = statusLeft - 6 * u;
+        int rowsUsed = 1;
         textSize(Theme.TEXT_SMALL);
-        for (String id : CHIP_SETTINGS) {
-            Setting s = Settings.get(id);
-            if (s == null || !s.isAvailable(p)) {
-                continue;
+        java.util.List<String> chips = new java.util.ArrayList<String>(java.util.Arrays.asList(CHIP_SETTINGS));
+        chips.add("_focal");
+        for (String id : chips) {
+            String value = null, t;
+            boolean icon = false;
+            if ("_focal".equals(id)) {
+                // Current focal length of the lens (follows the zoom ring)
+                float focal = ui.session().focalLength();
+                if (focal <= 0) {
+                    continue;
+                }
+                t = Math.round(focal) + " mm";
+            } else {
+                Setting s = Settings.get(id);
+                if (s == null || !s.isAvailable(p)) {
+                    continue;
+                }
+                value = s.safeGet(p);
+                t = s.currentText(p);
+                icon = hasIcon(id, value);
             }
-            String value = s.safeGet(p);
-            String t = s.currentText(p);
-            float w = hasIcon(id, value) ? h : text.measureText(t) + 2 * Theme.PAD * u;
-            if (x + w > statusLeft - 6 * u) {
-                break;
+            text.setTypeface(Typeface.DEFAULT_BOLD);
+            float w = icon ? h : text.measureText(t) + 2 * pad;
+            if (x + w > limit) {
+                // Larger display: what does not fit goes into a second row (full width there)
+                if (rowsUsed == 2) {
+                    break;
+                }
+                rowsUsed = 2;
+                x = pad;
+                y += h + 6 * u;
+                limit = vw - pad;
+                if (x + w > limit) {
+                    break;
+                }
             }
             roundRect(c, x, y, x + w, y + h, Theme.PANEL);
-            if (!Icons.draw(c, id, value, x + w / 2, y + h / 2, Theme.ICON * u, Theme.TEXT)) {
-                text.setTypeface(Typeface.DEFAULT_BOLD);
-                drawText(c, t, x + Theme.PAD * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TEXT);
-                text.setTypeface(Typeface.DEFAULT);
-            }
-            x += w + 6 * u;
-        }
-        // Current focal length of the lens (follows the zoom ring)
-        float focal = ui.session().focalLength();
-        if (focal > 0) {
-            String t = Math.round(focal) + " mm";
-            text.setTypeface(Typeface.DEFAULT_BOLD);
-            float w = text.measureText(t) + 2 * Theme.PAD * u;
-            if (x + w <= statusLeft - 6 * u) {
-                roundRect(c, x, y, x + w, y + h, Theme.PANEL);
-                drawText(c, t, x + Theme.PAD * u, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TEXT);
+            if (!icon || !Icons.draw(c, id, value, x + w / 2, y + h / 2, Theme.ICON * u, Theme.TEXT)) {
+                drawText(c, t, x + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.TEXT);
             }
             text.setTypeface(Typeface.DEFAULT);
+            x += w + 6 * u;
         }
+        text.setTypeface(Typeface.DEFAULT);
+        statusBottom = y + h;
     }
 
     /** Battery at the top right; WLAN marker left of it while WLAN is switched on in the app. */
@@ -674,7 +701,7 @@ public class OverlayView extends View {
                 String h = q.mode().label;
                 textSize(Theme.TEXT_SMALL);
                 float w = text.measureText(h) + 24 * u;
-                float top = Theme.PAD * u + Theme.ICON * u + 12 * u;
+                float top = belowStatus();
                 roundRect(c, (vw - w) / 2, top, (vw + w) / 2, top + 28 * u, Theme.PANEL);
                 drawText(c, h, (vw - w) / 2 + 12 * u, top + 20 * u, Theme.ACCENT);
             }
@@ -683,7 +710,7 @@ public class OverlayView extends View {
         textSize(Theme.TEXT_NORMAL);
         text.setTypeface(Typeface.DEFAULT_BOLD);
         float w = text.measureText(t) + 40 * u;
-        float top = Theme.PAD * u + Theme.ICON * u + 12 * u;
+        float top = belowStatus();
         roundRect(c, (vw - w) / 2, top, (vw + w) / 2, top + 38 * u, Theme.PANEL_SOLID);
         // Pulsing dot like the recording lamp
         int alpha = 140 + (int) (115 * Math.abs(Math.sin(android.os.SystemClock.uptimeMillis() / 400.0)));
@@ -918,16 +945,20 @@ public class OverlayView extends View {
         // Above the exposure line, which has the live view size
         float bottom = getHeight() - Theme.BAR * hudU - pad;
         FnLayout fl = ui.fnLayout();
+        int n = fl.size();
         int rows = fl.rows(), cols = fl.cols();
         float top = bottom - rows * cellH - (rows - 1) * gap;
-        float cellW = (vw - 2 * pad - (cols - 1) * gap) / cols;
+        // Cells as wide as in a row of six; fewer functions stand centred
+        float cellW = (vw - 2 * pad - 5 * gap) / 6;
 
-        for (int i = 0; i < fl.size(); i++) {
+        for (int i = 0; i < n; i++) {
             int r = i / cols;
             int col = i % cols;
-            float l = pad + col * (cellW + gap);
+            int inRow = Math.min(cols, n - r * cols);
+            float rowW = inRow * cellW + (inRow - 1) * gap;
+            float l = (vw - rowW) / 2 + col * (cellW + gap);
             float t = top + r * (cellH + gap);
-            Setting s = ui.fnLayout().get(i);
+            Setting s = fl.visibleSetting(i);
             boolean available = s != null && s.isAvailable(p);
             boolean selected = i == ui.fnIndex();
             boolean editing = selected && ui.state() == Ui.State.FN_EDIT;
@@ -957,7 +988,7 @@ public class OverlayView extends View {
 
         // Value strip above the grid while editing
         if (ui.state() == Ui.State.FN_EDIT) {
-            Setting s = ui.fnLayout().get(ui.fnIndex());
+            Setting s = ui.fnLayout().visibleSetting(ui.fnIndex());
             if (s != null) {
                 drawValueStrip(c, s, p, pad, top - 60 * u - gap, vw - pad, top - gap);
             }
@@ -1173,7 +1204,7 @@ public class OverlayView extends View {
         textSize(Theme.TEXT_NORMAL);
         float w = text.measureText(m) + 30 * u;
         float l = (vw - w) / 2;
-        float t = 50 * u;
+        float t = ui.state() == Ui.State.LIVE ? Math.max(50 * u, belowStatus()) : 50 * u;
         roundRect(c, l, t, l + w, t + 36 * u, ui.messageWarn() ? 0xEE5A2018 : Theme.PANEL_SOLID);
         drawText(c, m, l + 15 * u, t + 24 * u, ui.messageWarn() ? 0xFFFFD0C8 : Theme.TEXT);
         // Hide the message again
