@@ -327,6 +327,11 @@ public class McpServer {
             if (kind == Processor.Kind.PNG && a.has("bit")) {
                 host.ui().setPngBits(a.optInt("bit", 16));
             }
+            if (kind == Processor.Kind.HEIC || kind == Processor.Kind.AVIF) {
+                int size = a.optInt("mp", 0);
+                host.ui().setHeif(a.optInt("qualitaet", 0), size == 24 ? 0 : size == 12 ? 1 : size == 6 ? 2 : -1,
+                        a.optInt("kerne", 0));
+            }
             return text(pr.add(kind, files));
         }
         if (name.equals("rawtest")) {

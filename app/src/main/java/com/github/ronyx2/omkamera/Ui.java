@@ -272,6 +272,34 @@ public class Ui {
 
     public void setPngBits(int bits) { prefs.edit().putInt("pngbits", bits == 8 ? 8 : 16).apply(); }
 
+    // ---- HEIC/AVIF (proof of concept) ----
+
+    public static final int[] HEIF_QUALITIES = {50, 60, 70, 80, 90};
+    public static final String[] HEIF_SIZES = {"24 MP (voll)", "12 MP", "6 MP"};
+    private static final double[] HEIF_SCALES = {1.0, 0.7071, 0.5};
+
+    public int heifQuality() { return prefs.getInt("heif.q", 80); }
+
+    public int heifSizeIndex() { return Math.max(0, Math.min(2, prefs.getInt("heif.size", 0))); }
+
+    public double heifScale() { return HEIF_SCALES[heifSizeIndex()]; }
+
+    public int avifThreads() { return prefs.getInt("heif.avifthreads", 2) >= 4 ? 4 : 2; }
+
+    public void setHeif(int quality, int sizeIndex, int avifThreads) {
+        SharedPreferences.Editor e = prefs.edit();
+        if (quality > 0) {
+            e.putInt("heif.q", quality);
+        }
+        if (sizeIndex >= 0) {
+            e.putInt("heif.size", Math.min(2, sizeIndex));
+        }
+        if (avifThreads > 0) {
+            e.putInt("heif.avifthreads", avifThreads >= 4 ? 4 : 2);
+        }
+        e.apply();
+    }
+
     public Sequencer sequencer() { return sequencer; }
     /** Setting changed by a custom key (state QUICK) */
     private Setting quick;
@@ -838,15 +866,64 @@ public class Ui {
                 List<Row> r = new ArrayList<Row>();
                 List<java.io.File> last = Processor.newest(1);
                 r.add(Row.info("Datei", last.isEmpty() ? "keine ARW auf der Karte" : last.get(0).getName()));
-                for (final Processor.Kind k : new Processor.Kind[]{Processor.Kind.DNG, Processor.Kind.TIFF, Processor.Kind.PNG,
-                        Processor.Kind.HEIC, Processor.Kind.AVIF}) {
+                for (final Processor.Kind k : new Processor.Kind[]{Processor.Kind.DNG, Processor.Kind.TIFF, Processor.Kind.PNG}) {
                     String lbl = k == Processor.Kind.PNG ? "PNG " + pngBits() + " Bit" : k.label;
                     String hint = k == Processor.Kind.DNG ? "verlustfrei" : k == Processor.Kind.HEIC || k == Processor.Kind.AVIF
                             ? "8 Bit, dauert Minuten" : "entwickelt, sRGB";
                     r.add(Row.action("als " + lbl, hint, new Runnable() {
                         @Override
                         public void run() {
-                            showMessage(processor.add(k, Processor.newest(1)), false);
+                            String msg = processor.add(k, Processor.newest(1));
+                            showMessage(msg, msg.startsWith("Achtung"));
+                        }
+                    }));
+                }
+                return r;
+            }
+        }));
+        out.add(Row.sub("HEIC/AVIF (Versuch)", heifQuality() + " % · " + HEIF_SIZES[heifSizeIndex()], new Sub() {
+            @Override
+            public String title() {
+                return "HEIC/AVIF (Versuch)";
+            }
+
+            @Override
+            public List<Row> rows() {
+                List<Row> r = new ArrayList<Row>();
+                r.add(Row.action("Qualität", heifQuality() + " %", new Runnable() {
+                    @Override
+                    public void run() {
+                        int q = heifQuality(), n = HEIF_QUALITIES[0];
+                        for (int v : HEIF_QUALITIES) {
+                            if (v > q) {
+                                n = v;
+                                break;
+                            }
+                        }
+                        setHeif(n, -1, 0);
+                    }
+                }));
+                r.add(Row.action("Bildgröße", HEIF_SIZES[heifSizeIndex()], new Runnable() {
+                    @Override
+                    public void run() {
+                        setHeif(0, (heifSizeIndex() + 1) % HEIF_SIZES.length, 0);
+                    }
+                }));
+                r.add(Row.action("Kerne für AVIF", avifThreads() == 4 ? "4 (mehr Speicher)" : "2", new Runnable() {
+                    @Override
+                    public void run() {
+                        setHeif(0, -1, avifThreads() == 4 ? 2 : 4);
+                    }
+                }));
+                r.add(Row.info("Dauer etwa", "HEIC " + processor.estimateMinutes(Processor.Kind.HEIC) + " min, AVIF "
+                        + processor.estimateMinutes(Processor.Kind.AVIF) + " min"));
+                for (final Processor.Kind k : new Processor.Kind[]{Processor.Kind.HEIC, Processor.Kind.AVIF}) {
+                    r.add(Row.action("Letztes RAW als " + (k == Processor.Kind.HEIC ? "HEIC" : "AVIF"),
+                            k == Processor.Kind.HEIC ? ".HIF" : ".AVF", new Runnable() {
+                        @Override
+                        public void run() {
+                            String msg = processor.add(k, Processor.newest(1));
+                            showMessage(msg, msg.startsWith("Achtung"));
                         }
                     }));
                 }

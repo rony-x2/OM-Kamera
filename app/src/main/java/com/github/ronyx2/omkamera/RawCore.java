@@ -69,6 +69,9 @@ public final class RawCore {
 
     public static native void heifFree(long h);
 
+    /** Bilinear row for downscaling: rows a and b (8 bit RGB), fy weight of b 0..256 */
+    public static native void scaleRow(byte[] a, byte[] b, int fy, int wIn, int wOut, byte[] out);
+
     /** True if the library is loaded; false on the PC tests without it */
     public static boolean on() {
         return AVAILABLE && RawFile.useNative;

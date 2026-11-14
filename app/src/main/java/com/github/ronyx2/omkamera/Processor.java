@@ -31,6 +31,15 @@ public class Processor {
 
         /** Bits per channel for PNG: 16 or 8 */
         int pngBits();
+
+        /** HEIC/AVIF: quality 1..100, scale (1, 0.7071, 0.5), threads for AVIF */
+        int heifQuality();
+
+        double heifScale();
+
+        int avifThreads();
+
+        int batteryLevel();
     }
 
     public enum Kind {
@@ -153,8 +162,29 @@ public class Processor {
             worker.setPriority(Thread.MIN_PRIORITY);
             worker.start();
         }
-        return kind.label + ": " + (files.size() == 1 ? files.get(0).getName() : files.size() + " Bilder")
+        String msg = kind.label + ": " + (files.size() == 1 ? files.get(0).getName() : files.size() + " Bilder")
                 + " eingereiht" + (queue.size() > 1 || current != null ? " (Warteschlange " + queue.size() + ")" : "");
+        if (kind == Kind.HEIC || kind == Kind.AVIF) {
+            int bat = host.batteryLevel();
+            msg = "Achtung, Versuch: " + kind.label.replace(" (Versuch)", "") + " dauert etwa "
+                    + estimateMinutes(kind) + " min" + (bat >= 0 && bat < 40 ? ", Akku nur " + bat + " %" : "")
+                    + " – Kamera bleibt so lange an";
+        }
+        return msg;
+    }
+
+    /**
+     * Rough duration on the ILCE-6000 from the measurements (24 MP, quality 80): HEIC 12 min
+     * with 4 threads, AVIF 10.5 min with 2 threads; about 1.5 min of it is development.
+     */
+    public int estimateMinutes(Kind kind) {
+        double base = kind == Kind.HEIC ? 12 : 10.5;
+        double enc = base - 1.5;
+        if (kind == Kind.AVIF && host.avifThreads() >= 4) {
+            enc *= 0.6;
+        }
+        double s = host.heifScale();
+        return (int) Math.max(1, Math.round(1.5 + enc * s * s));
     }
 
     public synchronized void cancelAll() {
@@ -247,10 +277,10 @@ public class Processor {
                     RawTools.writePng(out, src, host.pngBits(), lens, sw, p);
                     break;
                 case HEIC:
-                    Heif.write(out, src, Heif.HEIC, 80, 4, lens, sw, p);
+                    Heif.write(out, src, Heif.HEIC, host.heifQuality(), 4, host.heifScale(), lens, sw, p);
                     break;
                 case AVIF:
-                    Heif.write(out, src, Heif.AVIF, 80, 2, lens, sw, p);
+                    Heif.write(out, src, Heif.AVIF, host.heifQuality(), host.avifThreads(), host.heifScale(), lens, sw, p);
                     break;
                 default:
                     RawTools.writeDng(out, src, lens, sw, j.kind.combines() ? null : first.getName(), p);

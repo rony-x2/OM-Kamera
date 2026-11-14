@@ -33,12 +33,21 @@ public final class Heif {
 
     public static void write(File out, RawTools.Rows src, final int format, int quality, int threads,
                              TiffOut.Lens lens, String software, RawTools.Progress p) throws IOException {
+        write(out, src, format, quality, threads, 1.0, lens, software, p);
+    }
+
+    /** scale 1 = full size, 0.7071 = half the pixels (12 MP), 0.5 = a quarter (6 MP) */
+    public static void write(File out, RawTools.Rows src, final int format, int quality, int threads, double scale,
+                             TiffOut.Lens lens, String software, RawTools.Progress p) throws IOException {
         load();
         RawFile m = src.meta();
-        final int w = m.cropW, h = m.cropH;
+        final int wIn = m.cropW, hIn = m.cropH;
+        final boolean scaled = scale < 0.999;
+        final int w = scaled ? (int) Math.round(wIn * scale) & ~1 : wIn;
+        final int h = scaled ? (int) Math.round(hIn * scale) & ~1 : hIn;
         final int cols = (w + TILE - 1) / TILE, rows = (h + TILE - 1) / TILE;
         final int n = cols * rows;
-        byte[] exif = TiffOut.exifBlock(m, lens, software);
+        byte[] exif = TiffOut.exifBlock(m, lens, software, w, h);
 
         // Item IDs: 1..n tiles, n+1 grid, n+2 Exif
         final int gridId = n + 1, exifId = n + 2;
@@ -74,8 +83,7 @@ public final class Heif {
 
             final int[] band = {0, 0};
             final int stride = w * 3;
-            final IOException[] fail = {null};
-            RawTools.develop(src, 3, new RawTools.ByteSink() {
+            final RawTools.ByteSink toBand = new RawTools.ByteSink() {
                 @Override
                 public void write(byte[] b, int l) throws IOException {
                     int r = l / stride;
@@ -94,7 +102,8 @@ public final class Heif {
                         }
                     }
                 }
-            }, p);
+            };
+            RawTools.develop(src, 3, scaled ? new Scaler(wIn, hIn, w, h, toBand) : toBand, p);
             if (band[1] > 0) {
                 flush(f, handle, format, band[0], band[1], cols, off, len);
             }
@@ -137,6 +146,50 @@ public final class Heif {
             off[id] = f.getFilePointer();
             len[id] = t.length;
             f.write(t);
+        }
+    }
+
+    /**
+     * Downscales developed rows (8 bit RGB) on the fly: output row k lies at source position
+     * (k + 0.5) / s - 0.5 and is interpolated from the two neighbouring source rows.
+     */
+    static final class Scaler implements RawTools.ByteSink {
+        private final int wIn, hIn, wOut, hOut;
+        private final RawTools.ByteSink sink;
+        private byte[] prev, cur;
+        private final byte[] outRow;
+        private int y = -1, k = 0;
+
+        Scaler(int wIn, int hIn, int wOut, int hOut, RawTools.ByteSink sink) {
+            this.wIn = wIn;
+            this.hIn = hIn;
+            this.wOut = wOut;
+            this.hOut = hOut;
+            this.sink = sink;
+            outRow = new byte[wOut * 3];
+        }
+
+        private double srcY(int row) {
+            return Math.max(0, (row + 0.5) * hIn / hOut - 0.5);
+        }
+
+        @Override
+        public void write(byte[] b, int len) throws IOException {
+            int stride = wIn * 3;
+            for (int off = 0; off < len; off += stride) {
+                prev = cur;
+                cur = java.util.Arrays.copyOfRange(b, off, off + stride);
+                y++;
+                // Output rows between source rows y-1 and y
+                while (k < hOut && (srcY(k) <= y || y == hIn - 1)) {
+                    double sy = srcY(k);
+                    byte[] a = prev != null && sy < y ? prev : cur;
+                    int fy = prev != null && sy < y ? (int) Math.round((sy - (y - 1)) * 256) : 0;
+                    RawCore.scaleRow(a, cur, Math.max(0, Math.min(256, fy)), wIn, wOut, outRow);
+                    sink.write(outRow, outRow.length);
+                    k++;
+                }
+            }
         }
     }
 

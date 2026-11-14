@@ -260,8 +260,17 @@ public class TiffOut {
 
     /** A standalone EXIF block (TIFF header + directories) for the PNG eXIf chunk */
     public static byte[] exifBlock(RawFile src, Lens lens, String software) {
+        return exifBlock(src, lens, software, 0, 0);
+    }
+
+    /** As above; width and height > 0 replace the pixel size in the EXIF data (scaled output) */
+    public static byte[] exifBlock(RawFile src, Lens lens, String software, int width, int height) {
         Dir root = new Dir();
-        metadata(src, root, lens, software);
+        Dir exif = metadata(src, root, lens, software);
+        if (width > 0 && height > 0) {
+            exif.longs(0xa002, width);
+            exif.longs(0xa003, height);
+        }
         return layout(root, 0);
     }
 

@@ -534,3 +534,43 @@ Java_com_github_ronyx2_omkamera_RawCore_deflate(JNIEnv *env, jclass cls, jbyteAr
     (*env)->SetLongArrayRegion(env, jadler, 0, 1, &ad);
     return err ? err : total;
 }
+
+/* ---- downscaling rows for HEIC/AVIF: bilinear between two source rows ---- */
+
+/*
+ * a, b: neighbouring source rows (8 bit RGB, wIn pixels), fy: weight of b (0..256),
+ * out: wOut pixels. Horizontal positions like the vertical ones: (x + 0.5) / s - 0.5.
+ */
+JNIEXPORT void JNICALL
+Java_com_github_ronyx2_omkamera_RawCore_scaleRow(JNIEnv *env, jclass cls, jbyteArray ja, jbyteArray jb,
+        jint fy, jint wIn, jint wOut, jbyteArray jout)
+{
+    unsigned char *a = (*env)->GetPrimitiveArrayCritical(env, ja, NULL);
+    unsigned char *b = (*env)->GetPrimitiveArrayCritical(env, jb, NULL);
+    unsigned char *o = (*env)->GetPrimitiveArrayCritical(env, jout, NULL);
+    int x, c;
+    long long step = ((long long) wIn << 16) / wOut;
+    for (x = 0; x < wOut; x++) {
+        long long sx = ((long long) x << 16) * wIn / wOut + step / 2 - 32768;
+        int x0, fx;
+        if (sx < 0) {
+            sx = 0;
+        }
+        x0 = (int) (sx >> 16);
+        fx = (int) ((sx >> 8) & 0xff);
+        if (x0 >= wIn - 1) {
+            x0 = wIn - 2;
+            fx = 256;
+        }
+        for (c = 0; c < 3; c++) {
+            int p00 = a[x0 * 3 + c], p01 = a[x0 * 3 + 3 + c];
+            int p10 = b[x0 * 3 + c], p11 = b[x0 * 3 + 3 + c];
+            int top = p00 * (256 - fx) + p01 * fx;
+            int bot = p10 * (256 - fx) + p11 * fx;
+            o[x * 3 + c] = (unsigned char) ((top * (256 - fy) + bot * fy + 32768) >> 16);
+        }
+    }
+    (*env)->ReleasePrimitiveArrayCritical(env, jout, o, 0);
+    (*env)->ReleasePrimitiveArrayCritical(env, jb, b, JNI_ABORT);
+    (*env)->ReleasePrimitiveArrayCritical(env, ja, a, JNI_ABORT);
+}

@@ -226,6 +226,26 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             public int pngBits() {
                 return ui.pngBits();
             }
+
+            @Override
+            public int heifQuality() {
+                return ui.heifQuality();
+            }
+
+            @Override
+            public double heifScale() {
+                return ui.heifScale();
+            }
+
+            @Override
+            public int avifThreads() {
+                return ui.avifThreads();
+            }
+
+            @Override
+            public int batteryLevel() {
+                return ui.batteryLevel();
+            }
         });
         ui.setProcessor(processor);
         autoIso = new AutoIso(session, getSharedPreferences("ui", MODE_PRIVATE), new AutoIso.Gate() {
