@@ -21,6 +21,8 @@ public final class HardwareProbe {
         Map<String, String> out = new LinkedHashMap<String, String>();
         Runtime rt = Runtime.getRuntime();
         out.put("heap.max", (rt.maxMemory() / (1024 * 1024)) + " MB");
+        out.put("cpu.abi", android.os.Build.CPU_ABI + (android.os.Build.CPU_ABI2 != null ? ", " + android.os.Build.CPU_ABI2 : ""));
+        out.put("cpu.info", cpuInfo());
         out.put("BitmapRegionDecoder", has("android.graphics.BitmapRegionDecoder"));
         out.put("JpegExporter", has("com.sony.scalar.graphics.JpegExporter"));
         out.put("OptimizedImageFactory", has("com.sony.scalar.graphics.OptimizedImageFactory"));
@@ -115,5 +117,35 @@ public final class HardwareProbe {
                 }
             }
         }
+    }
+
+    /** Processor, architecture and features from /proc/cpuinfo (read only) */
+    private static String cpuInfo() {
+        StringBuilder sb = new StringBuilder();
+        java.io.BufferedReader r = null;
+        try {
+            r = new java.io.BufferedReader(new java.io.FileReader("/proc/cpuinfo"));
+            String l;
+            while ((l = r.readLine()) != null) {
+                String k = l.split(":")[0].trim();
+                if (k.equals("Processor") || k.equals("model name") || k.equals("CPU architecture")
+                        || k.equals("Features") || k.equals("CPU part") || k.equals("BogoMIPS") || k.equals("Hardware")) {
+                    String v = l.substring(l.indexOf(':') + 1).trim();
+                    if (sb.indexOf(k + "=" + v) < 0) {
+                        sb.append(sb.length() > 0 ? "; " : "").append(k).append('=').append(v);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            sb.append("nicht lesbar");
+        } finally {
+            if (r != null) {
+                try {
+                    r.close();
+                } catch (java.io.IOException ignored) {
+                }
+            }
+        }
+        return sb.toString();
     }
 }

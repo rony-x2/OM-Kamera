@@ -2,6 +2,8 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_MODULE := rawcore
 LOCAL_SRC_FILES := rawcore.c
+# ARM instead of Thumb-1: all registers and conditional execution for the bit work of decoding
+LOCAL_ARM_MODE := arm
 LOCAL_LDLIBS := -lz
 LOCAL_CFLAGS := -O3 -Wall -fno-strict-aliasing -fno-stack-protector
 
