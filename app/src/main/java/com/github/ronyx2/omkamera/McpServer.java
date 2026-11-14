@@ -153,27 +153,56 @@ public class McpServer {
         if (name.equals("belichtung")) {
             final String was = a.optString("was");
             final int steps = Math.max(-10, Math.min(10, a.optInt("schritte", 0)));
-            return text(host.onMain(new Callable<String>() {
-                @Override
-                public String call() {
-                    int dir = steps < 0 ? -1 : 1;
-                    for (int i = 0; i < Math.abs(steps); i++) {
+            if (!was.equals("zeit") && !was.equals("blende") && !was.equals("shift") && !was.equals("ev")) {
+                return text("unbekannt: " + was);
+            }
+            final int dir = steps < 0 ? -1 : 1;
+            // One detent at a time, waiting for the camera to report the new value:
+            // quick successive calls are merged by the camera and steps get lost
+            for (int i = 0; i < Math.abs(steps); i++) {
+                final String before = host.onMain(new Callable<String>() {
+                    @Override
+                    public String call() {
+                        String v = session.shutterText() + " " + session.apertureText();
                         if (was.equals("zeit")) {
                             session.adjustShutterSpeed(dir);
                         } else if (was.equals("blende")) {
                             session.adjustAperture(dir);
                         } else if (was.equals("shift")) {
                             session.adjustProgramShift(dir);
-                        } else if (was.equals("ev")) {
-                            ui.stepSetting(Settings.get("ev"), dir);
                         } else {
-                            return "unbekannt: " + was;
+                            ui.stepSetting(Settings.get("ev"), dir);
+                        }
+                        return v;
+                    }
+                });
+                if (was.equals("zeit") || was.equals("blende") || was.equals("shift")) {
+                    for (int w = 0; w < 10; w++) {
+                        try {
+                            Thread.sleep(80);
+                        } catch (InterruptedException e) {
+                            break;
+                        }
+                        String now = host.onMain(new Callable<String>() {
+                            @Override
+                            public String call() {
+                                return session.shutterText() + " " + session.apertureText();
+                            }
+                        });
+                        if (now != null && !now.equals(before)) {
+                            break;
                         }
                     }
-                    host.redraw();
-                    return "ok";
                 }
-            }) + exposureLine());
+            }
+            host.onMain(new Callable<String>() {
+                @Override
+                public String call() {
+                    host.redraw();
+                    return null;
+                }
+            });
+            return text("ok" + exposureLine());
         }
         if (name.equals("fokus")) {
             String res = focus();

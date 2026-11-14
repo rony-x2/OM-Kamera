@@ -52,6 +52,12 @@ public class AutoIso {
         return m < 0 || m >= LABELS.length ? 0 : m;
     }
 
+    /** Switched on and in a mode where it acts (P or A); in S and M the ISO stays as set */
+    public boolean working() {
+        CameraSession.ExposureMode em = session.exposureMode();
+        return mode() != 0 && (em == CameraSession.ExposureMode.P || em == CameraSession.ExposureMode.A);
+    }
+
     public void setMode(int m) {
         prefs.edit().putInt("aiso.mode", m).apply();
         apply();

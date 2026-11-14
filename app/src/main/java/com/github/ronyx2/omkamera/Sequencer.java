@@ -429,7 +429,8 @@ public class Sequencer {
     private volatile boolean measuring;
     private String lastImage;
     private String tlLastAction = "";
-    private java.io.Writer tlCsv;
+    /** Time-lapse log; opened, appended and closed per line so it can be read during the run */
+    private File tlCsv;
     private boolean tlDirKnown;
     private int tlShutterSign = 1;
 
@@ -674,6 +675,9 @@ public class Sequencer {
         }
         int step = grail.decide(ev);
         String action = "";
+        // Values the picture was taken with, before a lever moves
+        final String shotShutter = session.shutterText();
+        final String shotIso = Settings.get("iso").safeGet(session.current());
         if (step != 0) {
             double iv = tlPlan.interval(SystemClock.uptimeMillis());
             double maxSh = Math.max(0.1, iv - get("tl.dark", 2));
@@ -698,7 +702,7 @@ public class Sequencer {
         }
         tlLastAction = action;
         tlLog(String.format(Locale.US, "bild %d %s ev %.2f abw %+.2f %s iso %s %s", done, name, ev, grail.lastDeviation,
-                session.shutterText(), Settings.get("iso").safeGet(session.current()), action));
+                shotShutter, shotIso, action));
         host.redraw();
     }
 
@@ -746,7 +750,7 @@ public class Sequencer {
             return "iso grenze";
         }
         iso.write(session, best);
-        return "iso " + best;
+        return (dir > 0 ? "iso höher → " : "iso niedriger → ") + best;
     }
 
     private static int parseInt(String v) {
@@ -844,7 +848,8 @@ public class Sequencer {
                     break;
                 }
             }
-            tlCsv = new java.io.OutputStreamWriter(new java.io.FileOutputStream(f), "UTF-8");
+            new java.io.FileOutputStream(f).close();
+            tlCsv = f;
         } catch (Exception e) {
             tlCsv = null;
             Log.error("tl log", e);
@@ -855,14 +860,21 @@ public class Sequencer {
         String l = new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date()) + " " + line;
         Log.info("timelapse " + line);
         if (tlCsv != null) {
+            java.io.Writer w = null;
             try {
-                tlCsv.write(l + "\n");
-                tlCsv.flush();
-                if (line.startsWith("ende")) {
-                    tlCsv.close();
-                    tlCsv = null;
-                }
+                w = new java.io.OutputStreamWriter(new java.io.FileOutputStream(tlCsv, true), "UTF-8");
+                w.write(l + "\n");
             } catch (Exception e) {
+                Log.error("tl log", e);
+            } finally {
+                if (w != null) {
+                    try {
+                        w.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            if (line.startsWith("ende")) {
                 tlCsv = null;
             }
         }

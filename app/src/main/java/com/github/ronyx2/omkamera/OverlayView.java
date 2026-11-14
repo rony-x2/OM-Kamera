@@ -873,7 +873,7 @@ public class OverlayView extends View {
             ui.session().shutterText(),
             ui.session().apertureText(),
             valueOf("ev", p),
-            "ISO " + valueOf("iso", p) + (ui.autoIso() != null && ui.autoIso().mode() != 0 ? " A" : ""),
+            "ISO " + valueOf("iso", p) + (ui.autoIso() != null && ui.autoIso().working() ? " A" : ""),
         };
         boolean[] active = {
             d1 == Ui.DialRole.SHUTTER || d2 == Ui.DialRole.SHUTTER || shift,

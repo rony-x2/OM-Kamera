@@ -225,15 +225,24 @@ public class DebugServer {
             if (r == null) {
                 r = Response.text(404, "text/plain", "nicht gefunden\n");
             }
+            // Open the file before the header goes out: a file still open for writing
+            // (e.g. a running time-lapse log) is refused by the card ("resource busy")
+            java.io.FileInputStream fin = null;
+            if (r.file != null) {
+                try {
+                    fin = new java.io.FileInputStream(r.file);
+                } catch (java.io.IOException e) {
+                    r = Response.text(503, "text/plain", "Datei gerade in Benutzung, bitte gleich noch einmal\n");
+                }
+            }
             OutputStream out = socket.getOutputStream();
-            String head = "HTTP/1.0 " + r.code + " " + (r.code == 200 ? "OK" : r.code == 202 ? "Accepted" : r.code == 400 ? "Bad Request" : r.code == 401 ? "Unauthorized" : r.code == 404 ? "Not Found" : r.code == 403 ? "Forbidden" : "Error") + "\r\n"
+            String head = "HTTP/1.0 " + r.code + " " + (r.code == 200 ? "OK" : r.code == 202 ? "Accepted" : r.code == 400 ? "Bad Request" : r.code == 401 ? "Unauthorized" : r.code == 404 ? "Not Found" : r.code == 403 ? "Forbidden" : r.code == 503 ? "Service Unavailable" : "Error") + "\r\n"
                     + "Content-Type: " + r.type + "\r\n"
                     + "Content-Length: " + (r.file != null ? r.file.length() : r.body.length) + "\r\n"
                     + "Cache-Control: no-store\r\n"
                     + "Connection: close\r\n\r\n";
             out.write(head.getBytes("UTF-8"));
-            if (r.file != null) {
-                java.io.FileInputStream fin = new java.io.FileInputStream(r.file);
+            if (fin != null) {
                 try {
                     byte[] buf = new byte[64 * 1024];
                     int n;
