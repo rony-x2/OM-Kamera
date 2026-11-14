@@ -20,7 +20,8 @@ import java.util.Locale;
 public class Sequencer {
 
     public enum Mode {
-        OFF("Aus"), INTERVAL("Intervallaufnahme"), FOCUS("Fokusreihe"), BRACKET("Belichtungsreihe+"), BULB("BULB-Timer");
+        OFF("Aus"), INTERVAL("Intervallaufnahme"), TIMELAPSE("Zeitraffer (LRT)"), FOCUS("Fokusreihe"),
+        BRACKET("Belichtungsreihe+"), BULB("BULB-Timer");
         public final String label;
 
         Mode(String label) {
@@ -92,6 +93,15 @@ public class Sequencer {
     /** Bracket steps in thirds of an EV */
     public static final int[] BRACKET_STEPS = {1, 2, 3, 4, 5, 6, 9};
     public static final int[] BULB_TIMES = {5, 10, 15, 30, 60, 120, 240, 480, 900, 1800, 3600};
+    /** Time-lapse: intervals in tenths of a second, like the Pro Timer's 0.1 s steps */
+    public static final int[] TL_INTERVALS = {10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 120, 150, 200, 250, 300, 450, 600, 900, 1200};
+    public static final int[] TL_COUNTS = {0, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 9999};
+    public static final int[] TL_RAMP_MIN = {5, 10, 15, 20, 30, 45, 60, 90, 120};
+    public static final int[] TL_BULB = {0, 30, 45, 60, 90, 120, 180, 240, 300};
+    public static final int[] TL_DARK = {1, 2, 3, 5};
+    public static final int[] TL_ISO_MAX = {800, 1600, 3200, 6400, 12800};
+    public static final int[] TL_ISO_MIN = {100, 200, 400};
+    public static final int[] TL_DAYS = {127, 31, 96};
 
     private final CameraSession session;
     private final SharedPreferences prefs;
@@ -189,6 +199,8 @@ public class Sequencer {
                 return (done == 0 && nextAt > now ? "Intervall startet in " + next : "Intervall " + done + "/" + total + " · nächste in " + next)
                         + (film != null ? " · Film " + film.frames() + " Bilder" : "");
             }
+            case TIMELAPSE:
+                return tlStatus(now);
             case FOCUS:
                 return "Fokusreihe " + done + "/" + total
                     + (session.focusMaxPosition() > 0 ? " · Fokus " + session.focusPosition() + "/" + session.focusMaxPosition() : "");
@@ -224,6 +236,7 @@ public class Sequencer {
         startedAt = SystemClock.uptimeMillis();
         switch (m) {
             case INTERVAL: return startInterval();
+            case TIMELAPSE: return startTimelapse();
             case FOCUS: return startFocusBracket();
             case BRACKET: return startBracket();
             case BULB: return startBulb();
@@ -248,6 +261,13 @@ public class Sequencer {
         if (was == Mode.BRACKET) {
             restoreExposure();
         }
+        if (was == Mode.TIMELAPSE) {
+            tlLog("ende " + why);
+            if (focusModeBefore != null) {
+                Settings.get("afmf").write(session, focusModeBefore);
+                focusModeBefore = null;
+            }
+        }
         if (was == Mode.INTERVAL) {
             session.setExposureLock(false);
             if (focusModeBefore != null) {
@@ -266,6 +286,10 @@ public class Sequencer {
         if (running == Mode.OFF || !waitingShot) {
             return;
         }
+        if (running == Mode.TIMELAPSE && tlBulbOpen && SystemClock.uptimeMillis() < tlBulbEnd) {
+            Log.info("timelapse bulb: shutter callback while open");
+            return;
+        }
         if (running == Mode.BULB && SystemClock.uptimeMillis() < bulbEnd) {
             // Some cameras report the opening of the shutter; the exposure goes on
             Log.info("bulb: shutter callback while open");
@@ -282,6 +306,20 @@ public class Sequencer {
                     handler.postDelayed(grabFrame, 700);
                 }
                 if (done >= total) {
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            stop("fertig");
+                        }
+                    }, film != null ? 1200 : 0);
+                }
+                break;
+            case TIMELAPSE:
+                if (film != null) {
+                    handler.postDelayed(grabFrame, 700);
+                }
+                tlAfterShot();
+                if (total > 0 && done >= total) {
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
@@ -378,6 +416,457 @@ public class Sequencer {
             handler.postDelayed(this, 250);
         }
     };
+
+    // ---- time-lapse (stage 4, modelled on the LRTimelapse Pro Timer) ----
+
+    private TimelapsePlan tlPlan;
+    private TimelapsePlan.Grail grail;
+    private long tlStartAt;
+    private long tlStartWall;
+    private String tlPause;
+    private boolean tlBulbOpen;
+    private long tlBulbEnd;
+    private volatile boolean measuring;
+    private String lastImage;
+    private String tlLastAction = "";
+    private java.io.Writer tlCsv;
+    private boolean tlDirKnown;
+    private int tlShutterSign = 1;
+
+    public double tlInterval() {
+        return get("tl.interval", 50) / 10.0;
+    }
+
+    public TimelapsePlan.Grail grail() {
+        return grail;
+    }
+
+    private String startTimelapse() {
+        int hg = get("tl.hg", 0);
+        int bulb = get("tl.bulb", 0);
+        if (hg != 0 && session.exposureMode() != CameraSession.ExposureMode.M) {
+            host.message("Holy Grail braucht den Modus M", true);
+            return "Holy Grail braucht den Modus M";
+        }
+        if (bulb > 0 && !session.isBulb()) {
+            host.message("Für Langzeit-Zeitraffer Modus M und Verschlusszeit BULB einstellen", true);
+            return "Verschlusszeit steht nicht auf BULB";
+        }
+        double iv = tlInterval();
+        if (bulb > 0 && iv < bulb + 2) {
+            iv = bulb + 2;
+            host.message("Intervall auf " + iv + " s verlängert (Belichtung " + bulb + " s + Pause)", true);
+        }
+        total = get("tl.count", 0);
+        tlPlan = new TimelapsePlan(iv);
+        grail = hg == 0 ? null : new TimelapsePlan.Grail(hg == 1 ? 1 : -1);
+        running = Mode.TIMELAPSE;
+        lastImage = newestImageName();
+        tlDirKnown = false;
+        long now = SystemClock.uptimeMillis();
+        tlStartAt = now + get("tl.delay", 0) * 1000L;
+        if (get("tl.at", 0) == 1) {
+            java.util.Calendar c = java.util.Calendar.getInstance();
+            java.util.Calendar t = (java.util.Calendar) c.clone();
+            t.set(java.util.Calendar.HOUR_OF_DAY, get("tl.ath", 20));
+            t.set(java.util.Calendar.MINUTE, get("tl.atm", 0));
+            t.set(java.util.Calendar.SECOND, 0);
+            if (t.before(c)) {
+                t.add(java.util.Calendar.DAY_OF_MONTH, 1);
+            }
+            tlStartAt = now + (t.getTimeInMillis() - c.getTimeInMillis());
+        }
+        nextAt = tlStartAt;
+        tlStartWall = System.currentTimeMillis();
+        focusModeBefore = null;
+        String af = Settings.get("afmf").safeGet(session.current());
+        if (af != null && !"manual".equals(af)) {
+            // Focus once at the start and keep it (MF)
+            focusModeBefore = af;
+            host.startFocus();
+            nextAt = Math.max(nextAt, now + 1500);
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (running == Mode.TIMELAPSE) {
+                        host.cancelFocus();
+                        Settings.get("afmf").write(session, "manual");
+                    }
+                }
+            }, 1300);
+        }
+        int fps = get("tl.film", 0);
+        film = null;
+        if (fps > 0) {
+            try {
+                filmFile = nextFilmFile();
+                film = new MjpegAvi(filmFile, fps);
+                film.setInfo(filmInfo());
+            } catch (Exception e) {
+                Log.error("film", e);
+            }
+        }
+        tlOpenCsv();
+        tlLog("start intervall " + iv + " s, bilder " + (total == 0 ? "unbegrenzt" : total) + ", holy grail "
+                + (grail == null ? "aus" : grail.direction > 0 ? "sonnenuntergang" : "sonnenaufgang") + ", bulb " + bulb);
+        handler.post(tlTick);
+        host.redraw();
+        return "Zeitraffer gestartet: alle " + fmtSec(iv) + (total > 0 ? ", " + total + " Bilder" : "");
+    }
+
+    private final Runnable tlTick = new Runnable() {
+        @Override
+        public void run() {
+            if (running != Mode.TIMELAPSE) {
+                return;
+            }
+            long now = SystemClock.uptimeMillis();
+            host.keepAwake();
+            // BULB: close the shutter when the exposure time is over
+            if (tlBulbOpen && now >= tlBulbEnd) {
+                tlBulbOpen = false;
+                session.stopBulb();
+            }
+            tlPause = null;
+            if (now < tlStartAt) {
+                tlPause = "Start in " + duration((int) ((tlStartAt - now + 999) / 1000));
+            } else if (get("tl.win", 0) == 1) {
+                long wait = TimelapsePlan.untilWindow(java.util.Calendar.getInstance(), get("tl.wfrom", 8) * 60,
+                        get("tl.wto", 18) * 60, get("tl.wdays", 127));
+                if (wait > 0) {
+                    tlPause = wait == Long.MAX_VALUE ? "kein Wochentag gewählt" : "Pause bis Zeitfenster, " + duration((int) (wait / 1000));
+                    nextAt = now + Math.min(wait, 60000);
+                }
+            }
+            if (tlPause == null && now >= nextAt && !waitingShot && !tlBulbOpen && !measuring && (total == 0 || done < total)) {
+                boolean ok;
+                int bulb = get("tl.bulb", 0);
+                if (bulb > 0) {
+                    ok = session.startBulb();
+                    if (ok) {
+                        waitingShot = true;
+                        tlBulbOpen = true;
+                        tlBulbEnd = now + bulb * 1000L;
+                    }
+                } else {
+                    ok = shoot();
+                }
+                if (ok) {
+                    nextAt += (long) (tlPlan.interval(now) * 1000);
+                    if (nextAt < now) {
+                        nextAt = now + (long) (tlPlan.interval(now) * 1000);
+                    }
+                }
+            }
+            host.redraw();
+            handler.postDelayed(this, 200);
+        }
+    };
+
+    private String tlStatus(long now) {
+        StringBuilder b = new StringBuilder();
+        b.append("ZR ").append(done).append(total > 0 ? "/" + total : "");
+        if (tlPause != null) {
+            return b.append(" · ").append(tlPause).toString();
+        }
+        double iv = tlPlan.interval(now);
+        b.append(" · ").append(fmtSec(iv)).append(tlPlan.ramping() ? "*" : "");
+        b.append(" · nächste ").append(nextAt > now ? duration((int) ((nextAt - now + 999) / 1000)) : "jetzt");
+        int fps = get("tl.film", 0) > 0 ? get("tl.film", 0) : 25;
+        b.append(" · ").append(fps).append("p ").append(TimelapsePlan.filmLength(done, fps));
+        if (total > 0) {
+            b.append(" · Rest ").append(duration((int) ((total - done) * iv)));
+        }
+        double sh = session.shutterSeconds();
+        int bulb = get("tl.bulb", 0);
+        double expo = bulb > 0 ? bulb : sh;
+        if (expo > 0 && iv - expo < 1.0) {
+            b.append(" · Pause zu kurz!");
+        }
+        if (grail != null) {
+            b.append(" · HG ").append(grail.hasReference() ? String.format(Locale.US, "%+.1f", grail.lastDeviation).replace('.', ',') : "Referenz …");
+        }
+        return b.toString();
+    }
+
+    /** Starts an interval ramp to target seconds within minutes, while the time-lapse runs */
+    public String tlRamp(double target, int minutes) {
+        if (running != Mode.TIMELAPSE) {
+            return "kein Zeitraffer aktiv";
+        }
+        long now = SystemClock.uptimeMillis();
+        tlPlan.startRamp(target, minutes * 60000L, now);
+        tlLog("rampe nach " + target + " s in " + minutes + " min");
+        return "Intervall-Rampe: " + fmtSec(tlPlan.interval(now)) + " → " + fmtSec(target) + " in " + minutes + " min";
+    }
+
+    public String tlRampStop() {
+        if (running != Mode.TIMELAPSE) {
+            return "kein Zeitraffer aktiv";
+        }
+        tlPlan.stopRamp(SystemClock.uptimeMillis());
+        return "Rampe angehalten bei " + fmtSec(tlPlan.interval(SystemClock.uptimeMillis()));
+    }
+
+    /** Moves the Holy Grail reference by thirds of an EV (+ brighter pictures) */
+    public String tlReference(int thirds) {
+        if (grail == null) {
+            return "Holy Grail ist aus";
+        }
+        grail.offsetThirds += thirds;
+        tlLog("referenz " + grail.offsetThirds + "/3 EV");
+        return "Referenz " + ev(grail.offsetThirds);
+    }
+
+    public static String fmtSec(double s) {
+        if (s >= 10 || Math.abs(s - Math.round(s)) < 0.05) {
+            return Math.round(s) + " s";
+        }
+        return String.format(Locale.US, "%.1f s", s).replace('.', ',');
+    }
+
+    /** After each picture: measure it (from the card) and let the Holy Grail decide */
+    private void tlAfterShot() {
+        if (grail == null) {
+            tlLog("bild " + done + " " + session.shutterText() + " iso " + Settings.get("iso").safeGet(session.current()));
+            return;
+        }
+        measuring = true;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                double ev = Double.NaN;
+                String name = null;
+                try {
+                    // Wait until the new picture is on the card (at most a few seconds)
+                    for (int i = 0; i < 40; i++) {
+                        File f = newestImage();
+                        if (f != null && !f.getName().equals(lastImage) && f.length() > 0) {
+                            Thread.sleep(400);
+                            name = f.getName();
+                            ev = measure(f);
+                            break;
+                        }
+                        Thread.sleep(250);
+                    }
+                } catch (Throwable t) {
+                    Log.error("tl measure", t);
+                }
+                final double fev = ev;
+                final String fname = name;
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        measuring = false;
+                        if (fname != null) {
+                            lastImage = fname;
+                        }
+                        tlGrailStep(fev, fname);
+                    }
+                });
+            }
+        }, "tl-measure").start();
+    }
+
+    private void tlGrailStep(double ev, String name) {
+        if (running != Mode.TIMELAPSE || grail == null) {
+            return;
+        }
+        int step = grail.decide(ev);
+        String action = "";
+        if (step != 0) {
+            double iv = tlPlan.interval(SystemClock.uptimeMillis());
+            double maxSh = Math.max(0.1, iv - get("tl.dark", 2));
+            CameraSession.Params p = session.current();
+            int iso = parseInt(Settings.get("iso").safeGet(p));
+            TimelapsePlan.Lever lv = TimelapsePlan.lever(step, session.shutterSeconds(), maxSh, 1.0 / 4000,
+                    iso, get("tl.isomin", 100), get("tl.isomax", 3200));
+            switch (lv) {
+                case SHUTTER_LONGER:
+                case SHUTTER_SHORTER:
+                    tlShutter(lv == TimelapsePlan.Lever.SHUTTER_LONGER ? 1 : -1);
+                    action = lv == TimelapsePlan.Lever.SHUTTER_LONGER ? "zeit länger" : "zeit kürzer";
+                    break;
+                case ISO_UP:
+                case ISO_DOWN:
+                    action = tlIso(lv == TimelapsePlan.Lever.ISO_UP ? 1 : -1);
+                    break;
+                default:
+                    action = "grenze erreicht";
+                    break;
+            }
+        }
+        tlLastAction = action;
+        tlLog(String.format(Locale.US, "bild %d %s ev %.2f abw %+.2f %s iso %s %s", done, name, ev, grail.lastDeviation,
+                session.shutterText(), Settings.get("iso").safeGet(session.current()), action));
+        host.redraw();
+    }
+
+    /** One third longer (+1) or shorter (-1); the direction of the camera call is checked once */
+    private void tlShutter(final int dir) {
+        final double before = session.shutterSeconds();
+        session.adjustShutterSpeed(dir * tlShutterSign);
+        if (!tlDirKnown) {
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    double after = session.shutterSeconds();
+                    if (after > 0 && before > 0 && after != before) {
+                        tlDirKnown = true;
+                        if ((after > before) != (dir > 0)) {
+                            session.adjustShutterSpeed(-2 * dir * tlShutterSign);
+                            tlShutterSign = -tlShutterSign;
+                            Log.info("timelapse: shutter direction inverted");
+                        }
+                    }
+                }
+            }, 350);
+        }
+    }
+
+    private String tlIso(int dir) {
+        Setting iso = Settings.get("iso");
+        CameraSession.Params p = session.current();
+        java.util.List<String> vals = iso.safeValues(p);
+        int cur = parseInt(iso.safeGet(p));
+        String best = null;
+        for (String v : vals) {
+            int i = parseInt(v);
+            if (i < 50 || i > 51200) {
+                continue;
+            }
+            if (dir > 0 && i > cur && (best == null || i < parseInt(best))) {
+                best = v;
+            }
+            if (dir < 0 && i < cur && (best == null || i > parseInt(best))) {
+                best = v;
+            }
+        }
+        if (best == null) {
+            return "iso grenze";
+        }
+        iso.write(session, best);
+        return "iso " + best;
+    }
+
+    private static int parseInt(String v) {
+        try {
+            return Integer.parseInt(v);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** Brightness of a picture: ARW from the sensor data, JPEG from a small decoded copy */
+    private static double measure(File f) throws Exception {
+        String n = f.getName().toUpperCase(Locale.US);
+        if (n.endsWith(".ARW")) {
+            RawFile r = new RawFile(f);
+            try {
+                return r.brightnessEv(64);
+            } finally {
+                r.close();
+            }
+        }
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+        o.inSampleSize = 16;
+        android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
+        if (b == null) {
+            return Double.NaN;
+        }
+        int[] hist = new int[256];
+        int w = b.getWidth(), h = b.getHeight();
+        int[] row = new int[w];
+        for (int y = 0; y < h; y++) {
+            b.getPixels(row, 0, w, 0, y, w, 1);
+            for (int c : row) {
+                hist[((c >> 16 & 0xFF) * 77 + (c >> 8 & 0xFF) * 150 + (c & 0xFF) * 29) >> 8]++;
+            }
+        }
+        b.recycle();
+        long half = (long) w * h / 2, acc = 0;
+        for (int i = 0; i < 256; i++) {
+            acc += hist[i];
+            if (acc > half) {
+                double v = (i + 0.5) / 255.0;
+                double lin = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                return Math.log(lin) / Math.log(2);
+            }
+        }
+        return Double.NaN;
+    }
+
+    /** Newest picture of the newest DCIM folder (ARW preferred), by name */
+    private static File newestImage() {
+        File dcim = new File(Environment.getExternalStorageDirectory(), "DCIM");
+        File[] dirs = dcim.listFiles();
+        File dir = null;
+        if (dirs != null) {
+            for (File d : dirs) {
+                if (d.isDirectory() && (dir == null || d.getName().compareTo(dir.getName()) > 0)) {
+                    dir = d;
+                }
+            }
+        }
+        File[] fs = dir != null ? dir.listFiles() : null;
+        File best = null;
+        if (fs != null) {
+            for (File f : fs) {
+                String n = f.getName().toUpperCase(Locale.US);
+                if (!n.endsWith(".ARW") && !n.endsWith(".JPG")) {
+                    continue;
+                }
+                String stem = n.substring(0, n.length() - 4);
+                String bestStem = best == null ? null : best.getName().toUpperCase(Locale.US).substring(0, best.getName().length() - 4);
+                int cmp = best == null ? 1 : stem.compareTo(bestStem);
+                if (cmp > 0 || (cmp == 0 && n.endsWith(".ARW"))) {
+                    best = f;
+                }
+            }
+        }
+        return best;
+    }
+
+    private static String newestImageName() {
+        File f = newestImage();
+        return f != null ? f.getName() : "";
+    }
+
+    private void tlOpenCsv() {
+        try {
+            File dir = new File(Environment.getExternalStorageDirectory(), "OMKAMERA");
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+            File f = null;
+            for (int i = 1; i < 10000; i++) {
+                f = new File(dir, String.format(Locale.US, "ZR%04d.LOG", i));
+                if (!f.exists()) {
+                    break;
+                }
+            }
+            tlCsv = new java.io.OutputStreamWriter(new java.io.FileOutputStream(f), "UTF-8");
+        } catch (Exception e) {
+            tlCsv = null;
+            Log.error("tl log", e);
+        }
+    }
+
+    private void tlLog(String line) {
+        String l = new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date()) + " " + line;
+        Log.info("timelapse " + line);
+        if (tlCsv != null) {
+            try {
+                tlCsv.write(l + "\n");
+                tlCsv.flush();
+                if (line.startsWith("ende")) {
+                    tlCsv.close();
+                    tlCsv = null;
+                }
+            } catch (Exception e) {
+                tlCsv = null;
+            }
+        }
+    }
 
     private final Runnable grabFrame = new Runnable() {
         @Override

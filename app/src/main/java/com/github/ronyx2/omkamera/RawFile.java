@@ -155,6 +155,58 @@ public class RawFile {
         }
     }
 
+    /**
+     * Brightness of the picture for the time-lapse exposure ramping: median of the green
+     * pixels of 'samples' rows spread over the visible area, as log2 of the share of white
+     * (0 = white, -1 = one stop below ...). Reads single rows, so it takes well under a second.
+     */
+    public double brightnessEv(int samples) throws IOException {
+        int[] row = new int[rawWidth];
+        int[] single = new int[width];
+        int[] hist = new int[4096];
+        long n = 0;
+        int range = Math.max(1, white - black[1]);
+        for (int i = 0; i < samples; i++) {
+            int y = cropY + (int) ((i + 0.5) * cropH / samples);
+            y = Math.max(0, Math.min(height - 1, y));
+            boolean ok = false;
+            if (nativeFd == -2) {
+                nativeFd = useNative && nativeAvailable() ? nativeOpen(file.getPath()) : -1;
+            }
+            if (nativeFd >= 0) {
+                ok = nativeDecode(nativeFd, dataOffset, rawWidth, width, compression, little, curve, y, 1, single) == 0;
+                if (ok) {
+                    System.arraycopy(single, 0, row, 0, width);
+                }
+            }
+            if (!ok) {
+                int keep = nativeFd;
+                nativeFd = -1;
+                readRow(y, row);
+                nativeFd = keep;
+            }
+            int phase = (y & 1) * 2;
+            for (int x = cropX; x < cropX + cropW; x += 2) {
+                int xx = cfa[phase + (x & 1)] == 1 ? x : x + 1;
+                if (xx >= width) {
+                    continue;
+                }
+                int v = row[xx] - black[phase + (xx & 1)];
+                int bin = v <= 0 ? 0 : (int) Math.min(4095, (long) v * 4095 / range);
+                hist[bin]++;
+                n++;
+            }
+        }
+        long half = n / 2, acc = 0;
+        for (int b = 0; b < hist.length; b++) {
+            acc += hist[b];
+            if (acc > half) {
+                return Math.log((b + 0.5) / 4096.0) / Math.log(2);
+            }
+        }
+        return 0;
+    }
+
     // ---- native decoder (librawcore) with a cache of row blocks ----
 
     /** Switched off on the PC and when the library is missing */

@@ -1011,6 +1011,112 @@ public class Ui {
         }
     }
 
+    /** Time-lapse modelled on the LRTimelapse Pro Timer, with interval ramping and Holy Grail */
+    private void timelapseRows(List<Row> out, final Sequencer q) {
+        final boolean run = q.running() == Sequencer.Mode.TIMELAPSE;
+        if (run) {
+            out.add(Row.info("Läuft", q.status()));
+            out.add(Row.action("Intervall-Rampe starten", "→ " + Sequencer.fmtSec(q.get("tl.rampto", 150) / 10.0)
+                    + " in " + q.get("tl.rampmin", 20) + " min", new Runnable() {
+                @Override
+                public void run() {
+                    showMessage(q.tlRamp(q.get("tl.rampto", 150) / 10.0, q.get("tl.rampmin", 20)), false);
+                }
+            }));
+            out.add(Row.action("Rampe anhalten", "", new Runnable() {
+                @Override
+                public void run() {
+                    showMessage(q.tlRampStop(), false);
+                }
+            }));
+            if (q.grail() != null) {
+                out.add(Row.action("Holy Grail: Referenz heller", "+1/3 EV", new Runnable() {
+                    @Override
+                    public void run() {
+                        showMessage(q.tlReference(1), false);
+                    }
+                }));
+                out.add(Row.action("Holy Grail: Referenz dunkler", "−1/3 EV", new Runnable() {
+                    @Override
+                    public void run() {
+                        showMessage(q.tlReference(-1), false);
+                    }
+                }));
+            }
+        }
+        out.add(cycle("Intervall", "tl.interval", Sequencer.TL_INTERVALS, 50, new Fmt() {
+            public String f(int v) { return Sequencer.fmtSec(v / 10.0); }
+        }));
+        out.add(cycle("Anzahl der Aufnahmen", "tl.count", Sequencer.TL_COUNTS, 0, new Fmt() {
+            public String f(int v) { return v == 0 ? "unbegrenzt" : String.valueOf(v); }
+        }));
+        out.add(cycle("Belichtung", "tl.bulb", Sequencer.TL_BULB, 0, new Fmt() {
+            public String f(int v) { return v == 0 ? "Kamera (M)" : "BULB " + Sequencer.duration(v); }
+        }));
+        out.add(cycle("Start", "tl.at", new int[]{0, 1}, 0, new Fmt() {
+            public String f(int v) { return v == 0 ? "nach Verzögerung" : "um Uhrzeit"; }
+        }));
+        if (q.get("tl.at", 0) == 0) {
+            out.add(cycle("Startverzögerung", "tl.delay", Sequencer.START_DELAYS, 0, new Fmt() {
+                public String f(int v) { return Sequencer.duration(v); }
+            }));
+        } else {
+            out.add(cycle("Startzeit Stunde", "tl.ath", range(0, 23), 20, new Fmt() {
+                public String f(int v) { return String.format(java.util.Locale.US, "%02d:%02d Uhr", v, q.get("tl.atm", 0)); }
+            }));
+            out.add(cycle("Startzeit Minute", "tl.atm", new int[]{0, 15, 30, 45}, 0, new Fmt() {
+                public String f(int v) { return String.format(java.util.Locale.US, ":%02d", v); }
+            }));
+        }
+        out.add(cycle("Tägliches Zeitfenster", "tl.win", new int[]{0, 1}, 0, new Fmt() {
+            public String f(int v) { return v == 0 ? "Aus" : "Ein"; }
+        }));
+        if (q.get("tl.win", 0) == 1) {
+            out.add(cycle("Zeitfenster von", "tl.wfrom", range(0, 23), 8, new Fmt() {
+                public String f(int v) { return v + ":00 Uhr"; }
+            }));
+            out.add(cycle("Zeitfenster bis", "tl.wto", range(0, 23), 18, new Fmt() {
+                public String f(int v) { return v + ":00 Uhr"; }
+            }));
+            out.add(cycle("Wochentage", "tl.wdays", Sequencer.TL_DAYS, 127, new Fmt() {
+                public String f(int v) { return v == 127 ? "täglich" : v == 31 ? "Mo–Fr" : "Sa–So"; }
+            }));
+        }
+        out.add(cycle("Holy Grail (Belichtung nachführen)", "tl.hg", new int[]{0, 1, 2}, 0, new Fmt() {
+            public String f(int v) { return v == 0 ? "Aus" : v == 1 ? "Sonnenuntergang" : "Sonnenaufgang"; }
+        }));
+        if (q.get("tl.hg", 0) != 0) {
+            out.add(cycle("ISO höchstens", "tl.isomax", Sequencer.TL_ISO_MAX, 3200, new Fmt() {
+                public String f(int v) { return String.valueOf(v); }
+            }));
+            out.add(cycle("ISO mindestens", "tl.isomin", Sequencer.TL_ISO_MIN, 100, new Fmt() {
+                public String f(int v) { return String.valueOf(v); }
+            }));
+            out.add(cycle("Mindestpause zwischen Bildern", "tl.dark", Sequencer.TL_DARK, 2, new Fmt() {
+                public String f(int v) { return v + " s (längste Zeit = Intervall − Pause)"; }
+            }));
+            out.add(Row.info("Voraussetzung", "Modus M, RAW oder JPEG, fester Weißabgleich"));
+        }
+        out.add(cycle("Rampe: Ziel-Intervall", "tl.rampto", Sequencer.TL_INTERVALS, 150, new Fmt() {
+            public String f(int v) { return Sequencer.fmtSec(v / 10.0); }
+        }));
+        out.add(cycle("Rampe: Dauer", "tl.rampmin", Sequencer.TL_RAMP_MIN, 20, new Fmt() {
+            public String f(int v) { return v + " min"; }
+        }));
+        out.add(cycle("Vorschaufilm", "tl.film", Sequencer.FILM_FPS, 0, new Fmt() {
+            public String f(int v) { return v == 0 ? "Aus" : v + " Bilder/s"; }
+        }));
+        out.add(Row.info("Protokoll", "OMKAMERA/ZRnnnn.LOG"));
+    }
+
+    private static int[] range(int a, int b) {
+        int[] r = new int[b - a + 1];
+        for (int i = 0; i < r.length; i++) {
+            r[i] = a + i;
+        }
+        return r;
+    }
+
     /** Sequences run by the app: interval, focus bracket, extended bracket, BULB timer */
     private void sequenceRows(List<Row> out) {
         if (sequencer == null) {
@@ -1045,6 +1151,9 @@ public class Ui {
                 out.add(cycle("Zeitrafferfilm", "iv.film", Sequencer.FILM_FPS, 25, new Fmt() {
                     public String f(int v) { return v == 0 ? "Aus" : v + " Bilder/s"; }
                 }));
+                break;
+            case TIMELAPSE:
+                timelapseRows(out, q);
                 break;
             case FOCUS:
                 if (!session.focusDriveSupported()) {

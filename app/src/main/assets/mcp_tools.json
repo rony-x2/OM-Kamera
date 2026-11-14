@@ -346,5 +346,32 @@
     }
    }
   }
+ },
+ {
+  "name": "zeitraffer",
+  "description": "Stufe 4: steuert den laufenden Zeitraffer (LRT). aktion 'status' zeigt den Stand, 'rampe' startet eine Intervall-Rampe auf 'ziel' Sekunden in 'minuten' Minuten, 'rampe_stopp' hält sie an, 'heller'/'dunkler' verschiebt die Holy-Grail-Referenz um 1/3 EV. Gestartet wird der Zeitraffer mit dem Ablauf 'Zeitraffer (LRT)' und dem Auslöser.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "aktion": {
+     "type": "string",
+     "enum": [
+      "status",
+      "rampe",
+      "rampe_stopp",
+      "heller",
+      "dunkler"
+     ]
+    },
+    "ziel": {
+     "type": "number",
+     "description": "Ziel-Intervall in Sekunden"
+    },
+    "minuten": {
+     "type": "integer",
+     "description": "Dauer der Rampe in Minuten"
+    }
+   }
+  }
  }
 ]

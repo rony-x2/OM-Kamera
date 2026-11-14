@@ -334,6 +334,31 @@ public class McpServer {
             }
             return text(pr.add(kind, files));
         }
+        if (name.equals("zeitraffer")) {
+            final String act = a.optString("aktion", "status");
+            final double ziel = a.optDouble("ziel", 15);
+            final int minuten = a.optInt("minuten", 20);
+            return text(host.onMain(new Callable<String>() {
+                @Override
+                public String call() {
+                    Sequencer q = host.ui().sequencer();
+                    if ("rampe".equals(act)) {
+                        return q.tlRamp(ziel, minuten);
+                    }
+                    if ("rampe_stopp".equals(act)) {
+                        return q.tlRampStop();
+                    }
+                    if ("heller".equals(act)) {
+                        return q.tlReference(1);
+                    }
+                    if ("dunkler".equals(act)) {
+                        return q.tlReference(-1);
+                    }
+                    String st = q.status();
+                    return st != null ? st : "kein Ablauf aktiv (Modus: " + q.mode().label + ")";
+                }
+            }));
+        }
         if (name.equals("rawtest")) {
             final String mode = a.optString("modus", "status");
             final int n = a.optInt("anzahl", 2);
