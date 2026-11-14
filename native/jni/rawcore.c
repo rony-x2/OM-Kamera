@@ -114,6 +114,15 @@ Java_com_github_ronyx2_omkamera_RawCore_close(JNIEnv *env, jclass cls, jint fd)
 /*
  * Decodes rows y .. y+count-1 into out (count * width ints). Returns 0 or an error code.
  */
+/*
+ * The read buffer is kept between calls: allocating and freeing some MB for every band
+ * (over a thousand times when combining) costs the camera more than the decoding itself.
+ * Calls are serialised by the mutex; the rows go straight into the Java array.
+ */
+static pthread_mutex_t dec_lock = PTHREAD_MUTEX_INITIALIZER;
+static unsigned char *dec_buf;
+static size_t dec_cap;
+
 JNIEXPORT jint JNICALL
 Java_com_github_ronyx2_omkamera_RawCore_decode(JNIEnv *env, jclass cls, jint fd, jlong offset,
         jint rawWidth, jint width, jint compression, jboolean little, jintArray jcurve,
@@ -123,53 +132,64 @@ Java_com_github_ronyx2_omkamera_RawCore_decode(JNIEnv *env, jclass cls, jint fd,
     pthread_t th[4];
     job_t jobs[4];
     int bpr = compression == 32767 ? rawWidth : rawWidth * 2;
-    size_t total = (size_t) count * bpr;
-    /*
-     * One sequential read for the whole band: the camera's card is slow with many small
-     * reads at scattered places (one per row and thread before).
-     */
-    unsigned char *src = (unsigned char *) malloc(total + 32);
-    int *out = (int *) malloc((size_t) count * width * sizeof(int));
-    if (!src || !out) {
-        free(src);
-        free(out);
+    size_t total = (size_t) count * bpr, got = 0;
+    off_t base = (off_t) (offset + (long long) y * bpr);
+    jint *curve, *out;
+
+    if ((*env)->GetArrayLength(env, jout) < count * width) {
+        return 4;
+    }
+    pthread_mutex_lock(&dec_lock);
+    if (dec_cap < total + 32) {
+        unsigned char *b = (unsigned char *) realloc(dec_buf, total + 32);
+        if (!b) {
+            pthread_mutex_unlock(&dec_lock);
+            return 3;
+        }
+        dec_buf = b;
+        dec_cap = total + 32;
+    }
+    memset(dec_buf + total, 0, 32);
+    /* One sequential read for the whole band */
+    while (got < total) {
+        ssize_t r = pread(fd, dec_buf + got, total - got, base + (off_t) got);
+        if (r <= 0) {
+            pthread_mutex_unlock(&dec_lock);
+            return 2;
+        }
+        got += (size_t) r;
+    }
+    curve = (*env)->GetIntArrayElements(env, jcurve, NULL);
+    out = (jint *) (*env)->GetPrimitiveArrayCritical(env, jout, NULL);
+    if (!curve || !out) {
+        if (out) {
+            (*env)->ReleasePrimitiveArrayCritical(env, jout, out, JNI_ABORT);
+        }
+        if (curve) {
+            (*env)->ReleaseIntArrayElements(env, jcurve, curve, JNI_ABORT);
+        }
+        pthread_mutex_unlock(&dec_lock);
         return 3;
     }
-    memset(src + total, 0, 32);
-    {
-        size_t got = 0;
-        off_t base = (off_t) (offset + (long long) y * bpr);
-        while (got < total) {
-            ssize_t r = pread(fd, src + got, total - got, base + (off_t) got);
-            if (r <= 0) {
-                free(src);
-                free(out);
-                return 2;
-            }
-            got += (size_t) r;
-        }
-    }
-    jint *curve = (*env)->GetIntArrayElements(env, jcurve, NULL);
     if (n > count) {
         n = count;
     }
     for (i = 0; i < n; i++) {
         job_t *j = &jobs[i];
         int y0 = count * i / n, y1 = count * (i + 1) / n;
-        j->src = src + (size_t) y0 * bpr;
+        j->src = dec_buf + (size_t) y0 * bpr;
         j->bpr = bpr;
         j->rawWidth = rawWidth;
         j->width = width;
         j->compression = compression;
         j->little = little;
-        j->curve = curve;
+        j->curve = (const int *) curve;
         j->rows = y1 - y0;
-        j->out = out + (size_t) y0 * width;
+        j->out = (int *) out + (size_t) y0 * width;
         j->err = 0;
     }
     for (i = 1; i < n; i++) {
         if (pthread_create(&th[i], NULL, worker, &jobs[i]) != 0) {
-            /* run it here instead */
             worker(&jobs[i]);
             jobs[i].err = -1;
         }
@@ -180,17 +200,9 @@ Java_com_github_ronyx2_omkamera_RawCore_decode(JNIEnv *env, jclass cls, jint fd,
             pthread_join(th[i], NULL);
         }
     }
-    for (i = 0; i < n; i++) {
-        if (jobs[i].err > 0) {
-            err = jobs[i].err;
-        }
-    }
-    if (!err) {
-        (*env)->SetIntArrayRegion(env, jout, 0, count * width, out);
-    }
-    free(out);
-    free(src);
+    (*env)->ReleasePrimitiveArrayCritical(env, jout, out, 0);
     (*env)->ReleaseIntArrayElements(env, jcurve, curve, JNI_ABORT);
+    pthread_mutex_unlock(&dec_lock);
     return err;
 }
 
@@ -598,7 +610,11 @@ Java_com_github_ronyx2_omkamera_RawCore_bench(JNIEnv *env, jclass cls, jint fd, 
         jint rawWidth, jint width, jint rows, jintArray jcurve)
 {
     char msg[256];
-    size_t total = (size_t) rows * rawWidth, got = 0;
+    size_t total, got = 0;
+    if (rows > 1024) {
+        rows = 1024;   /* 6 MB in, 24 MB out at most */
+    }
+    total = (size_t) rows * rawWidth;
     unsigned char *src = (unsigned char *) malloc(total + 32);
     int *out = (int *) malloc((size_t) rows * width * sizeof(int));
     long long t0, t1, t2, t3;

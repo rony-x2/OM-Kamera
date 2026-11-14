@@ -670,14 +670,22 @@ public final class RawTools {
             return f[0];
         }
 
+        private long readMs, mixMs;
+
         private void loadBand(int y0) throws IOException {
             int n = Math.min(band, f[0].height - y0);
             int len = n * w;
+            long t0 = System.currentTimeMillis();
             f[0].readBand(y0, n, acc);
+            readMs += System.currentTimeMillis() - t0;
             for (int i = 1; i < f.length; i++) {
+                t0 = System.currentTimeMillis();
                 f[i].readBand(y0, n, tmp);
+                long t1 = System.currentTimeMillis();
+                readMs += t1 - t0;
                 if (nativeOn()) {
                     RawCore.combine(mode == Mode.MAX ? 1 : 0, acc, tmp, len);
+                    mixMs += System.currentTimeMillis() - t1;
                     continue;
                 }
                 if (mode == Mode.MAX) {
@@ -727,6 +735,7 @@ public final class RawTools {
 
         @Override
         public void close() {
+            Log.info("combine " + mode + " " + f.length + " files: lesen+entpacken " + readMs + " ms, verrechnen " + mixMs + " ms");
             for (RawFile r : f) {
                 r.close();
             }
