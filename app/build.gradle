@@ -12,8 +12,8 @@ android {
         minSdk = 10
         //noinspection ExpiredTargetSdkVersion
         targetSdk = 10
-        versionCode = 37
-        versionName = '0.9.2'
+        versionCode = 38
+        versionName = '0.9.3'
     }
 
     buildFeatures {

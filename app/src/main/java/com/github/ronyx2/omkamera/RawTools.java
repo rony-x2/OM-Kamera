@@ -125,15 +125,20 @@ public final class RawTools {
             o.write(head);
             int[] row = new int[m.rawWidth];
             byte[] b = new byte[w * 2];
+            boolean nat = nativeOn();
             long tRead = 0, tWrite = 0;
             for (int y = 0; y < h; y++) {
                 long t0 = System.nanoTime();
                 src.row(y, row);
                 long t1 = System.nanoTime();
-                for (int x = 0; x < w; x++) {
-                    int v = row[x];
-                    b[x * 2] = (byte) v;
-                    b[x * 2 + 1] = (byte) (v >> 8);
+                if (nat) {
+                    RawCore.pack16(row, w, b);
+                } else {
+                    for (int x = 0; x < w; x++) {
+                        int v = row[x];
+                        b[x * 2] = (byte) v;
+                        b[x * 2 + 1] = (byte) (v >> 8);
+                    }
                 }
                 o.write(b);
                 tRead += t1 - t0;
@@ -181,33 +186,73 @@ public final class RawTools {
 
     // ---- development to 16 bit RGB ----
 
-    /** Receives developed rows: 3 × 16 bit per pixel, values 0..65535 */
-    interface RgbSink {
-        void rgbRow(int[] rgb) throws IOException;
+    /** Receives developed bytes: TIFF rows (LE) or PNG rows with filter byte */
+    interface ByteSink {
+        void write(byte[] b, int len) throws IOException;
     }
 
-    /** Bilinear demosaic of the visible area, white balance as shot, camera matrix to sRGB */
-    static void develop(Rows src, RgbSink sink, Progress p) throws IOException {
+    static boolean nativeOn() {
+        try {
+            return RawCore.on();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Bilinear demosaic of the visible area, white balance as shot, camera matrix to sRGB, sRGB
+     * curve. format 0: TIFF rows, 16 bit little endian; 1: PNG rows, 16 bit big endian with
+     * filter Sub. Uses the native library (all cores) when it is loaded.
+     */
+    static void develop(Rows src, int format, ByteSink sink, Progress p) throws IOException {
         RawFile m = src.meta();
         int w = m.cropW, h = m.cropH, x0 = m.cropX, y0 = m.cropY;
         int fullW = m.width;
-        // Linear scale per CFA colour: black removed, white balance, 0..65535 (clipped)
         int[] scale = new int[3];
         for (int c = 0; c < 3; c++) {
             scale[c] = (int) Math.round(m.wb[c] * 65535.0 * 4096 / (m.white - m.black[0]));
         }
-        int[] blk = m.black;
         float[] rc = rgbFromCam(colorMatrix(m.model));
         int[] mat = new int[9];
         for (int i = 0; i < 9; i++) {
             mat[i] = Math.round(rc[i] * 4096);
         }
         int[] gamma = srgbLut();
+        int stride = format == 1 ? 1 + w * 6 : w * 6;
 
+        if (nativeOn()) {
+            final int B = 32;
+            short[] lut = new short[65536];
+            for (int i = 0; i < lut.length; i++) {
+                lut[i] = (short) gamma[i];
+            }
+            int[] blk = {m.black[0], m.black[1], m.black[2], m.black[3]};
+            int[] block = new int[(B + 2) * fullW];
+            int[] raw = new int[m.rawWidth];
+            byte[] out = new byte[B * stride];
+            for (int y = 0; y < h; y += B) {
+                int n = Math.min(B, h - y);
+                for (int k = 0; k < n + 2; k++) {
+                    int sy = Math.max(0, Math.min(m.height - 1, y0 + y - 1 + k));
+                    src.row(sy, raw);
+                    System.arraycopy(raw, 0, block, k * fullW, fullW);
+                }
+                int err = RawCore.develop(block, n, fullW, x0, w, y0 + y, m.cfa, blk, scale, mat, lut, format, out);
+                if (err != 0) {
+                    throw new IOException("Entwicklung nativ fehlgeschlagen (" + err + ")");
+                }
+                sink.write(out, n * stride);
+                if (p != null && !p.step(y + n, h)) {
+                    throw new IOException("abgebrochen");
+                }
+            }
+            return;
+        }
+
+        int[] blk = m.black;
         int[][] ring = new int[3][fullW];
         int[] raw = new int[m.rawWidth];
-        int[] rgb = new int[w * 3];
-        // Prime rows y0-1 and y0
+        byte[] line = new byte[stride];
         load(src, y0 - 1, raw, ring[0], m, scale, blk);
         load(src, y0, raw, ring[1], m, scale, blk);
         for (int y = 0; y < h; y++) {
@@ -215,6 +260,11 @@ public final class RawTools {
             int[] prev = ring[y % 3], cur = ring[(y + 1) % 3], next = ring[(y + 2) % 3];
             load(src, ry + 1, raw, next, m, scale, blk);
             int rowPhase = (ry & 1) * 2;
+            int o = 0;
+            if (format == 1) {
+                line[o++] = 1;
+            }
+            int pr = 0, pg = 0, pb = 0;
             for (int x = 0; x < w; x++) {
                 int rx = x0 + x;
                 int c = m.cfa[rowPhase + (rx & 1)];
@@ -243,12 +293,31 @@ public final class RawTools {
                         b = v;
                     }
                 }
-                int o = x * 3;
-                rgb[o] = gamma[clamp((mat[0] * r + mat[1] * g + mat[2] * b) >> 12)];
-                rgb[o + 1] = gamma[clamp((mat[3] * r + mat[4] * g + mat[5] * b) >> 12)];
-                rgb[o + 2] = gamma[clamp((mat[6] * r + mat[7] * g + mat[8] * b) >> 12)];
+                int R = gamma[clamp((mat[0] * r + mat[1] * g + mat[2] * b) >> 12)];
+                int G = gamma[clamp((mat[3] * r + mat[4] * g + mat[5] * b) >> 12)];
+                int B = gamma[clamp((mat[6] * r + mat[7] * g + mat[8] * b) >> 12)];
+                if (format == 1) {
+                    // PNG filter Sub on bytes: each byte minus the same byte of the previous pixel
+                    line[o] = (byte) ((R >> 8) - (pr >> 8));
+                    line[o + 1] = (byte) ((R & 0xFF) - (pr & 0xFF));
+                    line[o + 2] = (byte) ((G >> 8) - (pg >> 8));
+                    line[o + 3] = (byte) ((G & 0xFF) - (pg & 0xFF));
+                    line[o + 4] = (byte) ((B >> 8) - (pb >> 8));
+                    line[o + 5] = (byte) ((B & 0xFF) - (pb & 0xFF));
+                    pr = R;
+                    pg = G;
+                    pb = B;
+                } else {
+                    line[o] = (byte) R;
+                    line[o + 1] = (byte) (R >> 8);
+                    line[o + 2] = (byte) G;
+                    line[o + 3] = (byte) (G >> 8);
+                    line[o + 4] = (byte) B;
+                    line[o + 5] = (byte) (B >> 8);
+                }
+                o += 6;
             }
-            sink.rgbRow(rgb);
+            sink.write(line, stride);
             if (p != null && !p.step(y + 1, h)) {
                 throw new IOException("abgebrochen");
             }
@@ -359,15 +428,10 @@ public final class RawTools {
         boolean ok = false;
         try {
             o.write(head);
-            final byte[] b = new byte[w * 6];
-            develop(src, new RgbSink() {
+            develop(src, 0, new ByteSink() {
                 @Override
-                public void rgbRow(int[] rgb) throws IOException {
-                    for (int i = 0; i < rgb.length; i++) {
-                        b[i * 2] = (byte) rgb[i];
-                        b[i * 2 + 1] = (byte) (rgb[i] >> 8);
-                    }
-                    o.write(b);
+                public void write(byte[] b, int len) throws IOException {
+                    o.write(b, 0, len);
                 }
             }, p);
             ok = true;
@@ -399,23 +463,11 @@ public final class RawTools {
             chunk(o, "sRGB", new byte[]{0}, 0, 1);
             byte[] exif = TiffOut.exifBlock(m, lens, software);
             chunk(o, "eXIf", exif, 0, exif.length);
-            final byte[] line = new byte[1 + w * 6];
             final byte[] buf = new byte[128 * 1024];
-            develop(src, new RgbSink() {
+            develop(src, 1, new ByteSink() {
                 @Override
-                public void rgbRow(int[] rgb) throws IOException {
-                    // Filter "Sub": difference to the same channel of the pixel on the left,
-                    // compresses noisy 16 bit data far better than no filter
-                    line[0] = 1;
-                    // PNG filters work on bytes: high and low byte each minus the same byte
-                    // of the previous pixel (6 bytes earlier), modulo 256
-                    for (int i = 0; i < rgb.length; i++) {
-                        int hi = (rgb[i] >> 8) - (i >= 3 ? rgb[i - 3] >> 8 : 0);
-                        int lo = (rgb[i] & 0xFF) - (i >= 3 ? rgb[i - 3] & 0xFF : 0);
-                        line[1 + i * 2] = (byte) hi;
-                        line[2 + i * 2] = (byte) lo;
-                    }
-                    def.setInput(line);
+                public void write(byte[] b, int len) throws IOException {
+                    def.setInput(b, 0, len);
                     while (!def.needsInput()) {
                         int n = def.deflate(buf);
                         if (n > 0) {
@@ -521,6 +573,10 @@ public final class RawTools {
             int black = f[0].black[(y & 1) * 2];
             for (int i = 1; i < f.length; i++) {
                 f[i].readRow(y, tmp);
+                if (nativeOn()) {
+                    RawCore.combine(mode == Mode.MAX ? 1 : 0, out, tmp, w);
+                    continue;
+                }
                 switch (mode) {
                     case MAX:
                         for (int x = 0; x < w; x++) {
@@ -535,6 +591,10 @@ public final class RawTools {
                         }
                         break;
                 }
+            }
+            if (nativeOn() && mode != Mode.MAX) {
+                RawCore.finish(mode == Mode.MEAN ? 0 : 1, out, w, f.length, black * (f.length - 1), f[0].white);
+                return;
             }
             if (mode == Mode.MEAN) {
                 int n = f.length, half = n / 2;
