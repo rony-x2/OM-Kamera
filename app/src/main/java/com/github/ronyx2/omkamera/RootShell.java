@@ -29,10 +29,14 @@ public final class RootShell {
         {"speicher", "Arbeitsspeicher", "cat /proc/meminfo\n"},
         {"prozesse", "Prozesse (Speicher in kB)",
             "for p in /proc/[0-9]*; do r=$(grep VmRSS $p/status 2>/dev/null); "
-            + "[ -n \"$r\" ] && echo \"${r#VmRSS:} ${p#/proc/} $(cat $p/comm 2>/dev/null)\"; done "
+            + "[ -n \"$r\" ] && set -- $r && echo \"$2 kB ${p#/proc/} $(cat $p/comm 2>/dev/null)\"; done "
             + "| busybox sort -n -r\n"},
-        {"log", "Android-Log (letzte 400 Zeilen)",
-            "chroot /android /system/bin/logcat -d -v time 2>&1 | busybox tail -n 400\n"},
+        {"log", "Android-Log (letzte 600 Zeilen, ohne Akku-Meldungen)",
+            "chroot /android /system/bin/logcat -d -v time 2>&1 | grep -v -E 'BatteryService|/BATT ' | busybox tail -n 600\n"},
+        {"ablauf", "App-Wechsel, Schlafen und Aufwachen von Android",
+            "chroot /android /system/bin/logcat -d -v time 2>&1 | grep -E "
+            + "'ActivityManager|DAConnectionManager|SyncAndroid|ScalarALauncher\\(|BootCompleted|SUSPEND|apo' "
+            + "| grep -v -E 'BatteryService|/BATT ' | busybox tail -n 300\n"},
         {"cpu", "Prozessor", "cat /proc/cpuinfo\necho\ngrep -E '^cpu' /proc/stat\n"},
     };
 

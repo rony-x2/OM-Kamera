@@ -89,6 +89,7 @@
     <button data-q="speicher">Arbeitsspeicher</button>
     <button data-q="prozesse">Prozesse</button>
     <button data-q="cpu">Prozessor</button>
+    <button data-q="ablauf">App-Wechsel</button>
     <button data-q="log">Android-Log</button>
   </div>
 </div>
@@ -129,7 +130,7 @@
       var code = '';
       try { code = sessionStorage.getItem('omk.code') || document.getElementById('code').value.trim(); } catch (e) {}
       fetch('/api/system?was=' + b.dataset.q + '&k=' + encodeURIComponent(code)).then(function (r) { return r.text(); })
-        .then(function (t) { o.textContent = t; if (b.dataset.q === 'log') window.scrollTo(0, document.body.scrollHeight); })
+        .then(function (t) { o.textContent = t; if (b.dataset.q === 'log' || b.dataset.q === 'ablauf') window.scrollTo(0, document.body.scrollHeight); })
         .catch(function (e) { o.textContent = 'Fehler: ' + e; });
     };
   });
