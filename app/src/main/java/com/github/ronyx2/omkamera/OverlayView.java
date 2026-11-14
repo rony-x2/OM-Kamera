@@ -1011,7 +1011,7 @@ public class OverlayView extends View {
         float pad = Theme.PAD * u;
         int tabColor = Theme.TAB_COLORS[ui.tab() % Theme.TAB_COLORS.length];
         // The list side takes on the colour of the tab, very lightly
-        fill.setColor((tabColor & 0x00FFFFFF) | 0x12000000);
+        fill.setColor((tabColor & 0x00FFFFFF) | 0x18000000);
         c.drawRect(tabW + pad, 0, vw, getHeight(), fill);
         float iconS = 22 * u;
 

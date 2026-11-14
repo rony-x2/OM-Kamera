@@ -480,7 +480,12 @@ public class Ui {
 
     /** The sensor was switched on a while ago but has not delivered anything */
     public boolean levelSilent() {
-        return levelEnabled && Float.isNaN(roll) && levelSince > 0 && SystemClock.uptimeMillis() - levelSince > 3000;
+        boolean silent = levelEnabled() && Float.isNaN(roll) && levelSince > 0 && SystemClock.uptimeMillis() - levelSince > 3000;
+        if (silent && !prefs.getBoolean("level.dead", false)) {
+            // No level gauge in this camera (a6000): the DISP view "Neigung" is left out from now on
+            prefs.edit().putBoolean("level.dead", true).apply();
+        }
+        return silent;
     }
 
     private int remainingShots = -1;
@@ -715,6 +720,9 @@ public class Ui {
     /** Next view of the DISP button, with a short note which one */
     public void nextDispView() {
         dispView = (dispView + 1) % DISP_VIEWS.length;
+        if (dispView == 2 && prefs.getBoolean("level.dead", false)) {
+            dispView = 3;
+        }
         prefs.edit().putInt("disp", dispView).apply();
         host.applyDisplay();
         showMessage(DISP_VIEWS[dispView], false);
@@ -2042,7 +2050,9 @@ public class Ui {
                 if (isFlexSpot()) {
                     state = State.AF_MOVE;
                 } else {
-                    showMessage(session.toggleCenterTracking(), false);
+                    String t = session.toggleCenterTracking();
+                    showMessage(t.contains("gibt es hier nicht")
+                            ? "Mitteltaste: Fokusfeld „Flex. Spot“ wählen, dann verschiebt sie das Feld" : t, false);
                 }
                 return true;
             case AF_CENTER:
