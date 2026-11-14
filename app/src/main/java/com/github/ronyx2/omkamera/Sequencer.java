@@ -77,7 +77,7 @@ public class Sequencer {
             c.append(", ISO ").append(iso);
         }
         c.append(", Intervall ").append(get("iv.interval", 5)).append(" s");
-        String date = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(new java.util.Date());
+        String date = CameraClock.format("yyyy-MM-dd HH:mm");
         return new String[][]{{"ISFT", "OM Kamera"}, {"ICRD", date}, {"ICMT", c.toString()}};
     }
 
@@ -467,11 +467,12 @@ public class Sequencer {
         long now = SystemClock.uptimeMillis();
         tlStartAt = now + get("tl.delay", 0) * 1000L;
         if (get("tl.at", 0) == 1) {
-            java.util.Calendar c = java.util.Calendar.getInstance();
+            java.util.Calendar c = CameraClock.now();
             java.util.Calendar t = (java.util.Calendar) c.clone();
             t.set(java.util.Calendar.HOUR_OF_DAY, get("tl.ath", 20));
             t.set(java.util.Calendar.MINUTE, get("tl.atm", 0));
             t.set(java.util.Calendar.SECOND, 0);
+            t.set(java.util.Calendar.MILLISECOND, 0);
             if (t.before(c)) {
                 t.add(java.util.Calendar.DAY_OF_MONTH, 1);
             }
@@ -532,7 +533,7 @@ public class Sequencer {
             if (now < tlStartAt) {
                 tlPause = "Start in " + duration((int) ((tlStartAt - now + 999) / 1000));
             } else if (get("tl.win", 0) == 1) {
-                long wait = TimelapsePlan.untilWindow(java.util.Calendar.getInstance(), get("tl.wfrom", 8) * 60,
+                long wait = TimelapsePlan.untilWindow(CameraClock.now(), get("tl.wfrom", 8) * 60,
                         get("tl.wto", 18) * 60, get("tl.wdays", 127));
                 if (wait > 0) {
                     tlPause = wait == Long.MAX_VALUE ? "kein Wochentag gewählt" : "Pause bis Zeitfenster, " + duration((int) (wait / 1000));
@@ -857,7 +858,7 @@ public class Sequencer {
     }
 
     private void tlLog(String line) {
-        String l = new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date()) + " " + line;
+        String l = CameraClock.format("HH:mm:ss") + " " + line;
         Log.info("timelapse " + line);
         if (tlCsv != null) {
             java.io.Writer w = null;

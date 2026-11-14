@@ -13,6 +13,8 @@
   header h1 { font-size: 17px; margin: 0 6px 0 0; font-weight: 650; }
   .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; font-size: 13.5px; color: var(--mute); white-space: nowrap; }
   .chip b { color: var(--text); font-weight: 600; }
+  .chip.clock { display: none; cursor: pointer; font: inherit; font-size: 13.5px; color: var(--accent); border-color: var(--accent); }
+  .chip.clock:hover { background: var(--panel2); }
   .chip.mode { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 700; }
   .chip.rec { color: #fff; border-color: var(--rec); display: none; }
   .chip.rec::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rec); margin-right: 6px; animation: pulse 1.1s ease-in-out infinite; }
@@ -97,6 +99,7 @@
   <span class="chip">Akku <b id="bat">–</b></span>
   <span class="chip rec" id="rec">schreibt</span>
   <span class="chip" id="conn">verbinde …</span>
+  <button class="chip clock" id="clock" title="Kamerauhr auf die Zeit dieses Geräts stellen">Uhr</button>
   <span class="spacer"></span>
   <a href="/">Debug</a>
 </header>
@@ -204,6 +207,10 @@
     });
   }
 
+  $('clock').onclick = function () {
+    api('/api/clock?t=' + Date.now()).then(function (j) { if (j && j.text) toast(j.text); });
+  };
+
   // ---- state ----
   function loadState() {
     fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
@@ -226,6 +233,17 @@
       $('t-ev').classList.toggle('active', roles.indexOf('EV') >= 0);
       document.querySelectorAll('[data-x=shutter]').forEach(function (b) { b.disabled = !shutterOk; });
       document.querySelectorAll('[data-x=aperture]').forEach(function (b) { b.disabled = !apertureOk; });
+      if (typeof s.clock === 'number') {
+        var dev = s.clock - Date.now();
+        var c = $('clock');
+        if (Math.abs(dev) > 3000) {
+          var a = Math.abs(dev) / 1000, txt = a < 90 ? Math.round(a) + ' s' : a < 5400 ? Math.round(a / 60) + ' min' : Math.round(a / 3600) + ' h';
+          c.textContent = 'Kamerauhr ' + (dev > 0 ? '+' : '−') + txt + ' · stellen';
+          c.style.display = 'inline-block';
+        } else {
+          c.style.display = 'none';
+        }
+      }
       renderSettings(s.settings || []);
     }).catch(function () { $('conn').textContent = 'keine Verbindung'; });
   }

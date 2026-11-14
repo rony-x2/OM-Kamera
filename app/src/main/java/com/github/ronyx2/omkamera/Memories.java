@@ -88,7 +88,7 @@ public class Memories {
         JSONObject values = snapshot();
         try {
             JSONObject o = new JSONObject();
-            o.put("time", new java.text.SimpleDateFormat("dd.MM. HH:mm", java.util.Locale.GERMANY).format(new java.util.Date()));
+            o.put("time", CameraClock.format("dd.MM. HH:mm"));
             o.put("values", values);
             prefs.edit().putString("mem." + slot, o.toString()).apply();
         } catch (Exception e) {

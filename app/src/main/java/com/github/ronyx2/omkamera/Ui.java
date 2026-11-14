@@ -52,6 +52,9 @@ public class Ui {
         /** WLAN has an address */
         boolean wifiConnected();
 
+        /** Camera clock with NTP setting */
+        CameraClock clock();
+
         /** Starts or stops histogram and level sensor according to the settings */
         void applyDisplay();
 
@@ -487,6 +490,8 @@ public class Ui {
     }
 
     public boolean wifiConnected() { return host.wifiConnected(); }
+
+    public CameraClock clock() { return host.clock(); }
     public boolean debugEnabled() { return debugEnabled; }
 
     public void setBattery(int level, boolean plugged) {
@@ -1399,7 +1404,43 @@ public class Ui {
         }));
     }
 
+    /** Camera clock: shown, set by NTP, EU summer time */
+    private void clockRows(List<Row> out) {
+        final CameraClock c = host.clock();
+        if (c == null) {
+            return;
+        }
+        out.add(Row.header("Uhr"));
+        out.add(Row.info("Kamerazeit", CameraClock.describe()));
+        out.add(Row.action("Jetzt stellen (Zeitserver)", "", new Runnable() {
+            @Override
+            public void run() {
+                showMessage(c.syncNtp(true), false);
+            }
+        }));
+        out.add(Row.action("Automatisch stellen im WLAN", c.auto() ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                c.setAuto(!c.auto());
+            }
+        }));
+        out.add(Row.action("Zeitserver", CameraClock.SERVERS[c.server()], new Runnable() {
+            @Override
+            public void run() {
+                c.setServer((c.server() + 1) % CameraClock.SERVERS.length);
+            }
+        }));
+        out.add(Row.action("Sommerzeit automatisch (EU)", c.autoSummer() ? "Ein" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                c.setAutoSummer(!c.autoSummer());
+            }
+        }));
+        out.add(Row.info("Letzter Abgleich", c.state()));
+    }
+
     private void setupRows(List<Row> out) {
+        clockRows(out);
         out.add(Row.header("Bedienung"));
         out.add(Row.sub("Benutzertasten", "", new Sub() {
             @Override

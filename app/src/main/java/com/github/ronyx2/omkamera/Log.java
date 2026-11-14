@@ -85,7 +85,9 @@ public final class Log {
         FileWriter w = null;
         try {
             w = new FileWriter(file, true);
-            w.write(TIME.format(new Date()) + " " + level + " " + msg + "\r\n");
+            // Wall time from the camera's own clock (Android's clock is not set on the camera)
+            TIME.setTimeZone(CameraClock.zone());
+            w.write(TIME.format(new Date(CameraClock.nowUtc())) + " " + level + " " + msg + "\r\n");
         } catch (Throwable ignored) {
             // The card may be missing or full; logging must never break the app
         } finally {

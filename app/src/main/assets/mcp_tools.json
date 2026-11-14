@@ -373,5 +373,26 @@
     }
    }
   }
+ },
+ {
+  "name": "uhr",
+  "description": "Uhr der Kamera (gilt für EXIF, Dateizeiten, Zeitraffer-Startzeit und Zeitfenster). aktion 'status' zeigt Kamerazeit, Zeitzone und letzten Abgleich; 'ntp' stellt sie über den Zeitserver (Router oder pool.ntp.org) inklusive EU-Sommerzeit; 'setzen' übernimmt die Zeit 'zeit_ms' (Millisekunden seit 1970, UTC) vom PC.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "aktion": {
+     "type": "string",
+     "enum": [
+      "status",
+      "ntp",
+      "setzen"
+     ]
+    },
+    "zeit_ms": {
+     "type": "integer",
+     "description": "aktuelle Zeit in ms seit 1970 (UTC), nur für 'setzen'"
+    }
+   }
+  }
  }
 ]

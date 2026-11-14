@@ -388,6 +388,31 @@ public class McpServer {
                 }
             }));
         }
+        if (name.equals("uhr")) {
+            CameraClock c = ui.clock();
+            if (c == null) {
+                return text("Uhr nicht verfügbar");
+            }
+            String act = a.optString("aktion", "status");
+            if ("ntp".equals(act)) {
+                c.syncNtp(true);
+                // Wait for the background query (at most a few seconds)
+                for (int i = 0; i < 80 && c.busy(); i++) {
+                    Thread.sleep(100);
+                }
+                return text(c.state() + "\nKamerazeit: " + CameraClock.describe());
+            }
+            if ("setzen".equals(act)) {
+                long ms = a.optLong("zeit_ms", 0);
+                if (ms < 1500000000000L) {
+                    return text("zeit_ms fehlt (Millisekunden seit 1970, UTC)");
+                }
+                return text(c.syncFrom(ms, "vom PC") + "\nKamerazeit: " + CameraClock.describe());
+            }
+            return text("Kamerazeit: " + CameraClock.describe() + "\nAbgleich: " + c.state()
+                    + "\nautomatisch: " + (c.auto() ? "ein" : "aus") + ", Zeitserver: " + CameraClock.SERVERS[c.server()]
+                    + ", Sommerzeit automatisch: " + (c.autoSummer() ? "ein" : "aus"));
+        }
         if (name.equals("rawtest")) {
             final String mode = a.optString("modus", "status");
             final int n = a.optInt("anzahl", 2);
@@ -589,6 +614,7 @@ public class McpServer {
         short[][] h = s.histogram();
         o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
         o.put("brennweite", Math.round(s.focalLength()));
+        o.put("uhr", CameraClock.describe());
         AutoIso ai = host.ui().autoIso();
         if (ai != null && ai.mode() != 0) {
             o.put("iso_automatik", AutoIso.LABELS[ai.mode()] + ", " + ai.state());

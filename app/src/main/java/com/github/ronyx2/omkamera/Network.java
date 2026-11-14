@@ -40,6 +40,20 @@ public class Network {
         }
     }
 
+    /** Gateway (router) of the WLAN from DHCP, or null */
+    public String gateway() {
+        try {
+            android.net.DhcpInfo d = wifi != null ? wifi.getDhcpInfo() : null;
+            int a = d != null ? d.gateway : 0;
+            if (a == 0) {
+                return null;
+            }
+            return (a & 0xff) + "." + ((a >> 8) & 0xff) + "." + ((a >> 16) & 0xff) + "." + ((a >> 24) & 0xff);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /**
      * SSID, standard, speed, signal and IP of the connection, or null without connection.
      * The standard is estimated from the link speed: the camera's WLAN chip works at 2.4 GHz

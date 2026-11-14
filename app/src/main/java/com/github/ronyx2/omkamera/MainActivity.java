@@ -39,6 +39,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private LiveAnalysis liveAnalysis;
     private Processor processor;
     private AutoIso autoIso;
+    private CameraClock clock;
     private final McpServer mcp = new McpServer(this);
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
@@ -257,6 +258,28 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
         });
         ui.setAutoIso(autoIso);
+        clock = new CameraClock(getSharedPreferences("ui", MODE_PRIVATE), new CameraClock.Host() {
+            @Override
+            public boolean wifiConnected() {
+                return network.ip() != null;
+            }
+
+            @Override
+            public String gateway() {
+                return network.gateway();
+            }
+
+            @Override
+            public void message(final String text, final boolean warn) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        ui.showMessage(text, warn);
+                        redraw();
+                    }
+                });
+            }
+        });
         debugServer = new DebugServer(new DebugServer.Provider() {
             @Override
             public DebugServer.Response handle(DebugServer.Request request) {
@@ -294,6 +317,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         applyNetwork();
         applyDisplay();
         autoIso.apply();
+        clock.start();
         handler.post(cardTick);
         redraw();
     }
@@ -311,6 +335,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         stopLevel();
         liveAnalysis.stop();
         autoIso.stop();
+        clock.stop();
         sequencer.stop("abgebrochen (App beendet)");
         SonySystem.setAutoPowerOff(this, true);
         debugServer.stop();
@@ -750,6 +775,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     }
 
     @Override
+    public CameraClock clock() {
+        return clock;
+    }
+
+    @Override
     public boolean wifiConnected() {
         return network.ip() != null;
     }
@@ -914,6 +944,18 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             return png != null ? new DebugServer.Response(200, "image/png", png)
                     : DebugServer.Response.text(503, "text/plain", "kein Bild");
         }
+        if (path.equals("/api/clock")) {
+            // Takes the browser's time for the camera clock (when there is no time server)
+            long t;
+            try {
+                t = Long.parseLong(String.valueOf(r.param("t")));
+            } catch (NumberFormatException e) {
+                return json("{\"result\":\"Zeit fehlt\"}");
+            }
+            String res = clock.syncFrom(t, "vom Browser");
+            Log.info("remote /api/clock -> " + res);
+            return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(res) + "}");
+        }
         final DebugServer.Request req = r;
         String result = onMain(new java.util.concurrent.Callable<String>() {
             @Override
@@ -1053,6 +1095,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         o.put("directShutter", session.isDirectShutter());
         o.put("ui", ui.state().name());
         o.put("ael", ui.aeLocked());
+        o.put("clock", CameraClock.nowUtc());
         int[] fp = session.focusPoint();
         if (fp != null) {
             o.put("focusPoint", fp[0] + "," + fp[1]);
