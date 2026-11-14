@@ -632,7 +632,8 @@ public final class RawTools {
      * (star trails with hundreds of frames).
      */
     private static final class Simple implements Rows {
-        private static final int BAND = 32;
+        /** Rows per band: each band opens every file once, so larger bands mean fewer opens */
+        private final int band;
         private final RawFile[] f;
         private final Mode mode;
         private final int w;
@@ -643,8 +644,25 @@ public final class RawTools {
             this.f = f;
             this.mode = mode;
             w = f[0].width;
-            acc = new int[BAND * w];
-            tmp = new int[BAND * w];
+            int b = 128;
+            int[] a = null, t = null;
+            // 128 rows of a 24 MP file: 2 x 3 MB; fall back to smaller bands if the heap is short
+            while (t == null) {
+                try {
+                    a = new int[b * w];
+                    t = new int[b * w];
+                } catch (OutOfMemoryError e) {
+                    a = null;
+                    if (b <= 16) {
+                        throw e;
+                    }
+                    b /= 2;
+                }
+            }
+            band = b;
+            acc = a;
+            tmp = t;
+            Log.info("combine " + mode + " " + f.length + " files, band " + band + " rows");
         }
 
         @Override
@@ -653,7 +671,7 @@ public final class RawTools {
         }
 
         private void loadBand(int y0) throws IOException {
-            int n = Math.min(BAND, f[0].height - y0);
+            int n = Math.min(band, f[0].height - y0);
             int len = n * w;
             f[0].readBand(y0, n, acc);
             for (int i = 1; i < f.length; i++) {
@@ -681,7 +699,7 @@ public final class RawTools {
         @Override
         public void row(int y, int[] out) throws IOException {
             if (bandY < 0 || y < bandY || y >= bandY + bandN) {
-                loadBand(y - y % BAND);
+                loadBand(y - y % band);
             }
             System.arraycopy(acc, (y - bandY) * w, out, 0, w);
             if (mode == Mode.MAX) {
