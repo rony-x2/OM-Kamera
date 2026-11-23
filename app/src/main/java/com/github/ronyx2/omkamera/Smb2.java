@@ -18,7 +18,8 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Minimal SMB 2.0.2 / 2.1 / 3.0 / 3.0.2 / 3.1.1 client for writing files to a share (any NAS, Samba,
  * Windows): NTLMv2 logon wrapped in SPNEGO, message signing when the server requires it
- * (HMAC-SHA256 for SMB 2, AES-CMAC for SMB 3),
+ * (HMAC-SHA256 for SMB 2, AES-CMAC for SMB 3) and SMB 3 encryption (AES-128-CCM) when the
+ * server or the share requires it,
  * creating folders and writing files. Pure Java without Android classes, so it also runs on
  * Android 2.3 and can be tested on a PC; small enough for the camera's 24 MB heap.
  */
@@ -41,6 +42,9 @@ public final class Smb2 {
     private String server;
     private String madeDir = null;
     private byte[] lastSent;
+    /** SMB 3 encryption (AES-128-CCM): keys after logon, on when the session or the share asks for it */
+    private boolean encrypt;
+    private byte[] encKey, decKey;
     /** SMB 3.1.1 preauth integrity hash over negotiate and session setup, null for older dialects */
     private byte[] preauth;
 
@@ -98,6 +102,10 @@ public final class Smb2 {
 
     public boolean signing() {
         return signing;
+    }
+
+    public boolean encrypted() {
+        return encrypt;
     }
 
     // ---- folders and files ----
@@ -238,13 +246,13 @@ public final class Smb2 {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         b.write(le16(36, 5)); // StructureSize, DialectCount
         b.write(le16(1, 0)); // SecurityMode: signing enabled
-        b.write(le32(0)); // Capabilities
+        b.write(le32(0x40)); // Capabilities: encryption (SMB 3.0/3.0.2)
         byte[] guid = new byte[16];
         new SecureRandom().nextBytes(guid);
         b.write(guid);
         // SMB 3.1.1: NegotiateContextOffset/Count instead of ClientStartTime
         b.write(le32(112));
-        b.write(le16(1, 0));
+        b.write(le16(2, 0)); // two contexts
         b.write(le16(0x0202, 0x0210));
         b.write(le16(0x0300, 0x0302));
         b.write(le16(0x0311, 0)); // last dialect + 2 bytes padding to offset 112
@@ -260,6 +268,11 @@ public final class Smb2 {
         ByteArrayOutputStream bb = new ByteArrayOutputStream();
         bb.write(body);
         bb.write(salt);
+        bb.write(new byte[2]); // align the next context to 8 bytes
+        // Encryption capabilities: AES-128-CCM
+        bb.write(le16(2, 4));
+        bb.write(new byte[4]);
+        bb.write(le16(1, 1)); // CipherCount 1, AES-128-CCM
         byte[] r;
         try {
             r = call(NEGOTIATE, bb.toByteArray(), true);
@@ -332,6 +345,21 @@ public final class Smb2 {
         if ((sessionFlags & 0x3) != 0) {
             signing = false; // guest or anonymous: nothing to sign with
         }
+        if (dialect >= 0x0300) {
+            byte[] sk = auth[1];
+            if (dialect == 0x0311) {
+                encKey = kdf(sk, "SMBC2SCipherKey\0".getBytes("US-ASCII"), preauth);
+                decKey = kdf(sk, "SMBS2CCipherKey\0".getBytes("US-ASCII"), preauth);
+            } else {
+                encKey = kdf(sk, "SMB2AESCCM\0".getBytes("US-ASCII"), "ServerIn \0".getBytes("US-ASCII"));
+                decKey = kdf(sk, "SMB2AESCCM\0".getBytes("US-ASCII"), "ServerOut\0".getBytes("US-ASCII"));
+            }
+            if ((sessionFlags & 0x4) != 0) {
+                encrypt = true; // the server wants everything encrypted
+            }
+        } else if ((sessionFlags & 0x4) != 0) {
+            throw new IOException("Server verlangt Verschlüsselung, spricht aber kein SMB 3");
+        }
         signingKey = dialect == 0x0311 ? kdf(auth[1], "SMBSigningKey\0".getBytes("US-ASCII"), preauth)
                 : dialect >= 0x0300 ? kdf(auth[1], "SMB2AESCMAC\0".getBytes("US-ASCII"), "SmbSign\0".getBytes("US-ASCII"))
                 : auth[1];
@@ -365,6 +393,12 @@ public final class Smb2 {
                     : status == 0xC0000022 ? "Kein Zugriff auf die Freigabe „" + share + "“" : "Freigabe nicht verbunden (" + statusText(status) + ")");
         }
         treeId = (int) u32(r, 36);
+        if ((u32(r, 64 + 4) & 0x8000) != 0) {
+            if (encKey == null) {
+                throw new IOException("Freigabe verlangt Verschlüsselung, der Server spricht aber kein SMB 3");
+            }
+            encrypt = true; // this share wants encryption
+        }
     }
 
     // ---- messages ----
@@ -385,7 +419,8 @@ public final class Smb2 {
         put16(msg, 6, dialect > 0x0202 ? 1 : 0); // CreditCharge
         put16(msg, 12, command);
         put16(msg, 14, 64); // CreditRequest
-        boolean sign = signing && signingKey != null && command != NEGOTIATE && command != SESSION_SETUP;
+        boolean enc = encrypt && command != NEGOTIATE && command != SESSION_SETUP;
+        boolean sign = !enc && signing && signingKey != null && command != NEGOTIATE && command != SESSION_SETUP;
         put32(msg, 16, sign ? 0x8 : 0);
         put64(msg, 24, id);
         put32(msg, 36, treeId);
@@ -396,6 +431,9 @@ public final class Smb2 {
             System.arraycopy(mac, 0, msg, 48, 16);
         }
         lastSent = msg;
+        if (enc) {
+            msg = seal(msg);
+        }
         byte[] frame = new byte[4 + msg.length];
         frame[1] = (byte) (msg.length >> 16);
         frame[2] = (byte) (msg.length >> 8);
@@ -419,6 +457,10 @@ public final class Smb2 {
             int len = in.readInt() & 0x00FFFFFF;
             byte[] msg = new byte[len];
             in.readFully(msg);
+            if (len > 52 && msg[0] == (byte) 0xFD && msg[1] == 'S') {
+                msg = unseal(msg);
+                len = msg.length;
+            }
             if (len < 64 || msg[0] != (byte) 0xFE || msg[1] != 'S') {
                 throw new IOException("Keine SMB2-Antwort");
             }
@@ -710,6 +752,94 @@ public final class Smb2 {
 
     private static long u64(byte[] b, int o) {
         return u32(b, o) | u32(b, o + 4) << 32;
+    }
+
+    // ---- SMB 3 encryption: transform header + AES-128-CCM (RFC 3610, 11-byte nonce, 16-byte tag) ----
+
+    private byte[] seal(byte[] msg) throws IOException {
+        byte[] th = new byte[52];
+        th[0] = (byte) 0xFD;
+        th[1] = 'S';
+        th[2] = 'M';
+        th[3] = 'B';
+        byte[] nonce = new byte[11];
+        new SecureRandom().nextBytes(nonce);
+        System.arraycopy(nonce, 0, th, 20, 11);
+        put32(th, 36, msg.length);
+        put16(th, 42, 1); // encrypted / AES-128-CCM
+        put64(th, 44, sessionId);
+        byte[] aad = java.util.Arrays.copyOfRange(th, 20, 52);
+        byte[][] ct = Ccm.run(encKey, nonce, aad, msg, true, null);
+        System.arraycopy(ct[1], 0, th, 4, 16);
+        return concat(th, ct[0]);
+    }
+
+    private byte[] unseal(byte[] m) throws IOException {
+        if (decKey == null) {
+            throw new IOException("Verschlüsselte Antwort vor der Anmeldung");
+        }
+        byte[] nonce = java.util.Arrays.copyOfRange(m, 20, 31);
+        byte[] aad = java.util.Arrays.copyOfRange(m, 20, 52);
+        byte[] tag = java.util.Arrays.copyOfRange(m, 4, 20);
+        byte[] data = java.util.Arrays.copyOfRange(m, 52, m.length);
+        return Ccm.run(decKey, nonce, aad, data, false, tag)[0];
+    }
+
+    static final class Ccm {
+        /** Encrypts (returns {ciphertext, tag}) or decrypts and checks the tag (returns {plaintext}) */
+        static byte[][] run(byte[] key, byte[] nonce, byte[] aad, byte[] data, boolean encrypt, byte[] tagIn)
+                throws IOException {
+            try {
+                SecretKeySpec k = new SecretKeySpec(key, "AES");
+                int n = data.length;
+                int blocks = (n + 15) / 16;
+                // Key stream: A_0 … A_blocks in one ECB call
+                byte[] ctr = new byte[16 * (blocks + 1)];
+                for (int i = 0; i <= blocks; i++) {
+                    int o = 16 * i;
+                    ctr[o] = 3; // L - 1 with L = 4
+                    System.arraycopy(nonce, 0, ctr, o + 1, 11);
+                    ctr[o + 12] = (byte) (i >>> 24);
+                    ctr[o + 13] = (byte) (i >>> 16);
+                    ctr[o + 14] = (byte) (i >>> 8);
+                    ctr[o + 15] = (byte) i;
+                }
+                javax.crypto.Cipher ecb = javax.crypto.Cipher.getInstance("AES/ECB/NoPadding");
+                ecb.init(javax.crypto.Cipher.ENCRYPT_MODE, k);
+                byte[] ks = ecb.doFinal(ctr);
+                byte[] out = new byte[n];
+                for (int i = 0; i < n; i++) out[i] = (byte) (data[i] ^ ks[16 + i]);
+                byte[] plain = encrypt ? data : out;
+                // CBC-MAC over B0, the additional data and the plaintext, in one CBC call
+                int aadLen = 2 + aad.length;
+                int aadPadded = (aadLen + 15) / 16 * 16;
+                byte[] macIn = new byte[16 + aadPadded + blocks * 16];
+                macIn[0] = 0x7B; // Adata, M = 16, L = 4
+                System.arraycopy(nonce, 0, macIn, 1, 11);
+                macIn[12] = (byte) (n >>> 24);
+                macIn[13] = (byte) (n >>> 16);
+                macIn[14] = (byte) (n >>> 8);
+                macIn[15] = (byte) n;
+                macIn[16] = (byte) (aad.length >>> 8);
+                macIn[17] = (byte) aad.length;
+                System.arraycopy(aad, 0, macIn, 18, aad.length);
+                System.arraycopy(plain, 0, macIn, 16 + aadPadded, n);
+                javax.crypto.Cipher cbc = javax.crypto.Cipher.getInstance("AES/CBC/NoPadding");
+                cbc.init(javax.crypto.Cipher.ENCRYPT_MODE, k, new javax.crypto.spec.IvParameterSpec(new byte[16]));
+                byte[] mac = cbc.doFinal(macIn);
+                byte[] tag = new byte[16];
+                for (int i = 0; i < 16; i++) tag[i] = (byte) (mac[mac.length - 16 + i] ^ ks[i]);
+                if (encrypt) {
+                    return new byte[][]{out, tag};
+                }
+                if (!java.security.MessageDigest.isEqual(tag, tagIn)) {
+                    throw new IOException("Verschlüsselte Antwort ist beschädigt");
+                }
+                return new byte[][]{out};
+            } catch (java.security.GeneralSecurityException e) {
+                throw new IOException("AES nicht verfügbar: " + e);
+            }
+        }
     }
 
     /** SP800-108 counter-mode KDF with HMAC-SHA256, 128-bit key (SMB 3.0 signing key) */

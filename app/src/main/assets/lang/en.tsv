@@ -713,6 +713,7 @@ re:^Ein · (.+)$	On · $1
 Verbindung wird geprüft …	Checking connection …
 Übertragung ist noch nicht eingerichtet (Fernsteuerungsseite im Browser)	Transfer is not set up yet (remote control page in the browser)
 re:^Verbindung in Ordnung: (.*), signiert\)$	Connection OK: $1, signed)
+re:^Verbindung in Ordnung: (.*), verschlüsselt\)$	Connection OK: $1, encrypted)
 re:^Verbindung in Ordnung: (.*)$	Connection OK: $1
 Benutzer oder Passwort falsch	wrong user or password
 kein Schreibrecht	no write permission

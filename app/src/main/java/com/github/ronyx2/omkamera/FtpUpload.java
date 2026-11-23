@@ -399,7 +399,7 @@ public final class FtpUpload {
         }
 
         public String info() {
-            return " (" + smb.dialectName() + (smb.signing() ? ", signiert" : "") + ")";
+            return " (" + smb.dialectName() + (smb.encrypted() ? ", verschlüsselt" : smb.signing() ? ", signiert" : "") + ")";
         }
 
         public void close() {
