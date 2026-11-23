@@ -294,7 +294,8 @@ public final class Smb2 {
             domain = u.substring(at + 1);
             u = u.substring(0, at);
         }
-        int flags = 0x00000001 | 0x00000004 | 0x00000200 | 0x00008000 | 0x00080000 | 0x00800000 | 0x20000000;
+        int flags = 0x00000001 | 0x00000004 | 0x00000010 | 0x00000200 | 0x00008000 | 0x00080000 | 0x00800000
+                | 0x20000000 | 0x40000000 | 0x80000000;
         byte[] neg = ntlmNegotiate(flags);
         long id = send(SESSION_SETUP, sessionSetup(spnegoInit(neg)));
         preauth(lastSent);
@@ -318,7 +319,14 @@ public final class Smb2 {
         r = receiveRaw(id);
         status = (int) u32(r, 8);
         if (status != STATUS_OK) {
-            throw new IOException(status == 0xC000006D ? "Benutzer oder Passwort falsch" : "Anmeldung abgelehnt (" + statusText(status) + ")");
+            if (status == 0xC000006D) {
+                throw new IOException("Benutzer oder Passwort falsch");
+            }
+            if (status == 0xC0000022) {
+                throw new IOException("Anmeldung verweigert – Passwort stimmt, aber das Konto darf SMB nicht nutzen "
+                        + "(Synology: Systemsteuerung → Benutzer → Bearbeiten → Anwendungen → SMB erlauben)");
+            }
+            throw new IOException("Anmeldung abgelehnt (" + statusText(status) + ")");
         }
         int sessionFlags = u16(r, 64 + 2);
         if ((sessionFlags & 0x3) != 0) {
@@ -516,9 +524,17 @@ public final class Smb2 {
         byte[] lmResponse = serverTime ? new byte[24]
                 : concat(hmac("HmacMD5", ntowf, concat(serverChallenge, clientChallenge)), clientChallenge);
         byte[] sessionKey = hmac("HmacMD5", ntowf, proof);
+        int negotiated = flags & serverFlags | 0x00000001;
+        byte[] encryptedKey = new byte[0];
+        if ((negotiated & 0x40000000) != 0) {
+            // Key exchange: a random session key, sent RC4-encrypted with the NTLMv2 key
+            byte[] exported = new byte[16];
+            new SecureRandom().nextBytes(exported);
+            encryptedKey = rc4(sessionKey, exported);
+            sessionKey = exported;
+        }
 
         byte[] d = utf16(domain), u = utf16(user), w = utf16("OMKAMERA");
-        int negotiated = flags & serverFlags | 0x00000001;
         int off = 64;
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         b.write("NTLMSSP\0".getBytes("US-ASCII"));
@@ -533,14 +549,32 @@ public final class Smb2 {
         off += u.length;
         b.write(field(w.length, off));
         off += w.length;
-        b.write(field(0, off)); // EncryptedRandomSessionKey: none (no key exchange)
+        b.write(field(encryptedKey.length, off));
         b.write(le32(negotiated));
         b.write(lmResponse);
         b.write(ntResponse);
         b.write(d);
         b.write(u);
         b.write(w);
+        b.write(encryptedKey);
         return new byte[][]{b.toByteArray(), sessionKey};
+    }
+
+    private static byte[] rc4(byte[] key, byte[] data) {
+        int[] st = new int[256];
+        for (int i = 0; i < 256; i++) st[i] = i;
+        for (int i = 0, j = 0; i < 256; i++) {
+            j = (j + st[i] + (key[i % key.length] & 0xff)) & 0xff;
+            int t = st[i]; st[i] = st[j]; st[j] = t;
+        }
+        byte[] out = new byte[data.length];
+        for (int k = 0, i = 0, j = 0; k < data.length; k++) {
+            i = (i + 1) & 0xff;
+            j = (j + st[i]) & 0xff;
+            int t = st[i]; st[i] = st[j]; st[j] = t;
+            out[k] = (byte) (data[k] ^ st[(st[i] + st[j]) & 0xff]);
+        }
+        return out;
     }
 
     private static byte[] avTimestamp(byte[] ti) {
