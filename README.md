@@ -9,7 +9,8 @@ Highlights: a menu modelled on Sony's newer cameras, Holy Grail time-lapse, RAW 
 camera, a browser remote and an **MCP interface** – the open standard that lets AI assistants such
 as Claude use tools, so you can ask the assistant in plain language and it operates the camera.
 
-Developed and tested on the a6000; see [Cameras](#cameras) for the status of the other models.
+Tested on the a6000 and a7II; it should run on all PlayMemories cameras – see [Cameras](#cameras),
+reports welcome.
 
 The display is available in **English and German** (Setup → Sprache / Language).
 
@@ -57,6 +58,8 @@ The display is available in **English and German** (Setup → Sprache / Language
 ## Features
 
 **Shooting**
+* Current focal length, live while zooming, with the 35 mm equivalent in brackets – "28 mm (42)" on
+  APS-C bodies and in the APS-C mode of the a7 models; Sony's own display does not show it
 * Live view with exposure bar, histogram, grid lines (3×3, golden ratio, square, diagonal), level marker,
   zebra and focus peaking, warnings (camera shake, clipped highlights, battery, card)
 * Fn menu with up to 18 freely assigned slots, menu with tabs and "My Menu", freely assignable custom buttons
@@ -89,17 +92,18 @@ The display is available in **English and German** (Setup → Sprache / Language
 ## Cameras
 
 Sony offered PlayMemories Camera Apps on 28 models, from the NEX-5R (2012) to the a6500 and
-RX100 V (2016); the app store closed on 31 August 2025. OM Kamera installs without it. The camera
-interfaces differ between generations, so each model needs its own test:
+RX100 V (2016); the app store closed on 31 August 2025. OM Kamera installs without it. All of them
+share the same platform, so OM Kamera should run on every one; it adapts to the sensor size and the
+features each body reports. Tested so far on two:
 
 | Status | Models |
 |---|---|
-| Tested | ILCE-6000 (a6000), firmware 3.21 |
-| Supported by the code | ILCE-7M2 (a7II), ILCE-7RM2 (a7RII) |
-| Interchangeable lens, not tested yet | ILCE-5000, ILCE-5100, ILCE-6300, ILCE-6500, ILCE-7, ILCE-7R, ILCE-7S, ILCE-7SM2, NEX-5R, NEX-5T, NEX-6 |
-| Compact, not tested yet | DSC-RX100M3, RX100M4, RX100M5, RX10M2, RX10M3, RX1RM2, HX60(V), HX80, HX90(V), HX400(V), WX500 |
+| Tested | ILCE-6000 (a6000), firmware 3.21 · ILCE-7M2 (a7II), firmware 4.01 |
+| Interchangeable lens, should work | ILCE-5000, ILCE-5100, ILCE-6300, ILCE-6500, ILCE-7, ILCE-7R, ILCE-7RM2, ILCE-7S, ILCE-7SM2, NEX-5R, NEX-5T, NEX-6 |
+| Compact, should work | DSC-RX100M3, RX100M4, RX100M5, RX10M2, RX10M3, RX1RM2, HX60(V), HX80, HX90(V), HX400(V), WX500 |
 
-Tried it on another model? Please open an [issue](../../issues) – what works, what does not.
+**Reports welcome:** tried it on another model? Please open an [issue](../../issues) with the model,
+the firmware and what works or does not – the table grows with every report.
 
 ## Forks and patches
 
