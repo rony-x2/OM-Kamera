@@ -1,13 +1,15 @@
 # OM Kamera
 
-A replacement for the whole shooting interface of Sony cameras with the PlayMemories Camera Apps
-platform – live view, menus, Fn menu, sequences – **without flashing**. It runs as an app on top of
-Sony's untouched firmware, built on [OpenMemories](https://github.com/ma1co/OpenMemories-Framework).
+Open camera software for **Sony cameras with PlayMemories Camera Apps** – 28 models from 2012 to
+2016, from the NEX-5R to the a6500 and RX100 V. OM Kamera replaces the whole shooting interface –
+live view, menus, Fn menu, sequences – **without flashing**: it runs as an app on top of Sony's
+untouched firmware, built on [OpenMemories](https://github.com/ma1co/OpenMemories-Framework).
+
 Highlights: a menu modelled on Sony's newer cameras, Holy Grail time-lapse, RAW stacking in the
 camera, a browser remote and an **MCP interface** – the open standard that lets AI assistants such
 as Claude use tools, so you can ask the assistant in plain language and it operates the camera.
-Developed and tested on the **ILCE-6000 (a6000)**; ILCE-7M2 and ILCE-7RM2 are supported by the code
-but less tested.
+
+Developed and tested on the a6000; see [Cameras](#cameras) for the status of the other models.
 
 The display is available in **English and German** (Setup → Sprache / Language).
 
