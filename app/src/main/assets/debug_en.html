@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OM Kamera – Debug</title>
+<style>
+  :root { --bg:#0e1114; --panel:#161b20; --line:#262d35; --text:#e6e9ec; --mute:#8b949e; --accent:#f0a030; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 12px; }
+  h1 { font-size: 19px; margin: 0; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav button, nav a { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 14px; font: inherit; cursor: pointer; text-decoration: none; }
+  nav button.on { border-color: var(--accent); color: var(--accent); }
+  nav a.remote { border-color: var(--accent); background: var(--accent); color: #111; font-weight: 600; }
+  label { color: var(--mute); font-size: 14px; }
+  #setup { display: none; max-width: 760px; }
+  #setup.on { display: block; }
+  #sys { display: none; }
+  #sys.on { display: block; }
+  #sys .btns { margin: 0 0 12px; }
+  #sys .btns button.on { border-color: var(--accent); color: var(--accent); }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .box h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); margin: 0 0 10px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 12px; }
+  .grid label { display: block; }
+  .wide { grid-column: 1 / -1; }
+  input, select { width: 100%; margin-top: 3px; background: #1d232a; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: inherit; }
+  input[type=checkbox] { width: auto; margin: 0 6px 0 0; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .btns button { background: #1d232a; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .btns button.main { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
+  .note { color: var(--mute); font-size: 13.5px; margin-top: 8px; }
+  #msg { color: var(--accent); font-size: 14px; min-height: 1.4em; margin: 0 0 10px; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 0;
+    white-space: pre-wrap; word-break: break-all; font: 13px/1.45 ui-monospace, Consolas, monospace; min-height: 60vh; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OM Kamera – Debug</h1>
+  <nav>
+    <button data-p="/status" class="on">Status</button>
+    <button data-p="/params">Parameter</button>
+    <button data-p="/log">Log</button>
+    <button data-s="1">Setup</button>
+    <button data-r="1">System</button>
+    <a class="remote" href="/remote">Remote control</a>
+  </nav>
+  <label><input type="checkbox" id="auto" checked> refresh automatically</label>
+</header>
+<div id="setup">
+  <p id="msg"></p>
+  <div class="box">
+    <h2>Access</h2>
+    <div class="grid"><label>Remote control code (on the camera: Network → Remote control)<input id="code" inputmode="numeric" autocomplete="off"></label></div>
+  </div>
+  <form class="box" id="ftp" autocomplete="off">
+    <h2>FTP transfer</h2>
+    <div class="grid">
+      <label>Server<input name="host" placeholder="192.168.2.10"></label>
+      <label>Port<input name="port" inputmode="numeric" placeholder="21"></label>
+      <label>User<input name="user" autocomplete="off"></label>
+      <label>Password<input name="pass" type="password" autocomplete="new-password"></label>
+      <label class="wide">Target folder<input name="dir" placeholder="/kamera"></label>
+      <label>Which pictures<select name="what"><option value="0">all pictures</option><option value="1">JPEG only</option><option value="2">RAW only (ARW)</option></select></label>
+      <label><br><input type="checkbox" name="results">also results (OMKAMERA)</label>
+    </div>
+    <div class="btns">
+      <button type="submit" class="main">Save</button>
+      <button type="button" id="ftptest">Check connection</button>
+      <button type="button" id="ftpon">Sending: off</button>
+    </div>
+    <p class="note" id="ftpstate">State: –</p>
+  </form>
+  <form class="box" id="lt" autocomplete="off">
+    <h2>Long times after 30"</h2>
+    <div class="grid"><label class="wide">Seconds, separated by commas (also 1:30 or 5m)<input name="v" placeholder="40, 45, 60, 90, 120"></label></div>
+    <div class="btns"><button type="submit" class="main">Save</button></div>
+    <p class="note">In mode M these times follow 30" on the shutter dial, before BULB. The exposure uses BULB, timed by the app.</p>
+  </form>
+</div>
+<div id="sys">
+  <p class="note" style="margin:0 0 8px">Fixed read-only queries with root rights on the Linux side of the camera. Needs the remote control code (under Setup).</p>
+  <div class="btns">
+    <button data-q="system">System</button>
+    <button data-q="speicher">Memory</button>
+    <button data-q="prozesse">Processes</button>
+    <button data-q="cpu">Processor</button>
+    <button data-q="ablauf">App switching</button>
+    <button data-q="log">Android-Log</button>
+  </div>
+</div>
+<pre id="out">…</pre>
+<script>
+  var cur = '/status';
+  var setupOn = false;
+  function show(p) {
+    cur = p;
+    setupOn = false;
+    document.getElementById('setup').classList.remove('on');
+    document.getElementById('sys').classList.remove('on');
+    document.getElementById('out').style.display = '';
+    document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.p === p); });
+    fetch(p).then(function (r) { return r.text(); }).then(function (t) {
+      var o = document.getElementById('out');
+      o.textContent = t;
+      if (cur === '/log') window.scrollTo(0, document.body.scrollHeight);
+    }).catch(function () {});
+  }
+  document.querySelectorAll('nav button').forEach(function (b) {
+    b.onclick = function () { if (b.dataset.s) openSetup(); else if (b.dataset.r) openSys(); else show(b.dataset.p); };
+  });
+  // ---- System: fixed root queries, chosen by name only ----
+  function openSys() {
+    setupOn = true;
+    document.getElementById('setup').classList.remove('on');
+    document.getElementById('sys').classList.add('on');
+    document.getElementById('out').style.display = '';
+    document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', !!b.dataset.r); });
+    document.getElementById('out').textContent = 'Choose a query.';
+  }
+  document.querySelectorAll('#sys button').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('#sys button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      var o = document.getElementById('out');
+      o.textContent = 'running …';
+      var code = '';
+      try { code = sessionStorage.getItem('omk.code') || document.getElementById('code').value.trim(); } catch (e) {}
+      fetch('/api/system?was=' + b.dataset.q + '&k=' + encodeURIComponent(code)).then(function (r) { return r.text(); })
+        .then(function (t) { o.textContent = t; if (b.dataset.q === 'log' || b.dataset.q === 'ablauf') window.scrollTo(0, document.body.scrollHeight); })
+        .catch(function (e) { o.textContent = 'Error: ' + e; });
+    };
+  });
+  setInterval(function () { if (!setupOn && document.getElementById('auto').checked) show(cur); }, 2000);
+
+  // ---- Einrichtung: needs the code of the remote control; the password goes in the body only ----
+  var $ = function (id) { return document.getElementById(id); };
+  try { $('code').value = sessionStorage.getItem('omk.code') || ''; } catch (e) {}
+  $('code').onchange = function () { try { sessionStorage.setItem('omk.code', $('code').value); } catch (e) {} load(); };
+  function say(t, warn) { $('msg').textContent = t || ''; $('msg').style.color = warn ? '#ff8a7a' : ''; }
+  function post(path, params) {
+    var p = new URLSearchParams();
+    for (var k in params) p.append(k, params[k]);
+    return fetch(path + '?k=' + encodeURIComponent($('code').value.trim()), {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: p.toString()
+    }).then(function (r) {
+      if (r.status === 403) return r.text().then(function (t) { throw new Error(t); });
+      return r.json();
+    });
+  }
+  var ftpOn = false;
+  function ftpShow(f) {
+    if (!f) return;
+    var fm = $('ftp');
+    if (!fm.contains(document.activeElement)) {
+      fm.host.value = f.host || ''; fm.port.value = f.port && f.port !== 21 ? f.port : '';
+      fm.user.value = f.user || ''; fm.dir.value = f.dir || '/'; fm.what.value = String(f.what || 0);
+      fm.results.checked = !!f.results;
+      fm.pass.placeholder = f.pass ? 'saved (leave empty = keep)' : '';
+    }
+    ftpOn = !!f.on;
+    $('ftpon').textContent = 'Sending: ' + (ftpOn ? 'on' : 'off');
+    $('ftpstate').textContent = 'State: ' + (f.state || '–');
+  }
+  function ftpParams(extra) {
+    var fm = $('ftp'), o = {};
+    ['host', 'port', 'user', 'pass', 'dir', 'what'].forEach(function (n) { o[n] = fm[n].value; });
+    o.results = fm.results.checked ? '1' : '0';
+    for (var k in extra) o[k] = extra[k];
+    return o;
+  }
+  function ftpSend(extra) {
+    post('/api/ftp', ftpParams(extra)).then(function (j) {
+      $('ftp').pass.value = ''; ftpShow(j.ftp); say(j.text, /FTP: |refused/.test(j.text || ''));
+    }).catch(function (e) { say(e.message, true); });
+  }
+  $('ftp').onsubmit = function (e) { e.preventDefault(); ftpSend({}); };
+  $('ftptest').onclick = function () { say('Checking the connection …'); ftpSend({ test: '1' }); };
+  $('ftpon').onclick = function () { ftpSend({ on: ftpOn ? '0' : '1' }); };
+  $('lt').onsubmit = function (e) {
+    e.preventDefault();
+    post('/api/longtimes', { v: $('lt').v.value }).then(function (j) { $('lt').v.value = j.longtimes; say(j.text); })
+      .catch(function (e) { say(e.message, true); });
+  };
+  function load() {
+    if (!$('code').value.trim()) { say('Please enter the remote control code.'); return; }
+    post('/api/ftp', {}).then(function (j) { ftpShow(j.ftp); say(''); }).catch(function (e) { say(e.message, true); });
+    post('/api/longtimes', {}).then(function (j) { if ($('lt').v !== document.activeElement) $('lt').v.value = j.longtimes; }).catch(function () {});
+  }
+  function openSetup() {
+    setupOn = true;
+    document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', !!b.dataset.s); });
+    $('setup').classList.add('on');
+    $('sys').classList.remove('on');
+    $('out').style.display = 'none';
+    load();
+  }
+  show(cur);
+</script>
+</body>
+</html>

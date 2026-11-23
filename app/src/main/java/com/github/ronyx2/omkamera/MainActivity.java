@@ -976,7 +976,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             o.put("what", ftp.what());
             o.put("results", ftp.results());
             o.put("on", ftp.on());
-            o.put("state", ftp.summary());
+            o.put("state", L.t(ftp.summary()));
             return "\"ftp\":" + o.toString();
         } catch (org.json.JSONException e) {
             return "\"ftp\":null";
@@ -1018,10 +1018,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private DebugServer.Response debugHandle(DebugServer.Request r) {
         String path = r.path;
         if (path.equals("/")) {
-            return DebugServer.Response.text(200, "text/html", asset("debug.html"));
+            return DebugServer.Response.text(200, "text/html", asset(L.english() ? "debug_en.html" : "debug.html"));
         }
         if (path.equals("/remote")) {
-            return DebugServer.Response.text(200, "text/html", asset("remote.html"));
+            return DebugServer.Response.text(200, "text/html", asset(L.english() ? "remote_en.html" : "remote.html"));
         }
         if (path.equals("/log")) {
             return text(Log.tail(64 * 1024));
@@ -1030,7 +1030,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             return text(onMain(new java.util.concurrent.Callable<String>() {
                 @Override
                 public String call() {
-                    return statusText();
+                    return L.lines(statusText());
                 }
             }));
         }
@@ -1147,7 +1147,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             for (int x : sequencer.dialLongTimes()) {
                 sb.append(sb.length() > 0 ? ", " : "").append(x);
             }
-            return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(msg == null ? "" : msg)
+            return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(msg == null ? "" : L.t(msg))
                     + ",\"longtimes\":" + org.json.JSONObject.quote(sb.toString()) + "}");
         }
         if (path.equals("/api/ftp")) {
@@ -1170,7 +1170,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                 }
                 Log.info("remote /api/ftp " + ftp.server() + ":" + ftp.port() + " " + ftp.dir() + " on=" + ftp.on() + " -> " + msg);
                 redraw();
-                return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(msg) + "," + ftpJson() + "}");
+                return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(L.t(msg)) + "," + ftpJson() + "}");
             }
             return json("{\"result\":\"ok\"," + ftpJson() + "}");
         }
@@ -1184,7 +1184,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
             String res = clock.syncFrom(t, "vom Browser");
             Log.info("remote /api/clock -> " + res);
-            return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(res) + "}");
+            return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(L.t(res)) + "}");
         }
         final DebugServer.Request req = r;
         String result = onMain(new java.util.concurrent.Callable<String>() {
@@ -1194,7 +1194,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
         });
         Log.info("remote " + path + " " + req.query + " -> " + result);
-        return json("{\"result\":" + org.json.JSONObject.quote(result != null ? result : "Zeitüberschreitung") + "}");
+        return json("{\"result\":" + org.json.JSONObject.quote(L.t(result != null ? result : "Zeitüberschreitung")) + "}");
     }
 
     /** Executes a remote action on the main thread. */
@@ -1339,19 +1339,19 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         for (Setting s : Settings.all()) {
             org.json.JSONObject j = new org.json.JSONObject();
             j.put("id", s.id);
-            j.put("label", s.label);
-            j.put("group", s.category.title);
+            j.put("label", L.t(s.label));
+            j.put("group", L.t(s.category.title));
             boolean available = s.isAvailable(p);
             j.put("available", available);
             j.put("shown", s.isShown(p));
             if (available) {
                 j.put("value", s.safeGet(p));
-                j.put("display", s.currentText(p));
+                j.put("display", L.t(s.currentText(p)));
                 org.json.JSONArray values = new org.json.JSONArray();
                 for (String v : s.safeValues(p)) {
                     org.json.JSONArray pair = new org.json.JSONArray();
                     pair.put(v);
-                    pair.put(s.display(p, v));
+                    pair.put(L.t(s.display(p, v)));
                     values.put(pair);
                 }
                 j.put("values", values);

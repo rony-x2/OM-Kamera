@@ -1,0 +1,425 @@
+[
+ {
+  "name": "status",
+  "description": "Current camera state: model, exposure mode, shutter speed, aperture, exposure compensation, ISO, battery, whether the card is being written, focus result, app UI state (LIVE, FN, MENU, AF_MOVE), position of the flexible spot, AE lock and all currently visible settings with their value. Keys are German (e.g. modus = mode, zeit = shutter speed, blende = aperture, akku = battery).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "einstellungen",
+  "description": "Lists settings with internal value, display text and all possible values. Without arguments only the settings that matter right now. The id and a value from 'werte' (values) are needed for einstellung_setzen.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "gruppe": {
+     "type": "string",
+     "description": "Only one group: Aufnahme (shooting), Belichtung (exposure), Bild (picture), Fokus (focus) or Blitz (flash)"
+    },
+    "alle": {
+     "type": "boolean",
+     "description": "Also show settings that do not matter right now or are not available"
+    }
+   }
+  }
+ },
+ {
+  "name": "einstellung_setzen",
+  "description": "Sets a setting. 'wert' (value) is the internal value or the display text (e.g. 'burst-high' or 'Continuous Hi'). Returns whether the camera accepted the value, and the value afterwards.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Id of the setting, e.g. iso, ev, wb, drive, dro, afarea"
+    },
+    "wert": {
+     "type": "string",
+     "description": "New value"
+    }
+   },
+   "required": [
+    "id",
+    "wert"
+   ]
+  }
+ },
+ {
+  "name": "belichtung",
+  "description": "Changes shutter speed, aperture, program shift or exposure compensation by whole steps, like the dials. What is possible depends on the mode (e.g. shutter speed only in S and M).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "was": {
+     "type": "string",
+     "enum": [
+      "zeit",
+      "blende",
+      "shift",
+      "ev"
+     ]
+    },
+    "schritte": {
+     "type": "integer",
+     "description": "Detents like on the dial, positive clockwise, negative counter-clockwise; -10 to 10"
+    }
+   },
+   "required": [
+    "was",
+    "schritte"
+   ]
+  }
+ },
+ {
+  "name": "fokus",
+  "description": "Focuses like a half-pressed shutter button and reports the result (OK, FAILED or NONE). With halten=true (hold) the shutter stays half pressed until fokus_loesen is called.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "halten": {
+     "type": "boolean"
+    }
+   }
+  }
+ },
+ {
+  "name": "fokus_loesen",
+  "description": "Releases the half-pressed shutter button.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "ausloesen",
+  "description": "Focuses and takes a picture, like a fully pressed shutter button. Only works with shutter control by the app.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "taste",
+  "description": "Presses a camera button in the app, e.g. to operate the Fn grid or the menu. Afterwards bild with quelle 'anzeige' shows what is on screen.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string",
+     "enum": [
+      "UP",
+      "DOWN",
+      "LEFT",
+      "RIGHT",
+      "ENTER",
+      "MENU",
+      "FN",
+      "DISP",
+      "DELETE",
+      "C1",
+      "C2",
+      "C3",
+      "WHEEL_CW",
+      "WHEEL_CCW",
+      "DIAL1_CW",
+      "DIAL1_CCW",
+      "DIAL2_CW",
+      "DIAL2_CCW",
+      "DIAL3_CW",
+      "DIAL3_CCW"
+     ]
+    },
+    "anzahl": {
+     "type": "integer",
+     "description": "How many times to press, default 1, at most 20"
+    }
+   },
+   "required": [
+    "name"
+   ]
+  }
+ },
+ {
+  "name": "fokusfeld",
+  "description": "Moves the flexible spot (focus area 'Flexible spot'). dx/dy in grid steps (17 × 11 like on the camera), or mitte=true (center), or x/y directly in the range -1000 to 1000 relative to the picture.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "dx": {
+     "type": "integer"
+    },
+    "dy": {
+     "type": "integer"
+    },
+    "mitte": {
+     "type": "boolean"
+    },
+    "x": {
+     "type": "integer"
+    },
+    "y": {
+     "type": "integer"
+    }
+   }
+  }
+ },
+ {
+  "name": "ael",
+  "description": "AE lock: an=true holds the current exposure, an=false releases it.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "an": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "an"
+   ]
+  }
+ },
+ {
+  "name": "bild",
+  "description": "Returns pictures: 'live' is the viewfinder picture as JPEG, 'anzeige' the app display (status line, Fn grid, menus) as PNG in the correct aspect ratio, 'beides' both pictures.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "quelle": {
+     "type": "string",
+     "enum": [
+      "live",
+      "anzeige",
+      "beides"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "log",
+  "description": "Last lines of the app log (buttons, settings, errors, camera responses).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "zeilen": {
+     "type": "integer",
+     "description": "Lines, default 60, at most 400"
+    }
+   }
+  }
+ },
+ {
+  "name": "parameter",
+  "description": "Diagnostics: reads the raw camera parameters (key=value) and optionally sets them directly, without the app's checks. 'filter' limits the output to keys containing the text. 'setzen' (set) is an object key → value. The response reports whether the camera accepted, and the values afterwards.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "filter": {
+     "type": "string"
+    },
+    "setzen": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "dateien",
+  "description": "Lists files on the memory card: 'OMKAMERA' (time-lapse movies, settings), 'DCIM' (newest picture folder) or a subfolder such as 'DCIM/10061114'.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ordner": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "jpeg_test",
+  "description": "Diagnostics: re-encodes a JPEG from the memory card with Sony's hardware JpegExporter at several quality levels and reports file size and errors per level. Without 'datei' (file) the newest JPEG in the DCIM folder is used. The test files go to OMKTEST on the card and can be removed with loeschen=true.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "datei": {
+     "type": "string",
+     "description": "Path on the card, e.g. /mnt/sdcard/DCIM/100MSDCF/DSC01234.JPG"
+    },
+    "stufen": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     },
+     "description": "Quality values for the exporter, default 1, 2, 3"
+    },
+    "loeschen": {
+     "type": "boolean",
+     "description": "Delete the test files after measuring, default true"
+    }
+   }
+  }
+ },
+ {
+  "name": "rawtest",
+  "description": "Experiment stage 3c: takes the RAW data of the next shot(s) via Sony's shutter sequence callback. modus 'durchreiche' (pass-through) develops one picture with the standard filter and saves it, 'addition' adds 'anzahl' pictures (2–8) with the RAW addition filter, 'hdr' takes three pictures (0, −EV, +EV; anzahl = EV distance 1–3, default 2) and develops them with the HDR filter, 'status' returns the result of the last attempt. Details are in the log (lines 'rawlab').",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "modus": {
+     "type": "string",
+     "enum": [
+      "status",
+      "durchreiche",
+      "addition",
+      "hdr"
+     ]
+    },
+    "anzahl": {
+     "type": "integer",
+     "description": "Pictures for the addition, default 2"
+    }
+   }
+  }
+ },
+ {
+  "name": "verarbeiten",
+  "description": "Stage 3c: converts ARW files on the card in the app or combines several. art 'dng' (lossless, with lens data), 'tiff' (16 bit) or 'png' (16 or 8 bit, simple development to sRGB) for the newest ARW or 'datei' (file); 'heic' and 'avif' (experimental, 8 bit, tile grid, slow); 'mittel' (average), 'summe' (sum), 'maximum' (star trails) and 'fokus' (focus stacking) for the newest 'anzahl' ARWs, result as DNG. 'status' shows progress and the last result, 'abbrechen' cancels. Results are stored in OMKAMERA on the card.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "art": {
+     "type": "string",
+     "enum": [
+      "status",
+      "abbrechen",
+      "dng",
+      "tiff",
+      "png",
+      "heic",
+      "avif",
+      "mittel",
+      "summe",
+      "maximum",
+      "fokus"
+     ]
+    },
+    "datei": {
+     "type": "string",
+     "description": "Name or path of an ARW, e.g. DSC05935.ARW"
+    },
+    "anzahl": {
+     "type": "integer",
+     "description": "Number of newest ARWs to combine, default 3"
+    },
+    "bit": {
+     "type": "integer",
+     "enum": [
+      8,
+      16
+     ],
+     "description": "Color depth for PNG, remembered as a setting"
+    },
+    "qualitaet": {
+     "type": "integer",
+     "description": "HEIC/AVIF: quality 50, 60, 70, 80 or 90 (remembered)"
+    },
+    "mp": {
+     "type": "integer",
+     "enum": [
+      24,
+      12,
+      6
+     ],
+     "description": "HEIC/AVIF: output size in megapixels (remembered)"
+    },
+    "kerne": {
+     "type": "integer",
+     "enum": [
+      2,
+      4
+     ],
+     "description": "AVIF: number of cores (remembered)"
+    }
+   }
+  }
+ },
+ {
+  "name": "zeitraffer",
+  "description": "Stage 4: time-lapse (LRT). aktion 'status' shows the state, 'rampe' starts an interval ramp to 'ziel' seconds within 'minuten' minutes, 'rampe_stopp' stops it, 'heller'/'dunkler' (brighter/darker) moves the Holy Grail reference by 1/3 EV, 'setzen' sets an option like in the menu ('schluessel' (key) and 'wert' (value): interval in tenths of a second, count, bulb seconds, at 0/1 = delay/time of day, ath/atm start time, delay, win 0/1, wfrom/wto hour, wdays bit mask Mon=1, hg 0/1/-1, isomax, isomin, film frames/s, rampto, rampmin). It is started with the sequence 'Time-lapse (LRT)' and the shutter button.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "aktion": {
+     "type": "string",
+     "enum": [
+      "status",
+      "rampe",
+      "rampe_stopp",
+      "heller",
+      "dunkler",
+      "setzen"
+     ]
+    },
+    "ziel": {
+     "type": "number",
+     "description": "Target interval in seconds"
+    },
+    "minuten": {
+     "type": "integer",
+     "description": "Duration of the ramp in minutes"
+    },
+    "schluessel": {
+     "type": "string"
+    },
+    "wert": {
+     "type": "integer"
+    }
+   }
+  }
+ },
+ {
+  "name": "uhr",
+  "description": "Clock: 'status' shows the time the app works with (log, time-lapse start time, time window) and the camera's Sony clock (EXIF, folder names) with its deviation. 'ntp' syncs with the time server (router or pool.ntp.org, EU summer time); 'setzen' takes 'zeit_ms' (ms since 1970, UTC) from the PC. The a6000 does not let apps set its Sony clock; the app then remembers the deviation and works with the correct time.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "aktion": {
+     "type": "string",
+     "enum": [
+      "status",
+      "ntp",
+      "setzen"
+     ]
+    },
+    "zeit_ms": {
+     "type": "integer",
+     "description": "current time in ms since 1970 (UTC), only for 'setzen'"
+    }
+   }
+  }
+ },
+ {
+  "name": "system",
+  "description": "System diagnostics with root rights on the Linux side of the camera, read-only and fixed queries only: 'system' (kernel, uptime, load, memory, cores and clock), 'speicher' (/proc/meminfo), 'prozesse' (all processes by memory use), 'log' (last 600 lines of the Android log without battery messages), 'ablauf' (app switching, Android sleep and wake-up), 'cpu' (processor).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "was": {
+     "type": "string",
+     "enum": [
+      "system",
+      "speicher",
+      "prozesse",
+      "log",
+      "ablauf",
+      "cpu"
+     ]
+    }
+   }
+  }
+ }
+]

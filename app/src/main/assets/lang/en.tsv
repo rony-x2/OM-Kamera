@@ -674,3 +674,7 @@ Zustand	State
 Zusätzlich speichern als	Also save as
 Übertragung von 	Transfer of 
 weiter in 	continuing in 
+leer	empty
+WLAN	Wi-Fi
+re:^Letzte (\d+) Bilder verrechnen$	Combine last $1 pictures
+re:^Letzte (\d+) RAWs verrechnen$	Combine last $1 RAWs

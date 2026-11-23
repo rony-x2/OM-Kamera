@@ -30,6 +30,8 @@ public final class L {
     private static final Map<String, String> FULL = new HashMap<String, String>();
     /** German pieces, longest first */
     private static final List<String[]> PIECES = new ArrayList<String[]>();
+    /** Patterns for texts with numbers in the middle ("re:" lines in the file) */
+    private static final List<Object[]> PATTERNS = new ArrayList<Object[]>();
     private static final Map<String, String> CACHE = new HashMap<String, String>();
     private static final Set<String> MISSING = new LinkedHashSet<String>();
     private static boolean loaded;
@@ -69,6 +71,10 @@ public final class L {
                 }
                 String de = unescape(line.substring(0, tab));
                 String en = unescape(line.substring(tab + 1));
+                if (de.startsWith("re:")) {
+                    PATTERNS.add(new Object[] {java.util.regex.Pattern.compile(de.substring(3)), en});
+                    continue;
+                }
                 FULL.put(de, en);
                 int n = letters(de);
                 if (n >= 3 || (n == 2 && n < de.length())) {
@@ -118,7 +124,8 @@ public final class L {
                 CACHE.clear();
             }
             CACHE.put(s, r);
-            if (looksGerman(r) && MISSING.size() < 2000) {
+            boolean untouched = r.equals(s) && !FULL.containsKey(s) && hasLowerWord(s);
+            if ((untouched || looksGerman(r)) && MISSING.size() < 2000) {
                 MISSING.add(s);
             }
             return r;
@@ -129,6 +136,12 @@ public final class L {
         String f = FULL.get(s);
         if (f != null) {
             return f;
+        }
+        for (Object[] p : PATTERNS) {
+            java.util.regex.Matcher m = ((java.util.regex.Pattern) p[0]).matcher(s);
+            if (m.matches()) {
+                return m.replaceFirst((String) p[1]);
+            }
         }
         // Replace known pieces; translated parts are protected by markers, so they are not
         // translated a second time by a shorter piece.
@@ -175,6 +188,26 @@ public final class L {
         return Character.isLetterOrDigit(c);
     }
 
+    /** At least one word of 4 letters with lower case (not just codes like RAW, AWB, ILCE-6000) */
+    private static boolean hasLowerWord(String s) {
+        int run = 0;
+        boolean lower = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isLetter(c)) {
+                run++;
+                lower |= Character.isLowerCase(c);
+                if (run >= 4 && lower) {
+                    return true;
+                }
+            } else {
+                run = 0;
+                lower = false;
+            }
+        }
+        return false;
+    }
+
     /** Rough check for German text that was left over */
     private static boolean looksGerman(String s) {
         for (int i = 0; i < s.length(); i++) {
@@ -196,6 +229,22 @@ public final class L {
         " der ", " die ", " das ", " und ", " nicht ", " mit ", " ein ", " aus ", " bei ", " nach ", " vor ",
         " zeit", " bild", " einstellung", " wird ", " ist ", " für ", " auf ", " oder ", " uhr",
     };
+
+    /** Translates a text line by line (status pages) */
+    public static String lines(String s) {
+        if (!english || s == null) {
+            return s;
+        }
+        String[] ls = s.split("\n", -1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < ls.length; i++) {
+            if (i > 0) {
+                sb.append('\n');
+            }
+            sb.append(t(ls[i]));
+        }
+        return sb.toString();
+    }
 
     /** Texts that stayed German, for completing the translation */
     public static synchronized String missing() {

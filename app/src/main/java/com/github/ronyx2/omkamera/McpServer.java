@@ -92,7 +92,7 @@ public class McpServer {
             } else if (method.equals("ping")) {
                 result = new JSONObject();
             } else if (method.equals("tools/list")) {
-                result = new JSONObject().put("tools", new JSONArray(host.asset("mcp_tools.json")));
+                result = new JSONObject().put("tools", new JSONArray(host.asset(L.english() ? "mcp_tools_en.json" : "mcp_tools.json")));
             } else if (method.equals("tools/call")) {
                 JSONObject params = req.optJSONObject("params");
                 String name = params != null ? params.optString("name") : "";
@@ -787,7 +787,7 @@ public class McpServer {
 
     private static JSONObject text(String s) throws JSONException {
         return new JSONObject().put("content", new JSONArray().put(
-                new JSONObject().put("type", "text").put("text", s != null ? s : "Zeitüberschreitung")));
+                new JSONObject().put("type", "text").put("text", L.lines(s != null ? s : "Zeitüberschreitung"))));
     }
 
     private static JSONObject error(String s) throws JSONException {
