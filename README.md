@@ -12,7 +12,27 @@ The display is available in **English and German** (Setup → Sprache / Language
 
 ## Screenshots
 
-See [`docs/screenshots`](docs/screenshots).
+| Live view with status line and RGB histogram | Fn menu |
+|---|---|
+| ![Live view](docs/screenshots/01-live-view.png) | ![Fn menu](docs/screenshots/02-fn-menu.png) |
+
+| Main | Shooting |
+|---|---|
+| ![Menu main](docs/screenshots/03-menu-main.png) | ![Menu shooting](docs/screenshots/04-menu-shooting.png) |
+
+| Exposure/Color (auto ISO with minimum shutter speed) | Focus |
+|---|---|
+| ![Menu exposure](docs/screenshots/05-menu-exposure.png) | ![Menu focus](docs/screenshots/06-menu-focus.png) |
+
+| Setup: clock (NTP correction) | Setup: operation, language, direct start |
+|---|---|
+| ![Menu setup clock](docs/screenshots/07-menu-setup-clock.png) | ![Menu setup operation](docs/screenshots/08-menu-setup-operation.png) |
+
+**Remote control in the browser** – live view with the camera display, exposure, camera buttons and all settings:
+
+![Remote control](docs/screenshots/09-remote-control.jpg)
+
+<img src="docs/screenshots/10-remote-settings.png" alt="Remote control settings panel" width="320">
 
 ## Features
 
