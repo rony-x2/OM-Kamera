@@ -679,3 +679,10 @@ WLAN	Wi-Fi
 re:^Letzte (\d+) Bilder verrechnen$	Combine last $1 pictures
 re:^Letzte (\d+) RAWs verrechnen$	Combine last $1 RAWs
 sofort	immediately
+APS-C-Modus	APS-C mode
+unbekannt	unknown
+aktiv (Faktor 1,5)	on (factor 1.5)
+aus (Vollformat)	off (full frame)
+re:^(\d+) mm \((\d+) mm KB\)$	$1 mm ($2 mm equiv.)
+re:^1/\((\d+),(\d+) × Brennweite\), Standard$	1/($1.$2 × focal length), standard
+re:^1/\((\d+) × Brennweite\), Standard$	1/($1 × focal length), standard

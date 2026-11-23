@@ -98,7 +98,7 @@ public class AutoIso {
             return 1.0 / FIXED[m];
         }
         float f = session.focalLength();
-        double base = f > 0 ? 1.0 / (CROP * f) : 1.0 / 60;
+        double base = f > 0 ? 1.0 / (session.cropFactorOrGuess() * f) : 1.0 / 60;
         double l = base / Math.pow(2, STOPS[m]);
         if (ossBonus()) {
             String lens = session.lensText();

@@ -448,6 +448,111 @@ public class CameraSession {
         }
     }
 
+    // ---- sensor size and crop ----
+
+    /** Auto APS-C decision reported by full-frame bodies ("on"/"off"), null until reported */
+    private volatile String autoApsc;
+    private String model;
+
+    private String model() {
+        if (model == null) {
+            try {
+                model = com.github.ma1co.openmemories.framework.DeviceInfo.getInstance().getModel();
+            } catch (Throwable t) {
+                model = "";
+            }
+            if (model == null) {
+                model = "";
+            }
+        }
+        return model;
+    }
+
+    /** Full-frame body: a7 family and RX1 */
+    public boolean fullFrameBody() {
+        String m = model();
+        return m.startsWith("ILCE-7") || m.startsWith("DSC-RX1R") || m.equals("DSC-RX1");
+    }
+
+    /**
+     * Sensor factor of fixed-lens compacts (35 mm equivalent / real focal length), 0 for
+     * interchangeable-lens bodies. 1" sensors 2.73, 1/2.3" sensors depending on the lens.
+     */
+    private float compactFactor() {
+        String m = model();
+        if (m.startsWith("DSC-RX100") || m.startsWith("DSC-RX10")) {
+            return 2.73f;
+        }
+        if (m.startsWith("DSC-HX60") || m.startsWith("DSC-HX400")) {
+            return 5.58f;
+        }
+        if (m.startsWith("DSC-HX80") || m.startsWith("DSC-HX90") || m.startsWith("DSC-WX500")) {
+            return 5.85f;
+        }
+        return 0;
+    }
+
+    /**
+     * APS-C crop on a full-frame body: the APS-C setting ("on"/"off"/"auto") and, with "auto",
+     * what the camera decided for the attached lens. Null if the body does not say.
+     */
+    public Boolean apscCrop() {
+        if (!fullFrameBody()) {
+            return null;
+        }
+        try {
+            if (current == null || current.mod == null) {
+                return null;
+            }
+            String mode = current.mod.getApscMode();
+            if (CameraEx.ParametersModifier.APSC_MODE_ON.equals(mode)) {
+                return Boolean.TRUE;
+            }
+            if (CameraEx.ParametersModifier.APSC_MODE_OFF.equals(mode)) {
+                return Boolean.FALSE;
+            }
+            if (CameraEx.ParametersModifier.APSC_MODE_AUTO.equals(mode)) {
+                String a = autoApsc;
+                return a == null ? null : Boolean.valueOf(CameraEx.ParametersModifier.APSC_MODE_ON.equals(a));
+            }
+        } catch (Throwable t) {
+            // older bodies without the APS-C parameter
+        }
+        return null;
+    }
+
+    /**
+     * Factor from the real focal length to the 35 mm equivalent: 1.5 on APS-C bodies and in the
+     * APS-C mode of full-frame bodies, 1 on full frame, the sensor factor on compacts,
+     * 0 if unknown (full-frame body in "auto" before the camera reported its decision).
+     */
+    public float cropFactor() {
+        float c = compactFactor();
+        if (c > 0) {
+            return c;
+        }
+        if (!fullFrameBody()) {
+            return 1.5f;
+        }
+        Boolean crop = apscCrop();
+        return crop == null ? 0 : crop ? 1.5f : 1f;
+    }
+
+    /** Crop factor for rules of thumb (Auto ISO, shake warning): unknown counts as full frame on FF bodies */
+    public float cropFactorOrGuess() {
+        float c = cropFactor();
+        return c > 0 ? c : (fullFrameBody() ? 1f : 1.5f);
+    }
+
+    /** 35 mm equivalent of the current focal length, 0 if there is none to show (full frame, unknown) */
+    public int equivalentFocal() {
+        float f = focalLength(), c = cropFactor();
+        if (f <= 0 || c <= 0 || Math.abs(c - 1f) < 0.01f) {
+            return 0;
+        }
+        return Math.round(f * c);
+    }
+
     // ---- lens ----
 
     private volatile int focalRaw = -1;
@@ -521,12 +626,20 @@ public class CameraSession {
         if (l.FocalLength != null && l.FocalLength.wide > 0) {
             int w = Math.round(l.FocalLength.wide / scale), t = Math.round(l.FocalLength.tele / scale);
             out.add(new String[]{"Brennweite", w == t ? w + " mm (Festbrennweite)" : w + "–" + t + " mm"});
-            // APS-C: equivalent focal length on full frame
-            out.add(new String[]{"Kleinbild-Äquivalent", w == t ? Math.round(w * 1.5f) + " mm" : Math.round(w * 1.5f) + "–" + Math.round(t * 1.5f) + " mm"});
+            // 35 mm equivalent with the factor of this body (and APS-C mode on full frame)
+            float cf = cropFactor();
+            if (cf > 0 && Math.abs(cf - 1f) >= 0.01f) {
+                out.add(new String[]{"Kleinbild-Äquivalent", w == t ? Math.round(w * cf) + " mm" : Math.round(w * cf) + "–" + Math.round(t * cf) + " mm"});
+            }
         }
         float f = focalLength();
         if (f > 0) {
-            out.add(new String[]{"Aktuelle Brennweite", Math.round(f) + " mm"});
+            int eq = equivalentFocal();
+            out.add(new String[]{"Aktuelle Brennweite", Math.round(f) + " mm" + (eq > 0 ? " (" + eq + " mm KB)" : "")});
+        }
+        if (fullFrameBody()) {
+            Boolean crop = apscCrop();
+            out.add(new String[]{"APS-C-Modus", crop == null ? "unbekannt" : crop ? "aktiv (Faktor 1,5)" : "aus (Vollformat)"});
         }
         if (l.MinFValue != null && l.MinFValue.wide > 0) {
             out.add(new String[]{"Lichtstärke", fRange(l.MinFValue)});
@@ -608,7 +721,8 @@ public class CameraSession {
             return null;
         }
         float f = focalLength();
-        return l.LensName.trim() + (f > 0 ? " · " + Math.round(f) + " mm" : "");
+        int eq = equivalentFocal();
+        return l.LensName.trim() + (f > 0 ? " · " + Math.round(f) + " mm" + (eq > 0 ? " (" + eq + " mm)" : "") : "");
     }
 
     /** Shutter speed in seconds, 0 if unknown or BULB */
@@ -751,6 +865,25 @@ public class CameraSession {
             });
         } catch (Throwable t) {
             Log.error("setFocalLengthChangeListener", t);
+        }
+        try {
+            cameraEx.setAutoApscModeListener(new CameraEx.AutoApscModeListener() {
+                @Override
+                public void onChanged(String mode, CameraEx ex) {
+                    if (mode != null && !mode.equals(autoApsc)) {
+                        Log.info("auto apsc " + mode);
+                    }
+                    autoApsc = mode;
+                    post(new Runnable() {
+                        @Override
+                        public void run() {
+                            listener.onExposureChanged();
+                        }
+                    });
+                }
+            });
+        } catch (Throwable t) {
+            Log.error("setAutoApscModeListener", t);
         }
         try {
             cameraEx.setFocusDriveListener(new CameraEx.FocusDriveListener() {

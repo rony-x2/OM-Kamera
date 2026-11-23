@@ -639,6 +639,14 @@ public class McpServer {
         short[][] h = s.histogram();
         o.put("histogramm", h != null ? h[0].length + " Stufen" : "keins");
         o.put("brennweite", Math.round(s.focalLength()));
+        int eq = s.equivalentFocal();
+        if (eq > 0) {
+            o.put("brennweite_kb", eq);
+        }
+        if (s.fullFrameBody()) {
+            Boolean crop = s.apscCrop();
+            o.put("apsc_modus", crop == null ? "unbekannt" : crop ? "aktiv" : "aus");
+        }
         o.put("uhr", CameraClock.describe());
         FtpUpload ftp = host.ui().ftp();
         if (ftp != null && ftp.configured()) {

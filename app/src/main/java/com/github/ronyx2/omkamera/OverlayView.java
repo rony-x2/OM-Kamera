@@ -173,7 +173,8 @@ public class OverlayView extends View {
                 if (focal <= 0) {
                     continue;
                 }
-                t = Math.round(focal) + " mm";
+                int eq = ui.session().equivalentFocal();
+                t = Math.round(focal) + " mm" + (eq > 0 ? " (" + eq + ")" : "");
             } else {
                 Setting s = Settings.get(id);
                 if (s == null || !s.isAvailable(p)) {
@@ -597,9 +598,9 @@ public class OverlayView extends View {
         CameraSession s = ui.session();
         double sec = s.shutterSeconds();
         float focal = s.focalLength();
-        // Rule of thumb for APS-C: 1 / (1.5 × focal length), at least 1/30 s without lens data;
+        // Rule of thumb: 1 / (crop × focal length), at least 1/30 s without lens data;
         // with the app's ISO automatic its own limit
-        double limit = focal > 0 ? 1.0 / (1.5 * focal) : 1.0 / 30;
+        double limit = focal > 0 ? 1.0 / (s.cropFactorOrGuess() * focal) : 1.0 / 30;
         AutoIso ai = ui.autoIso();
         if (ai != null && ai.mode() != 0) {
             limit = ai.limit();

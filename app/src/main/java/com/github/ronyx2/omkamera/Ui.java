@@ -1043,7 +1043,7 @@ public class Ui {
             }
         }));
         if (m == 0) {
-            out.add(Row.info("Grenze nach Brennweite", "1/(1,5 × Brennweite), Standard"));
+            out.add(Row.info("Grenze nach Brennweite", "1/(" + String.valueOf(session.cropFactorOrGuess()).replace(".0", "").replace('.', ',') + " × Brennweite), Standard"));
             return;
         }
         out.add(Row.info("Grenze jetzt", autoIso.limitText()
