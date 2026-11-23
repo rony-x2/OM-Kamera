@@ -704,9 +704,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
             gravityValid = true;
             float x = gravity[0], y = gravity[1], z = gravity[2];
-            // Roll: rotation around the lens axis; pitch: lens up or down
-            float roll = (float) Math.toDegrees(Math.atan2(x, y));
-            float pitch = (float) Math.toDegrees(Math.atan2(z, Math.sqrt(x * x + y * y)));
+            // Axes as measured on the a7II (values in g): camera upright z = +1, turned to portrait with
+            // the grip up x = +1, lens pointing down y > 0. Roll: rotation around the lens axis, negative
+            // with the grip up; pitch: lens up positive, down negative.
+            float roll = (float) -Math.toDegrees(Math.atan2(x, z));
+            float pitch = (float) -Math.toDegrees(Math.atan2(y, Math.sqrt(x * x + z * z)));
             ui.setTilt(roll, pitch);
         }
 
