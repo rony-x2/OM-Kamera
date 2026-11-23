@@ -955,11 +955,12 @@ public class Ui {
                 mainRows(out);
                 break;
             case TAB_SHOOTING:
-                group(out, "Bildqualität", "quality", "size", "aspect");
+                group(out, "Bildqualität", "quality", "rawrec", "size", "aspect");
                 group(out, "Bildfolgemodus", "drive", "bracketstep", "bracketcount", "bracketlevel", "bracketorder");
                 sequenceRows(out);
                 processRows(out);
                 group(out, "Aufnahme", "lenr");
+                group(out, "SteadyShot", "ibisinfo", "ibisfocal");
                 displayRows(out);
                 break;
             case TAB_EXPOSURE:

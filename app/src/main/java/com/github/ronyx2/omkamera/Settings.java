@@ -2,6 +2,8 @@ package com.github.ronyx2.omkamera;
 
 import android.hardware.Camera;
 
+import com.sony.scalar.hardware.CameraEx;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -164,6 +166,92 @@ public final class Settings {
             @Override
             public String display(String v) {
                 return "start-zero".equals(v) ? "0 → − → +" : "start-minus".equals(v) ? "− → 0 → +" : v;
+            }
+        });
+
+        // Uncompressed RAW (a7 bodies from firmware 4)
+        add(new Setting("rawrec", "RAW-Format", "RAW", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedRawRecModes());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getRawRecMode();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setRawRecMode(v);
+            }
+
+            @Override
+            public String display(String v) {
+                return "compress".equals(v) ? "komprimiert" : "uncompress".equals(v) ? "unkomprimiert" : v;
+            }
+        });
+
+        // SteadyShot focal length for lenses without contacts (a7 bodies with stabiliser)
+        add(new Setting("ibisinfo", "SteadyShot-Brennweite", "SteadyShot", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                return strings(p.mod.getSupportedAntiHandBlurInfos());
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return p.mod.getAntiHandBlurInfo();
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setAntiHandBlurInfo(v);
+            }
+
+            @Override
+            public String display(String v) {
+                return "from-lens".equals(v) ? "vom Objektiv" : "manual".equals(v) ? "manuell" : v;
+            }
+        });
+
+        add(new Setting("ibisfocal", "Brennweite (manuell)", "Brennw.", Setting.Category.SHOOTING) {
+            @Override
+            protected List<String> values(CameraSession.Params p) {
+                // only while the focal length is entered by hand; the steps of Sony's own menu
+                if (!CameraEx.ParametersModifier.ANTI_HAND_BLUR_INFO_MANUAL.equals(p.mod.getAntiHandBlurInfo())) {
+                    return null;
+                }
+                List<String> out = new ArrayList<String>();
+                for (int f : IBIS_FOCALS) {
+                    out.add(String.valueOf(f));
+                }
+                String cur = String.valueOf(p.mod.getAntiHandBlurFocalLength());
+                if (!out.contains(cur)) {
+                    out.add(cur);
+                    Collections.sort(out, new java.util.Comparator<String>() {
+                        @Override
+                        public int compare(String a, String b) {
+                            return Integer.parseInt(a) - Integer.parseInt(b);
+                        }
+                    });
+                }
+                return out;
+            }
+
+            @Override
+            protected String get(CameraSession.Params p) {
+                return String.valueOf(p.mod.getAntiHandBlurFocalLength());
+            }
+
+            @Override
+            protected void set(CameraSession.Params e, String v) {
+                e.mod.setAntiHandBlurFocalLength(Integer.parseInt(v));
+            }
+
+            @Override
+            public String display(String v) {
+                return v + " mm";
             }
         });
 
@@ -671,6 +759,10 @@ public final class Settings {
     }
 
     private static final List<String> ON_OFF = java.util.Arrays.asList("off", "on");
+
+    /** Focal lengths of Sony's SteadyShot menu for manual lenses */
+    private static final int[] IBIS_FOCALS = {8, 10, 12, 16, 18, 20, 24, 28, 30, 35, 40, 50, 55, 70, 85, 100, 135, 200,
+            300, 400, 500, 600, 800, 1000};
 
     /** RAW or RAW+JPEG */
     static boolean isRaw(CameraSession.Params p) {

@@ -441,11 +441,27 @@ public class CameraSession {
         if (l != null && l.FocalLength != null && l.FocalLength.wide > 0) {
             return l.FocalLength.wide / focalScale();
         }
+        float f = 0;
         try {
-            return current != null ? current.params.getFocalLength() : 0;
+            f = current != null ? current.params.getFocalLength() : 0;
         } catch (Throwable t) {
-            return 0;
+            f = 0;
         }
+        // Lens without contacts: the focal length set for the stabiliser (a7 bodies)
+        return f > 0 ? f : manualFocal();
+    }
+
+    /** Focal length entered for SteadyShot with a manual lens, 0 if not set or not supported */
+    public int manualFocal() {
+        try {
+            if (current != null && current.mod != null
+                    && CameraEx.ParametersModifier.ANTI_HAND_BLUR_INFO_MANUAL.equals(current.mod.getAntiHandBlurInfo())) {
+                return current.mod.getAntiHandBlurFocalLength();
+            }
+        } catch (Throwable t) {
+            // older bodies without the parameter
+        }
+        return 0;
     }
 
     // ---- sensor size and crop ----

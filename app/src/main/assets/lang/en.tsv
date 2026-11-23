@@ -693,3 +693,11 @@ re:^(\d+(?:\.\d+)*) · (\d+(?:\.\d+)*) verfügbar$	$1 · $2 available
 re:^(\d+(?:\.\d+)*) · aktuell$	$1 · up to date
 re:^Update (\S+) verfügbar – Setup → App-Version$	Update $1 available – Setup → App version
 re:^(\d+(?:\.\d+)*) verfügbar( · .*)?$	$1 available$2
+RAW-Format	RAW format
+komprimiert	compressed
+unkomprimiert	uncompressed
+SteadyShot-Brennweite	SteadyShot focal length
+vom Objektiv	from lens
+manuell	manual
+Brennweite (manuell)	Focal length (manual)
+Brennw.	Focal
