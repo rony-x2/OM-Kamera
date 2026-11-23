@@ -95,6 +95,18 @@ interfaces differ between generations, so each model needs its own test:
 
 Tried it on another model? Please open an [issue](../../issues) – what works, what does not.
 
+## Forks and patches
+
+Side work from getting the tools to run again:
+
+* [rony-x2/fwtool.py](https://github.com/rony-x2/fwtool.py) – unpacks Sony firmware updates; support
+  for repackaged updaters and current Python, sent upstream as
+  [ma1co/fwtool.py#57](https://github.com/ma1co/fwtool.py/pull/57)
+* [rony-x2/OpenMemories-Framework](https://github.com/rony-x2/OpenMemories-Framework) – build on
+  Gradle 8 (branch `modernize-build`)
+* [rony-x2/OpenMemories-Tweak](https://github.com/rony-x2/OpenMemories-Tweak) – build on Android
+  Gradle plugin 8, native part on the C++ string ABI the camera expects (branch `modernize-build`)
+
 ## Installing
 
 Download the APK from the [releases](../../releases) and install it with
