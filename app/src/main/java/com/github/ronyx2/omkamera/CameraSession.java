@@ -464,6 +464,68 @@ public class CameraSession {
         return 0;
     }
 
+    // ---- manual lens: EXIF data and SteadyShot focal length (a7 bodies) ----
+
+    /** The body can write lens data for lenses without contacts into the EXIF */
+    public boolean exifInfoSupported() {
+        try {
+            return current != null && current.mod != null && current.mod.isSupportedExifInfo();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** The body has SteadyShot with a manual focal length */
+    public boolean manualIbisSupported() {
+        try {
+            return current != null && current.mod != null
+                    && current.mod.getSupportedAntiHandBlurInfos().contains(CameraEx.ParametersModifier.ANTI_HAND_BLUR_INFO_MANUAL);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Lens data for a lens without contacts: written into the EXIF of every picture and used for
+     * SteadyShot. With on=false the camera writes its own data again and SteadyShot follows the lens.
+     */
+    public void applyManualLens(boolean on, String name, int focal, float fMax, float f) {
+        if (cameraEx == null) {
+            return;
+        }
+        if (exifInfoSupported()) {
+            try {
+                CameraEx.ExifInfo e = new CameraEx.ExifInfo();
+                e.writeMode = on;
+                e.lensName = name;
+                e.focalLengthNumer = focal * 10;
+                e.focalLengthDenom = 10;
+                e.fNumberNumer = Math.round(f * 10);
+                e.fNumberDenom = 10;
+                e.fNumberMinNumer = Math.round(fMax * 10);
+                e.fNumberMinDenom = 10;
+                cameraEx.setExifInfo(e);
+                Log.info("exif lens " + (on ? name + " " + focal + " mm F" + f + " (F" + fMax + ")" : "off"));
+            } catch (Throwable t) {
+                Log.error("setExifInfo", t);
+            }
+        }
+        if (manualIbisSupported()) {
+            try {
+                Params edit = createEdit();
+                if (on) {
+                    edit.mod.setAntiHandBlurInfo(CameraEx.ParametersModifier.ANTI_HAND_BLUR_INFO_MANUAL);
+                    edit.mod.setAntiHandBlurFocalLength(focal);
+                } else {
+                    edit.mod.setAntiHandBlurInfo(CameraEx.ParametersModifier.ANTI_HAND_BLUR_INFO_FROM_LENS);
+                }
+                apply(edit);
+            } catch (Throwable t) {
+                Log.error("manual lens steadyshot", t);
+            }
+        }
+    }
+
     // ---- sensor size and crop ----
 
     /** Auto APS-C decision reported by full-frame bodies ("on"/"off"), null until reported */

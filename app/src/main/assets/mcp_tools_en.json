@@ -382,6 +382,35 @@
   }
  },
  {
+  "name": "objektiv",
+  "description": "Manual lens (lens without contacts, only on cameras that report it – e.g. a7 models): writes name, focal length and aperture into the EXIF data of every picture and sets SteadyShot to this focal length. Without arguments it shows the state. 'an'=false switches back to the camera's own data.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "an": {
+     "type": "boolean",
+     "description": "switch the lens data on or off"
+    },
+    "name": {
+     "type": "string",
+     "description": "lens name for the EXIF, e.g. 'Helios 44-2 58mm F2'; empty = built from focal length and aperture"
+    },
+    "brennweite": {
+     "type": "integer",
+     "description": "focal length in mm (8–1000)"
+    },
+    "blende_offen": {
+     "type": "number",
+     "description": "largest aperture of the lens, e.g. 2"
+    },
+    "blende": {
+     "type": "number",
+     "description": "aperture set on the lens, e.g. 5.6"
+    }
+   }
+  }
+ },
+ {
   "name": "uhr",
   "description": "Clock: 'status' shows the time the app works with (log, time-lapse start time, time window) and the camera's Sony clock (EXIF, folder names) with its deviation. 'ntp' syncs with the time server (router or pool.ntp.org, EU summer time); 'setzen' takes 'zeit_ms' (ms since 1970, UTC) from the PC. The a6000 does not let apps set its Sony clock; the app then remembers the deviation and works with the correct time.",
   "inputSchema": {

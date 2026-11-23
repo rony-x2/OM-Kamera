@@ -413,6 +413,32 @@ public class McpServer {
             return text(RootShell.title(was) + " (" + RootShell.status() + ")\n\n"
                     + RootShell.run((android.content.Context) host, was, 15000));
         }
+        if (name.equals("objektiv")) {
+            final JSONObject args = a;
+            return text(host.onMain(new java.util.concurrent.Callable<String>() {
+                @Override
+                public String call() {
+                    CameraSession s = ui.session();
+                    if (!s.exifInfoSupported() && !s.manualIbisSupported()) {
+                        return "Diese Kamera kann keine Daten für manuelle Objektive übernehmen.";
+                    }
+                    Integer focal = args.has("brennweite") ? Integer.valueOf(Math.max(8, Math.min(1000, args.optInt("brennweite")))) : null;
+                    Float fMax = args.has("blende_offen") ? Float.valueOf((float) Math.max(0.7, args.optDouble("blende_offen"))) : null;
+                    Float f = args.has("blende") ? Float.valueOf((float) args.optDouble("blende")) : null;
+                    Boolean on = args.has("an") ? Boolean.valueOf(args.optBoolean("an")) : null;
+                    String n = args.has("name") ? args.optString("name", "") : null;
+                    if (on != null || n != null || focal != null || fMax != null || f != null) {
+                        ui.setManualLens(on, n, focal, fMax, f);
+                    }
+                    return "Objektivdaten: " + (ui.mlensOn() ? "ein" : "aus")
+                            + "\nName: " + ui.mlensName()
+                            + "\nBrennweite: " + ui.mlensFocal() + " mm"
+                            + "\nGrößte Blende: F" + Ui.fText(ui.mlensFMax())
+                            + "\nEingestellte Blende: F" + Ui.fText(ui.mlensF())
+                            + "\nEXIF: " + (s.exifInfoSupported() ? "ja" : "nein") + " · SteadyShot: " + (s.manualIbisSupported() ? "ja" : "nein");
+                }
+            }));
+        }
         if (name.equals("uhr")) {
             CameraClock c = ui.clock();
             if (c == null) {

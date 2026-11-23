@@ -382,6 +382,35 @@
   }
  },
  {
+  "name": "objektiv",
+  "description": "Manuelles Objektiv (Objektiv ohne Kontakte, nur Kameras, die es melden – z. B. a7-Modelle): schreibt Name, Brennweite und Blende in die EXIF-Daten jedes Bildes und stellt SteadyShot auf diese Brennweite. Ohne Angaben zeigt es den Stand. 'an'=false schaltet zurück auf die Daten der Kamera.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "an": {
+     "type": "boolean",
+     "description": "Objektivdaten ein- oder ausschalten"
+    },
+    "name": {
+     "type": "string",
+     "description": "Objektivname für das EXIF, z. B. 'Helios 44-2 58mm F2'; leer = aus Brennweite und Blende gebildet"
+    },
+    "brennweite": {
+     "type": "integer",
+     "description": "Brennweite in mm (8–1000)"
+    },
+    "blende_offen": {
+     "type": "number",
+     "description": "größte Blende des Objektivs, z. B. 2"
+    },
+    "blende": {
+     "type": "number",
+     "description": "am Objektiv eingestellte Blende, z. B. 5.6"
+    }
+   }
+  }
+ },
+ {
   "name": "uhr",
   "description": "Uhr: 'status' zeigt die Uhrzeit, mit der die App rechnet (Log, Zeitraffer-Startzeit, Zeitfenster), und die Sony-Uhr der Kamera (EXIF, Ordnernamen) mit ihrer Abweichung. 'ntp' gleicht mit dem Zeitserver ab (Router oder pool.ntp.org, EU-Sommerzeit); 'setzen' übernimmt 'zeit_ms' (ms seit 1970, UTC) vom PC. Die a6000 lässt ihre Sony-Uhr von Apps nicht stellen; die App merkt sich dann die Abweichung und rechnet mit der richtigen Zeit.",
   "inputSchema": {

@@ -396,6 +396,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             ui.onModeDial(dial);
         }
         restoreDrive();
+        ui.applyManualLens();
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         applyNetwork();
         applyDisplay();

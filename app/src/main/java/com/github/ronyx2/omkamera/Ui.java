@@ -384,6 +384,104 @@ public class Ui {
 
     // ---- update notice (the remote page asks GitHub, the camera remembers the answer) ----
 
+    // ---- manual lens (EXIF + SteadyShot) ----
+
+    public static final float[] F_STOPS = {0.95f, 1f, 1.1f, 1.2f, 1.4f, 1.6f, 1.7f, 1.8f, 2f, 2.2f, 2.5f, 2.8f, 3.2f, 3.5f,
+            4f, 4.5f, 5f, 5.6f, 6.3f, 7.1f, 8f, 9f, 10f, 11f, 13f, 14f, 16f, 18f, 20f, 22f};
+    public static final int[] LENS_FOCALS = {8, 10, 12, 14, 15, 16, 18, 20, 21, 24, 25, 28, 30, 32, 35, 40, 45, 50, 55,
+            58, 60, 75, 85, 90, 100, 105, 120, 135, 150, 180, 200, 250, 300, 400, 500, 600, 800, 1000};
+
+    public boolean mlensOn() { return prefs.getBoolean("mlens.on", false); }
+    public int mlensFocal() { return prefs.getInt("mlens.focal", 50); }
+    public float mlensFMax() { return prefs.getFloat("mlens.fmax", 1.8f); }
+    public float mlensF() { return Math.max(mlensFMax(), prefs.getFloat("mlens.f", mlensFMax())); }
+
+    /** Lens name for the EXIF: the given one, or built from focal length and largest aperture */
+    public String mlensName() {
+        String n = prefs.getString("mlens.name", "");
+        return n.length() > 0 ? n : mlensFocal() + "mm F" + fText(mlensFMax());
+    }
+
+    public static String fText(float f) {
+        return f == Math.round(f) ? String.valueOf(Math.round(f)) : String.valueOf(f).replace('.', ',');
+    }
+
+    /** Stores the manual lens and sends it to the camera; null values keep what is set */
+    public void setManualLens(Boolean on, String name, Integer focal, Float fMax, Float f) {
+        android.content.SharedPreferences.Editor e = prefs.edit();
+        if (on != null) e.putBoolean("mlens.on", on);
+        if (name != null) e.putString("mlens.name", name.trim());
+        if (focal != null) e.putInt("mlens.focal", focal);
+        if (fMax != null) e.putFloat("mlens.fmax", fMax);
+        if (f != null) e.putFloat("mlens.f", f);
+        e.apply();
+        applyManualLens();
+    }
+
+    /** Sends the stored manual lens to the camera (after start and after every change) */
+    public void applyManualLens() {
+        if (!session.exifInfoSupported() && !session.manualIbisSupported()) {
+            return;
+        }
+        // Only touch the camera when the lens data is on, or when it was on before
+        if (mlensOn() || prefs.getBoolean("mlens.applied", false)) {
+            session.applyManualLens(mlensOn(), mlensName(), mlensFocal(), mlensFMax(), mlensF());
+            prefs.edit().putBoolean("mlens.applied", mlensOn()).apply();
+        }
+    }
+
+    private static int nextIndex(float[] list, float cur, float min) {
+        for (int i = 0; i < list.length; i++) {
+            if (list[i] > cur + 0.01f && list[i] >= min - 0.01f) return i;
+        }
+        for (int i = 0; i < list.length; i++) {
+            if (list[i] >= min - 0.01f) return i;
+        }
+        return 0;
+    }
+
+    private void manualLensRows(List<Row> out) {
+        if (!session.exifInfoSupported() && !session.manualIbisSupported()) {
+            return;
+        }
+        out.add(Row.header("Manuelles Objektiv"));
+        out.add(Row.action("Objektivdaten", mlensOn() ? "Ein · " + mlensName() : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                setManualLens(!mlensOn(), null, null, null, null);
+                showMessage(mlensOn() ? "Objektivdaten für EXIF und SteadyShot aktiv" : "Objektivdaten aus", false);
+            }
+        }));
+        if (!mlensOn()) {
+            return;
+        }
+        out.add(Row.action("Brennweite", mlensFocal() + " mm", new Runnable() {
+            @Override
+            public void run() {
+                int cur = mlensFocal(), next = LENS_FOCALS[0];
+                for (int fl : LENS_FOCALS) {
+                    if (fl > cur) { next = fl; break; }
+                }
+                setManualLens(null, null, next, null, null);
+            }
+        }));
+        out.add(Row.action("Größte Blende", "F" + fText(mlensFMax()), new Runnable() {
+            @Override
+            public void run() {
+                float n = F_STOPS[nextIndex(F_STOPS, mlensFMax(), 0)];
+                if (n > 8f) n = F_STOPS[0];
+                setManualLens(null, null, null, n, Math.max(n, mlensF()));
+            }
+        }));
+        out.add(Row.action("Eingestellte Blende", "F" + fText(mlensF()), new Runnable() {
+            @Override
+            public void run() {
+                setManualLens(null, null, null, null, F_STOPS[nextIndex(F_STOPS, mlensF(), mlensFMax())]);
+            }
+        }));
+        out.add(Row.info("Name im EXIF", mlensName()));
+    }
+
     public boolean updateCheck() { return prefs.getBoolean("update.check", true); }
 
     /** Newest version the remote page found on GitHub, null if none is known */
@@ -960,7 +1058,10 @@ public class Ui {
                 sequenceRows(out);
                 processRows(out);
                 group(out, "Aufnahme", "lenr");
-                group(out, "SteadyShot", "ibisinfo", "ibisfocal");
+                if (!mlensOn()) {
+                    group(out, "SteadyShot", "ibisinfo", "ibisfocal");
+                }
+                manualLensRows(out);
                 displayRows(out);
                 break;
             case TAB_EXPOSURE:

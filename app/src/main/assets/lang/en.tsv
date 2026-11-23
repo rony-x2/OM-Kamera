@@ -701,3 +701,11 @@ vom Objektiv	from lens
 manuell	manual
 Brennweite (manuell)	Focal length (manual)
 Brennw.	Focal
+Manuelles Objektiv	Manual lens
+Objektivdaten	Lens data
+Größte Blende	Largest aperture
+Eingestellte Blende	Set aperture
+Name im EXIF	Name in EXIF
+Objektivdaten für EXIF und SteadyShot aktiv	Lens data for EXIF and SteadyShot active
+Objektivdaten aus	Lens data off
+re:^Ein · (.+)$	On · $1
