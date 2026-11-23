@@ -44,6 +44,9 @@ public class Ui {
         /** Applies the standby setting. */
         void applyStandby();
 
+        /** Language of the display changed (pref "lang") */
+        void applyLanguage();
+
         /** Switches WLAN and debug server according to the settings. */
         void applyNetwork();
 
@@ -1878,6 +1881,14 @@ public class Ui {
             }
         }));
 
+        out.add(Row.action("Sprache / Language", L.CHOICES[Math.max(0, Math.min(2, prefs.getInt("lang", 0)))], new Runnable() {
+            @Override
+            public void run() {
+                int v = (prefs.getInt("lang", 0) + 1) % L.CHOICES.length;
+                prefs.edit().putInt("lang", v).apply();
+                host.applyLanguage();
+            }
+        }));
         out.add(Row.action("Menü Applikation", prefs.getBoolean(AppListReceiver.PREF_ON, false)
                 ? "startet OM Kamera" : "zeigt App-Liste", new Runnable() {
             @Override

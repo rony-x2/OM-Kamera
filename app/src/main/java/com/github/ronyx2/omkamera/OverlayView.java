@@ -24,7 +24,24 @@ public class OverlayView extends View {
 
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** Text paint: measures in the display language, like drawText draws (see {@link L}) */
+    private final TextPaint text = new TextPaint();
+
+    private static final class TextPaint extends Paint {
+        TextPaint() {
+            super(Paint.ANTI_ALIAS_FLAG);
+        }
+
+        @Override
+        public float measureText(String s) {
+            return super.measureText(L.t(s));
+        }
+
+        /** Width of a text that is already in the display language */
+        float rawWidth(String s) {
+            return super.measureText(s);
+        }
+    }
     private final RectF rect = new RectF();
     private final android.graphics.Path bolt = new android.graphics.Path();
 
@@ -1230,19 +1247,20 @@ public class OverlayView extends View {
 
     private void drawText(Canvas c, String s, float x, float y, int color) {
         text.setColor(color);
-        c.drawText(s, x, y, text);
+        c.drawText(L.t(s), x, y, text);
     }
 
     /** Draws text and shortens it with "…" if it does not fit. */
     private void drawFitted(Canvas c, String s, float x, float y, float maxW, int color) {
-        String t = s;
-        if (text.measureText(t) > maxW) {
-            while (t.length() > 1 && text.measureText(t + "…") > maxW) {
+        String t = L.t(s);
+        if (text.rawWidth(t) > maxW) {
+            while (t.length() > 1 && text.rawWidth(t + "…") > maxW) {
                 t = t.substring(0, t.length() - 1);
             }
             t = t + "…";
         }
-        drawText(c, t, x, y, color);
+        text.setColor(color);
+        c.drawText(t, x, y, text);
     }
 
     private void roundRect(Canvas c, float l, float t, float r, float b, int color) {

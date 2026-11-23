@@ -1,0 +1,676 @@
+# OM Kamera: German display text <TAB> English. Leading/trailing spaces matter.
+  Hochformat	  portrait
+ (App-Optionen nach Neustart)	 (app options after restart)
+ (Bild 	 (picture 
+ (Maximum erreicht)	 (maximum reached)
+ (nicht abgeglichen)	 (not synced)
+ (Versuch)	 (experimental)
+ (Warteschlange 	 (queue 
+ auf der Karte	 on the card
+ Aufnahmen)	 shots)
+ aus Mein Menü entfernt	 removed from My Menu
+ bei 	 at 
+ belegt	 assigned
+ Bild(er)	 picture(s)
+ Bilder	 pictures
+ Bilder alle 	 pictures every 
+ Bilder verrechnen	 pictures combine
+ Bilder, 	 pictures, 
+ Bilder, als RAW gespeichert	 pictures, saved as RAW
+ Bilder, Schrittweite 	 pictures, step 
+ Bilder, Stufe 	 pictures, step 
+ Bilder/s	 frames/s
+ Bildern	 pictures
+ daneben (	 off (
+ dauert etwa 	 takes about 
+ eingereiht	 queued
+ Einstellungen gesichert	 settings saved
+ erhalten)	 received)
+ fehlgeschlagen: 	 failed: 
+ fertig: 	 done: 
+ geladen	 loaded
+ geladen, 	 loaded, 
+ geleert	 cleared
+ gesendet	 sent
+ gespeichert	 saved
+ hat eine andere Größe	 has a different size
+ in 	 in 
+ ist leer	 is empty
+ mit 	 with 
+ mm (Festbrennweite)	 mm (prime)
+ ms, schreiben 	 ms, write 
+ nach	 slow
+ nicht anlegbar	 cannot be created
+ nicht bestätigt	 not confirmed
+ nicht einstellbar	 not adjustable
+ nicht lesbar	 not readable
+ nicht verfügbar	 not available
+ offen	 pending
+ RAWs verrechnen	 RAWs combine
+ s (längste Zeit = Intervall − Pause)	 s (longest time = interval − pause)
+ s + Pause)	 s + pause)
+ s nach dem Drehen	 s after turning
+ s verlängert (Belichtung 	 s (exposure 
+ sind mindestens 2 ARW-Dateien nötig	 needs at least 2 ARW files
+ Sommerzeit	 summer time
+ vor	 fast
+ weitere	 more
+ Werte	 values
+ Werte nicht übernommen	 values not applied
+ wird in der App nicht unterstützt	 is not supported in the app
+ wird nicht unterstützt	 is not supported
+ · Film 	 · movie 
+ · Fokus 	 · focus 
+ · geht 	 · runs 
+ · nächste 	 · next 
+ · nächste in 	 · next in 
+ · Pause zu kurz!	 · pause too short!
+ · Rest 	 · remaining 
+ · stimmt	 · correct
+ – App rechnet mit der richtigen Zeit	 – the app uses the correct time
+ – Kamera bleibt so lange an	 – the camera stays on until then
+%02d:%02d Uhr	%02d:%02d
+(leer)	(empty)
+) um 	) at 
+, Akku nur 	, battery only 
+, bitte einmal von Hand stellen (Prüfung des Weges)	, please set it once by hand (to check the method)
+, danach 	, then 
+, Grenze 	, limit 
+, Intervall 	, interval 
+, jetzt 	, now 
+, Objektiv 	, lens 
+, Sommerzeit aus	, summer time off
+, Sommerzeit ein	, summer time on
+1 Bild	1 picture
+1 Stufe länger	1 stop longer
+1/(1,5 × Brennweite), Standard	1/(1.5 × focal length), standard
+2. Verschlussv.	Rear curtain
+2. Vorhang	Rear sync.
+24 MP (voll)	24 MP (full)
+3 Bilder	3 pictures
+3×3 Raster	3×3 grid
+4 (kaum schneller)	4 (hardly faster)
+8 Bit, dauert Minuten	8 bit, takes minutes
+: an dieser Kamera nicht verfügbar	: not available on this camera
+: gerade nicht verfügbar	: not available right now
+: gesperrt	: locked
+: nicht verfügbar	: not available
+: war 	: was 
+:00 Uhr	:00
+A-Mount (Adapter)	A-mount (adapter)
+abgebrochen (App beendet)	cancelled (app closed)
+abgebrochen (Kamera verschiebt den Fokus nicht)	cancelled (camera does not move the focus)
+abgeglichen um 	synced at 
+Abgleich läuft bereits	Sync already running
+Ablauf abgebrochen	Sequence cancelled
+Ablauf beim Auslösen	Sequence on release
+Ablauf läuft bereits	Sequence already running
+Abweichung 	Deviation 
+Achtung	Note
+Achtung, Versuch: 	Note, experimental: 
+Addition fehlgeschlagen bei Bild 	Addition failed at picture 
+Addition ohne Ergebnis bei Bild 	Addition without result at picture 
+Addition ok: 	Addition OK: 
+AE-Speicher gesperrt	AE lock locked
+AEL halten	AEL hold
+AEL umschalten	AEL toggle
+AF-Feld	AF area
+AF-Modus	AF mode
+AF/MF umschalten	AF/MF toggle
+Akku fast leer	Battery almost empty
+Akkuanzeige	Battery display
+Aktuelle Brennweite	Current focal length
+Aktuelle Einstellungen hier speichern	Save current settings here
+alle Bilder	all pictures
+Alle Infos	All info
+Alles auf Karte sichern	Back up everything to the card
+als 	as 
+als DNG	as DNG
+An dieser Kamera nicht möglich	Not possible on this camera
+Anmeldung abgelehnt (	Login refused (
+Anschluss	Mount
+Ansicht (Taste DISP)	View (DISP button)
+Antwort passt nicht zur Anfrage	Response does not match the request
+Anzahl der Aufnahmen	Number of shots
+App (mit Fokusanzeige)	App (with focus display)
+App beenden	Close app
+App-Liste: nach dem Beenden innerhalb 20 s Applikation öffnen	App list: open Application within 20 s after closing
+App-Version	App version
+Aquarell	Watercolor
+Auch Ergebnisse (OMKAMERA)	Also results (OMKAMERA)
+Aufhellblitz	Fill flash
+Aufnahme	Shooting
+Aufnahme-Anzeige	Shooting display
+Aufnahmeablauf (App)	Shooting sequence (app)
+Aufnahmeintervall	Shooting interval
+Aus	Off
+Aus (nachführen)	Off (follow)
+Auslösen abgelehnt	Release refused
+Auslöser startet, erneut drücken bricht ab	Shutter starts, press again to cancel
+Auslöser-Steuerung	Shutter control
+Auslöser-Steuerung steht auf „Kamera direkt“	Shutter control is set to “Camera direct”
+Automatisch abgleichen im WLAN	Sync automatically on Wi-Fi
+außerhalb	outside
+AVIF (Versuch)	AVIF (experimental)
+Baureihe	Series
+Bedienung	Operation
+Belichtung	Exposure
+Belichtung festhalten	Lock exposure
+Belichtung/Farbe	Exposure/Color
+Belichtungs- und Fokushilfen	Exposure and focus aids
+Belichtungskorrektur	Exposure compensation
+Belichtungskorrektur am Ende des Bereichs (±5 EV)	Exposure compensation at the end of its range (±5 EV)
+Belichtungsreihe 	Exposure bracketing 
+Belichtungsreihe+	Exposure bracketing+
+Belichtungsreihe+ gestartet: 	Exposure bracketing+ started: 
+Belichtungsstufe	Exposure step
+Belichtungszeit	Shutter speed
+Benutzer	Custom
+Benutzer 1	Custom 1
+Benutzer 2	Custom 2
+Benutzer 3	Custom 3
+Benutzertaste (Standard: C1)	Custom button (default: C1)
+Benutzertasten	Custom buttons
+Benutzertasten zurückgesetzt	Custom buttons reset
+Bild	Picture
+Bildeffekt	Picture effect
+Bilder	Pictures
+Bildfolge	Drive
+Bildfolgemodus	Drive mode
+Bildgröße	Image size
+Bildprozessor	Image processor
+Bildqualität	Image quality
+Bildstabilisator	Image stabilizer
+Bildstabilisator (OSS) nutzen	Use image stabilizer (OSS)
+Binärmodus abgelehnt	Binary mode refused
+Blau	Blue
+Blende	Aperture
+Blendenring	Aperture ring
+Blitz	Flash
+Blitz aus	Flash off
+Blitz ausklappen	Raise the flash
+Blitz nicht bereit	Flash not ready
+Blitzkorrektur	Flash compensation
+Blitzmodus	Flash mode
+Breit	Wide
+Brennweite	Focal length
+BULB konnte nicht gestartet werden	BULB could not be started
+BULB läuft 	BULB running 
+BULB nicht gestartet	BULB not started
+BULB-Timer	BULB timer
+BW Schwarzweiß	BW Black & white
+Datei	File
+Datei nicht lesbar	File not readable
+Datei nicht lesbar: 	File not readable: 
+Daten n. anz.	No info
+Daten nicht lesbar	Data not readable
+Dauer etwa	Takes about
+Debug-Server	Debug server
+Dekoder-Fehler 	Decoder error 
+Diagonal + Quadrat	Diagonal + square
+Drahtlos	Wireless
+DRO-Reihe	DRO bracket
+Durchreiche ok: 	Pass-through OK: 
+Dämmerung	Twilight
+Effekt	Effect
+Eigene	Own
+Eigene Einstellung	Own setting
+Ein	On
+Ein (AEL)	On (AEL)
+Ein · Code 	On · code 
+Ein · Token 	On · token 
+Ein, 	On, 
+Ein, bleibt bis Tastendruck	On, stays until a key is pressed
+Ein, wartet auf WLAN	On, waiting for Wi-Fi
+Eingeben am PC	Enter on the PC
+einmal am Anfang	once at the start
+Einrichten	Set up
+Einstellung	Setup
+Einzelbild	Single shot
+entwickelt, sRGB	developed, sRGB
+Entwicklung fehlgeschlagen	Development failed
+Entwicklung nativ fehlgeschlagen (	Native development failed (
+Extrafein	Extra fine
+Farbe/Farbton	Color/tone
+Farbraum	Color space
+Farbtemp.	Color temp.
+Farbtemperatur	Color temperature
+Fehler	Error
+Fehler beim Öffnen: 	Error while opening: 
+Fehler: 	Error: 
+Fein	Fine
+Feld	Zone
+Fernsteuerung (Browser)	Remote control (browser)
+Fernsteuerung oder Debug-Seite	remote control or debug page
+Fernzugriff	Remote access
+fertig (Unendlich erreicht)	done (infinity reached)
+Film	Movie
+Film OMKAMERA/	Movie OMKAMERA/
+FL Film, ruhig und kühl	FL Film, calm and cool
+Flex. Spot	Flexible spot
+Fn-Menü (leere Plätze werden ausgeblendet)	Fn menu (empty slots are hidden)
+Fn-Menü einrichten	Set up Fn menu
+Fn-Menü ist leer: unter Einstellung → Fn-Menü einrichten belegen	Fn menu is empty: assign it under Setup → Set up Fn menu
+Fn-Menü zurückgesetzt	Fn menu reset
+Fn-Raster	Fn grid
+Fokus	Focus
+Fokus-Assistent	Focus assist
+Fokus-Haltetaste	Focus hold button
+Fokus-Haltetaste (Objektiv)	Focus hold button (lens)
+Fokus-Peaking	Focus peaking
+Fokus-Peaking ein/aus	Focus peaking on/off
+Fokus-Peaking: 	Focus peaking: 
+Fokus-Stacking	Focus stacking
+Fokus-Stacking höchstens 	Focus stacking at most 
+Fokus: 	Focus: 
+Fokusfeld	Focus area
+Fokusfeld gesperrt	Focus area locked
+Fokusfeld in der Mitte	Focus area in the center
+Fokusfeld verschieben	Move focus area
+Fokusfeld zur Mitte	Focus area to center
+Fokusfelder anzeigen	Show focus areas
+Fokuslupe	Focus magnifier
+Fokuslupe 	Magnifier 
+Fokuslupe an dieser Kamera nicht verfügbar	Focus magnifier not available on this camera
+Fokusmodus AF/MF	Focus mode AF/MF
+Fokusreihe	Focus bracketing
+Fokusreihe 	Focus bracketing 
+Fokusreihe an dieser Kamera nicht möglich (kein Fokusantrieb)	Focus bracketing not possible on this camera (no focus drive)
+Fokusreihe gestartet: 	Focus bracketing started: 
+Fokusreihe: Diese Kamera kann den Fokus für Apps nicht verschieben	Focus bracketing: this camera cannot move the focus for apps
+Format	Format
+Formatmarkierung	Aspect marker
+FTP ist noch nicht eingerichtet (Fernsteuerungsseite im Browser)	FTP is not set up yet (remote control page in the browser)
+FTP wird geprüft …	Checking FTP …
+FTP-Verbindung in Ordnung	FTP connection OK
+FTP-Verbindung in Ordnung: 	FTP connection OK: 
+FTP-Übertragung	FTP transfer
+für 	for 
+Für den BULB-Timer Modus M und Verschlusszeit BULB einstellen	For the BULB timer set mode M and shutter speed BULB
+Für Langzeit-Zeitraffer Modus M und Verschlusszeit BULB einstellen	For long time-lapse exposures set mode M and shutter speed BULB
+Geladen	Loaded
+Gelb	Yellow
+gerade nicht verfügbar	not available right now
+Geschwindigkeit	Speed
+Gesicht	Face
+Gesichtserkennung	Face detection
+Gespeichert	Saved
+Gespeichert: 	Saved: 
+gestellt um 	set at 
+gestellt, aber zurückgelesen 	set, but read back 
+gibt es hier nicht	not available here
+Gilt ab dem nächsten Start der App	Applies from the next app start
+Gitterlinien	Grid lines
+Gitterlinien ein/aus	Grid lines on/off
+Glühlampe	Incandescent
+Goldener Schnitt	Golden ratio
+Grenze jetzt	Limit now
+Grenze nach Brennweite	Limit by focal length
+Größe	Size
+Größe der Anzeige	Display size
+Haupt	Main
+HDR ohne Bild	HDR without picture
+HDR ok: 	HDR OK: 
+HDR-Entwicklung fehlgeschlagen	HDR development failed
+HDR-Gemälde	HDR painting
+HEIC (Versuch)	HEIC (experimental)
+HEIC/AVIF (Versuch)	HEIC/AVIF (experimental)
+Hell	Light
+Helligkeit	Brightness
+Herbstlaub	Autumn leaves
+Histogramm	Histogram
+Histogramm ein/aus	Histogram on/off
+Histogramm …	Histogram …
+Hoch	High
+Hochkontr.-Mono	High-contrast mono
+Holy Grail (Belichtung nachführen)	Holy Grail (follow exposure)
+Holy Grail braucht den Modus M	Holy Grail needs mode M
+Holy Grail ist aus	Holy Grail is off
+Holy Grail: Referenz dunkler	Holy Grail: reference darker
+Holy Grail: Referenz heller	Holy Grail: reference brighter
+Im Modus 	In mode 
+in der Fernsteuerung (Browser)	in the remote control (browser)
+IN Matt, gedämpft	IN Matte, muted
+Info	Info
+Inhalt	Content
+Intervall	Interval
+Intervall 	Interval 
+Intervall auf 	Interval extended to 
+Intervall startet in 	Interval starts in 
+Intervall-Rampe starten	Start interval ramp
+Intervall-Rampe: 	Interval ramp: 
+Intervallaufnahme	Interval shooting
+Intervallaufnahme gestartet: 	Interval shooting started: 
+IP-Adresse	IP address
+ISO höchstens	ISO maximum
+ISO mindestens	ISO minimum
+ISO-Automatik mit Mindestzeit (App)	Auto ISO with minimum shutter speed (app)
+ISO-Empfindlichkeit	ISO sensitivity
+ISO-Werte unbekannt	ISO values unknown
+Ja (OSS im Objektiv)	Yes (OSS in the lens)
+Ja (Power Zoom)	Yes (power zoom)
+Jetzt abgleichen (Zeitserver)	Sync now (time server)
+Kamera	Camera
+Kamera (M)	Camera (M)
+Kamera direkt	Camera direct
+Kamera hat das Stellen abgelehnt (Code 	Camera refused to set the clock (code 
+Kamera konnte nicht geöffnet werden	The camera could not be opened
+Kamera nicht offen	camera not open
+Kamera-Ton	Camera sound
+Kamera-Verarbeitung (Versuch)	Camera processing (experimental)
+Karte fast voll	Card almost full
+Karte voll	Card full
+kein Fokusantrieb für Apps	no focus drive for apps
+kein RAW-Rückruf nach 20 s (	no RAW callback after 20 s (
+kein WLAN	no Wi-Fi
+kein Wochentag gewählt	no weekday selected
+kein Zeitraffer aktiv	no time-lapse active
+keine Antwort vom Zeitserver	no response from the time server
+keine ARW auf der Karte	no ARW on the card
+keine ARW-Datei gefunden (Bildqualität RAW oder RAW+JPEG?)	no ARW file found (image quality RAW or RAW+JPEG?)
+Keine Datei 	No file 
+keine Daten	no data
+keine Daten (Adapter oder manuelles Objektiv)	no data (adapter or manual lens)
+Keine Einstellungen verfügbar	No settings available
+Keine Funktion	No function
+keine Langzeiten, nach 30" folgt BULB	no long times, BULB follows 30"
+keine RAW-Daten gefunden	no RAW data found
+keine TIFF/ARW-Datei	no TIFF/ARW file
+Kerne für AVIF	Cores for AVIF
+Klar	Clear
+Kleinbild-Äquivalent	Full-frame equivalent
+Kleinste Blende	Minimum aperture
+Kompression fehlgeschlagen (	Compression failed (
+Kontrast	Contrast
+Kreativer Look	Creative look
+Kreativmodus	Creative style
+kürzeste	shortest
+Laden und anwenden	Load and apply
+Landschaft	Landscape
+Langsam	Slow
+Langsamer	Slower
+Langz. 2. V.	Slow rear
+Langzeiten (mit BULB, Zeit von der App)	Long times (with BULB, timed by the app)
+Langzeiten nach 30"	Long times after 30"
+Langzeiten: 	Long times: 
+Langzeitsync.	Slow sync.
+Lebhaft	Vivid
+lesen 	read 
+Letzte 	Last 
+Letzte Zeit entfernen	Remove last time
+Letzter Abgleich	Last sync
+Letzter Versuch	Last attempt
+Letztes RAW als 	Last RAW as 
+Letztes RAW umwandeln	Convert last RAW
+Leuchtst.	Fluor.
+Leuchtst. kalt	Fluor. cool white
+Leuchtst. neutral	Fluor. day white
+Leuchtst. Tag	Fluor. daylight
+Leuchtst. warm	Fluor. warm white
+Lichter überbelichtet	Highlights clipped
+Lichtstärke	Maximum aperture
+Live-Bild-Anzeige	Live view display
+Läuft	Running
+läuft bereits	already running
+läuft: 	running: 
+Löschtaste	Delete button
+Löschtaste entfernt den gewählten Posten	Delete button removes the selected item
+Maximum	Maximum
+MCP-Schnittstelle (KI)	MCP interface (AI)
+MCP-Token erneuern	Renew MCP token
+Mehrbild-Rauschminderung	Multi-frame noise reduction
+Mein Menü	My Menu
+Menü Applikation	Menu Application
+Menü und Fn-Menü	Menu and Fn menu
+Messmethode	Metering mode
+Messung	Metering
+MF-Hilfe (Lupe am Fokusring)	MF assist (magnify on focus ring)
+mindestens 2 Dateien	at least 2 files
+Mindestpause zwischen Bildern	Minimum pause between pictures
+Mindestverschlusszeit	Minimum shutter speed
+Miniatur	Miniature
+Mitte	Center
+Mittel	Mid
+Mittel-AF-Verriegelung aus	Center lock-on AF off
+Mittel-AF-Verriegelung gerade nicht möglich	Center lock-on AF not possible right now
+Mittel-AF-Verriegelung gibt es hier nicht	Center lock-on AF is not available here
+Mittel-AF-Verriegelung: Motiv in die Mitte, Auslöser halb drücken	Center lock-on AF: subject in the center, press the shutter halfway
+Mittelmarkierung	Center marker
+Mitteltaste	Center button
+Mitteltaste: Fokusfeld „Flex. Spot“ wählen, dann verschiebt sie das Feld	Center button: choose focus area “Flexible spot”, then it moves the area
+Mittelwert	Average
+Mittenbetont	Center-weighted
+Modell	Model
+Modus 	Mode 
+Modus M, RAW oder JPEG, fester Weißabgleich	Mode M, RAW or JPEG, fixed white balance
+Modus M, Verschlusszeit BULB	Mode M, shutter speed BULB
+Modus · Zeit · Blende	Mode · shutter · aperture
+Motiverkennung	Subject detection
+Motorzoom	Power zoom
+Mo–Fr	Mon–Fri
+nach 	after 
+nach Verzögerung	after a delay
+Nachtszene	Night scene
+Name	Name
+Neigung	Level
+Nein	No
+Netz (SSID)	Network (SSID)
+Netzwerk	Network
+Neue Bilder senden	Send new pictures
+Neuer MCP-Token 	New MCP token 
+nicht angegeben	not specified
+nicht eingerichtet	not set up
+nicht unterstützt	not supported
+nicht verfügbar	not available
+Niedrig	Low
+noch keine Taste gemeldet	no button reported yet
+noch nicht abgeglichen	not synced yet
+noch nicht gestartet	not started yet
+noch nichts verarbeitet	nothing processed yet
+NT Neutral, zum Bearbeiten	NT Neutral, for editing
+nur in P und A	only in P and A
+nur JPEG	JPEG only
+Nur mit Fokusfeld „Flex. Spot“	Only with focus area “Flexible spot”
+nur mit nativem Dekoder und Sony-cRAW	only with the native decoder and Sony cRAW
+nur RAW (ARW)	RAW only (ARW)
+nur Wiedergabe	playback only
+Objektiv	Lens
+Objektiv-Firmware	Lens firmware
+Ordner 	Folder 
+Ortszeit	Local time
+Passiver Modus abgelehnt (	Passive mode refused (
+Pause bis Zeitfenster, 	Pause until time window, 
+Pause zwischen Aufnahmen	Pause between shots
+Peaking-Farbe	Peaking color
+Pfeile: Ausschnitt  ·  Löschen: Mitte  ·  Mitte: nächste Stufe  ·  MENU: Ende	Arrows: area  ·  Delete: center  ·  Center: next step  ·  MENU: exit
+Pfeile: verschieben  ·  Löschen: Mitte  ·  Mitteltaste: fertig	Arrows: move  ·  Delete: center  ·  Center button: done
+Phasen-AF	Phase-detect AF
+Piepton	Beep tone
+Plattform (API)	Platform (API)
+Platz 	Slot 
+PNG-Farbtiefe	PNG color depth
+Pop-Farbe	Pop color
+Porträt	Portrait
+Position 	Position 
+Posten hinzufügen …	Add item …
+Protokoll	Log
+Prozent	Percent
+PT Porträt, weiche Haut	PT Portrait, soft skin
+Quadratraster	Square grid
+Qualität	Quality
+Rad links	Wheel left
+Rad rechts	Wheel right
+Rad unten	Wheel down
+Rampe angehalten bei 	Ramp stopped at 
+Rampe anhalten	Stop ramp
+Rampe: Dauer	Ramp: duration
+Rampe: Ziel-Intervall	Ramp: target interval
+Rauschmind. Langzeitbel.	Long exposure NR
+RAW-Daten leer	RAW data empty
+RAW-Kompression 	RAW compression 
+RAW-Übernahme testen	Test RAW transfer
+Referenz 	Reference 
+Referenz …	Reference …
+Reihe	Bracket
+Reihe Anz.	Bracket no.
+Reihe Einzel	Bracket single
+Reihe EV	Bracket EV
+Reihe Serie	Bracket continuous
+Reihe Stufe	Bracket step
+Reihe WB/DRO: Stufe	Bracket WB/DRO: step
+Reihe: Anzahl Bilder	Bracket: number of pictures
+Reihe: Belichtungsstufe	Bracket: exposure step
+Reihe: Reihenfolge	Bracket: order
+Reihenf.	Order
+Reihenfolge	Order
+Restaufnahmen	Shots remaining
+Restaufnahmen anzeigen	Show shots remaining
+Retro-Foto	Retro photo
+RM Lang	Long NR
+Rot	Red
+Rote Augen	Red-eye
+Rote-Augen-Reduzierung	Red-eye reduction
+Router (Gateway)	Router (gateway)
+Rückweg in die App	Way back into the app
+Sattes Monochrom	Rich-tone mono
+Sa–So	Sat–Sun
+Scharfstellen	Focusing
+Schatten	Shade
+Schnell	Fast
+Schneller	Faster
+Schreiben abgelehnt (	Writing refused (
+Schrittweite	Step size
+Schwarzweiß	Black & white
+Schärfe	Sharpness
+sehr gut	very good
+Seitenverhältnis	Aspect ratio
+Selbstausl.	Self-timer
+Selbstauslöser abgebrochen	Self-timer cancelled
+sendet 	sending 
+Serie	Continuous
+Serie Hi	Continuous Hi
+Serie Lo	Continuous Lo
+Serie Mid	Continuous Mid
+Server	Server
+Server antwortet nicht	Server does not respond
+SH Hell und luftig	SH Bright and airy
+Sichere Zone	Safe zone
+Signal	Signal
+Signalton	Beep
+Soft Skin-Effekt	Soft skin effect
+Sommerzeit automatisch (EU)	Summer time automatic (EU)
+Sonnenaufgang	Sunrise
+Sonnenunterg.	Sunset
+Sonnenuntergang	Sunset
+Sony-Uhr (EXIF)	Sony clock (EXIF)
+Sony-Uhr geht 	Sony clock runs 
+Sony-Uhr stimmt	Sony clock is correct
+Sortieren und doppelte entfernen	Sort and remove duplicates
+Speicher 	Memory 
+Speichern nicht möglich: 	Saving not possible: 
+Speichern/Laden	Save/Load
+Spielzeugkamera	Toy camera
+Spot-Größe	Spot size
+Stand	State
+Standard	Standard
+Standard (Fokusfeld / Mittel-AF-Verriegelung)	Standard (focus area / center lock-on AF)
+Standardbelegung	Default assignment
+Standardliste	Default list
+Standby in der App	Standby in the app
+Start	Start
+Start in 	Start in 
+startet OM Kamera	starts OM Kamera
+Startverzögerung	Start delay
+Startzeit	Start time
+Startzeit Minute	Start time minute
+Startzeit Stunde	Start time hour
+Status	Status
+Sternspuren, Lichtspuren	star trails, light trails
+Stil	Style
+Stil: Kontrast	Style: contrast
+Stil: Schärfe	Style: sharpness
+Stil: Sättigung	Style: saturation
+stimmt (	correct (
+Summe	Sum
+Sättigung	Saturation
+Tageslicht	Daylight
+Taste AEL	AEL button
+Taste C1	C1 button
+Taste C2	C2 button
+Tasten am Objektiv	Lens buttons
+Teilfarbe	Partial color
+Tief	Deep
+Timer 	Timer 
+täglich	daily
+Tägliches Zeitfenster	Daily time window
+Uhr	Clock
+Uhr 	Clock 
+Uhr: 	Clock: 
+Uhrzeit	Time
+um Uhrzeit	at a time of day
+unbekannte Aktion	unknown action
+unbekanntes Ergebnis 	unknown result 
+ungültige Antwort (Stratum 	invalid response (stratum 
+Unterwasser	Underwater
+Verarbeitung (RAW)	Processing (RAW)
+Verarbeitung abbrechen	Cancel processing
+Verarbeitung wird abgebrochen	Processing is being cancelled
+verbindet …	connecting …
+Verbindung	Connection
+Verbindung beendet	Connection closed
+Verbindung prüfen	Check connection
+Verrechnen: Anzahl Bilder	Combine: number of pictures
+Verschlusszeit steht nicht auf BULB	Shutter speed is not set to BULB
+Verwacklungsgefahr	Risk of camera shake
+vom Stativ	from a tripod
+Von Karte laden	Load from card
+vor jeder Aufnahme	before each shot
+Voraussetzung	Requirement
+Vorschaufilm	Preview movie
+VV Lebhaft	VV Vivid
+VV2 Kräftig und klar	VV2 Strong and clear
+Warnhinweise	Warnings
+wartet auf neue Bilder	waiting for new pictures
+wartet auf WLAN	waiting for Wi-Fi
+Wasserwaage	Level
+Wasserwaage: Kamera liefert keine Sensordaten	Level: the camera provides no sensor data
+WB-Feinkorrektur A–B	WB fine-tune A–B
+WB-Feinkorrektur G–M	WB fine-tune G–M
+WB-Reihe	WB bracket
+Weichzeichnung	Soft focus
+Weiß	White
+Weißabgleich	White balance
+Welche Bilder	Which pictures
+weniger Rauschen	less noise
+Wert wählen, ENTER, dann Rad	select a value, ENTER, then the wheel
+wie Kamera	as camera
+Wiedergabe-Taste	Playback button
+wird ausgeschaltet	switching off
+wird eingeschaltet	switching on
+Wirkt nach dem nächsten Start der App	Takes effect after the next app start
+WLAN in der App	Wi-Fi in the app
+Wochentage	Weekdays
+Wolkig	Cloudy
+Zebra	Zebra
+Zebra ein/aus	Zebra on/off
+Zebra: 	Zebra: 
+zeigt App-Liste	shows app list
+Zeit 	Time 
+Zeit %.4f s, Grenze %.4f s	Time %.4f s, limit %.4f s
+Zeit hinzufügen	Add time
+Zeitfenster bis	Time window until
+Zeitfenster von	Time window from
+Zeitraffer (LRT)	Time-lapse (LRT)
+Zeitraffer gestartet: alle 	Time-lapse started: every 
+Zeitrafferfilm	Time-lapse movie
+Zeitrafferfilm nicht möglich: 	Time-lapse movie not possible: 
+Zeitserver	Time server
+Zeitserver wird gefragt …	Asking the time server …
+Zoomwippe	Zoom lever
+ZR 	TL 
+zuletzt: 	last: 
+Zum Ändern	To change
+Zustand	State
+Zusätzlich speichern als	Also save as
+Übertragung von 	Transfer of 
+weiter in 	continuing in 

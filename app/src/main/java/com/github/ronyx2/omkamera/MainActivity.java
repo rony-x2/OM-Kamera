@@ -86,6 +86,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
      * the chosen idle time; then the camera's own power save time applies.
      */
     @Override
+    public void applyLanguage() {
+        L.init(this, getSharedPreferences("ui", MODE_PRIVATE).getInt("lang", 0));
+        Log.info("Sprache: " + (L.english() ? "English" : "Deutsch"));
+        redraw();
+    }
+
+    @Override
     public void applyStandby() {
         int minutes = ui.standbyMinutes();
         boolean apo;
@@ -134,6 +141,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         setContentView(root);
 
         session = new CameraSession(this);
+        L.init(this, getSharedPreferences("ui", MODE_PRIVATE).getInt("lang", 0));
         Settings.init(getSharedPreferences("ui", MODE_PRIVATE));
         ui = new Ui(session, new FnLayout(this), this, getSharedPreferences("ui", MODE_PRIVATE));
         sequencer = new Sequencer(session, getSharedPreferences("ui", MODE_PRIVATE), new Sequencer.Host() {
@@ -1054,6 +1062,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         }
         if (ui.remoteCode() == null || !ui.remoteCode().equals(r.param("k"))) {
             return DebugServer.Response.text(403, "text/plain", "Code fehlt oder falsch");
+        }
+        if (path.equals("/api/i18n")) {
+            // Texts that stayed German in the English display (for completing the translation)
+            return DebugServer.Response.text(200, "text/plain; charset=utf-8", L.missing());
         }
         if (path.equals("/api/system")) {
             // Fixed read-only queries with root rights on the camera's Linux host; no free commands
