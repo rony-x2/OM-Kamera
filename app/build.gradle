@@ -12,8 +12,8 @@ android {
         minSdk = 10
         //noinspection ExpiredTargetSdkVersion
         targetSdk = 10
-        versionCode = 81
-        versionName = '0.17.6'
+        versionCode = 82
+        versionName = '0.18.0'
     }
 
     buildFeatures {

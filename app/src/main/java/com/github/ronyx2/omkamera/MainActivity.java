@@ -971,8 +971,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     private String ftpJson() {
         try {
             org.json.JSONObject o = new org.json.JSONObject();
+            o.put("proto", ftp.proto());
             o.put("host", ftp.server());
             o.put("port", ftp.port());
+            o.put("defaultPort", ftp.defaultPort());
             o.put("user", ftp.user());
             o.put("pass", ftp.hasPassword());
             o.put("dir", ftp.dir());
@@ -1171,14 +1173,15 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (path.equals("/api/ftp")) {
             // FTP settings from the remote page; without parameters only the current state
             if (r.param("host") != null || r.param("on") != null || r.param("test") != null) {
-                Integer port = null, what = null;
+                Integer port = null, what = null, proto = null;
                 try {
-                    port = r.param("port") != null && r.param("port").length() > 0 ? Integer.valueOf(r.param("port")) : null;
+                    port = r.param("port") != null ? (r.param("port").trim().length() > 0 ? Integer.valueOf(r.param("port").trim()) : Integer.valueOf(0)) : null;
+                    proto = r.param("proto") != null ? Integer.valueOf(r.param("proto")) : null;
                     what = r.param("what") != null ? Integer.valueOf(r.param("what")) : null;
                 } catch (NumberFormatException ignored) {
                 }
                 Boolean results = r.param("results") != null ? Boolean.valueOf("1".equals(r.param("results"))) : null;
-                ftp.configure(r.param("host"), port, r.param("user"), r.param("pass"), r.param("dir"), what, results);
+                ftp.configure(proto, r.param("host"), port, r.param("user"), r.param("pass"), r.param("dir"), what, results);
                 String msg = "gespeichert";
                 if (r.param("test") != null) {
                     msg = ftp.test();
@@ -1186,7 +1189,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                 if (r.param("on") != null) {
                     ftp.setOn("1".equals(r.param("on")));
                 }
-                Log.info("remote /api/ftp " + ftp.server() + ":" + ftp.port() + " " + ftp.dir() + " on=" + ftp.on() + " -> " + msg);
+                Log.info("remote /api/ftp " + ftp.protoName() + " " + ftp.server() + ":" + ftp.port() + " " + ftp.dir() + " on=" + ftp.on() + " -> " + msg);
                 redraw();
                 return json("{\"result\":\"ok\",\"text\":" + org.json.JSONObject.quote(L.t(msg)) + "," + ftpJson() + "}");
             }

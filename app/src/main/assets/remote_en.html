@@ -168,13 +168,14 @@
       </form>
     </div>
     <div class="card" id="ftpcard">
-      <h2>FTP transfer</h2>
+      <h2>Transfer (FTP / SMB)</h2>
       <form class="settings ftp" id="ftpform" autocomplete="off">
-        <label>Server<input name="host" placeholder="192.168.2.10 or nas.local"></label>
-        <label>Port<input name="port" inputmode="numeric" placeholder="21"></label>
+        <label class="wide">Target<select name="proto"><option value="1">SMB – NAS or Windows share</option><option value="0">FTP server</option></select></label>
+        <label>Server<input name="host" placeholder="IP address, e.g. 192.168.2.10"></label>
+        <label>Port<input name="port" inputmode="numeric" placeholder="445"></label>
         <label>User<input name="user" autocomplete="off"></label>
         <label>Password<input name="pass" type="password" autocomplete="new-password"></label>
-        <label class="wide">Target folder<input name="dir" placeholder="/kamera"></label>
+        <label class="wide"><span id="dirlabel">Share and folder</span><input name="dir" placeholder="photo/OM-Kamera"></label>
         <label>Which pictures<select name="what"><option value="0">all pictures</option><option value="1">JPEG only</option><option value="2">RAW only (ARW)</option></select></label>
         <label class="check"><input type="checkbox" name="results"> also results (OMKAMERA)</label>
         <div class="ftpbtns wide">
@@ -254,8 +255,10 @@
     var fm = $('ftpform');
     if (document.activeElement && fm.contains(document.activeElement)) { /* do not overwrite while typing */ }
     else {
-      fm.host.value = f.host || ''; fm.port.value = f.port && f.port !== 21 ? f.port : '';
-      fm.user.value = f.user || ''; fm.dir.value = f.dir || '/'; fm.what.value = String(f.what || 0);
+      fm.proto.value = f.host ? String(f.proto || 0) : (fm.proto.value || '1');
+      fm.host.value = f.host || ''; fm.port.value = f.port && f.port !== f.defaultPort ? f.port : '';
+      fm.user.value = f.user || ''; fm.dir.value = f.dir || (f.proto ? '' : '/'); fm.what.value = String(f.what || 0);
+      ftpProto();
       fm.results.checked = !!f.results;
       fm.pass.placeholder = f.pass ? 'saved (leave empty = keep)' : '';
     }
@@ -267,7 +270,7 @@
   function ftpPost(extra) {
     var fm = $('ftpform');
     var p = new URLSearchParams();
-    ['host', 'port', 'user', 'pass', 'dir', 'what'].forEach(function (n) { p.append(n, fm[n].value); });
+    ['proto', 'host', 'port', 'user', 'pass', 'dir', 'what'].forEach(function (n) { p.append(n, fm[n].value); });
     p.append('results', fm.results.checked ? '1' : '0');
     for (var k in extra) p.append(k, extra[k]);
     return fetch('/api/ftp?k=' + encodeURIComponent(code), {
@@ -278,10 +281,19 @@
     }).then(function (j) {
       fm.pass.value = '';
       ftpShow(j.ftp);
-      if (j.text) toast(j.text, /FTP: |not |refused/.test(j.text) && !/ OK/.test(j.text));
+      if (j.text) toast(j.text, /^(FTP|SMB): |nicht|abgelehnt|falsch/.test(j.text) && !/in Ordnung/.test(j.text));
       return j;
     });
   }
+  // FTP or SMB: the fields explain themselves with the right placeholders
+  function ftpProto() {
+    var fm = $('ftpform'), smb = fm.proto.value === '1';
+    fm.port.placeholder = smb ? '445' : '21';
+    fm.dir.placeholder = smb ? 'photo/OM-Kamera' : '/kamera';
+    fm.user.placeholder = smb ? 'NAS user' : '';
+    $('dirlabel').textContent = smb ? 'Share and folder' : 'Target folder';
+  }
+  $('ftpform').proto.onchange = ftpProto;
   $('ftpform').onsubmit = function (e) { e.preventDefault(); ftpPost({}); };
   $('ftptest').onclick = function () { $('ftpstate').textContent = 'State: checking …'; ftpPost({ test: '1' }); };
   $('ftpon').onclick = function () { ftpPost({ on: ftpOn ? '0' : '1' }); };

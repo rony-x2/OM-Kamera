@@ -19,9 +19,10 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Sends new pictures to an FTP server over WLAN, one after the other in the background.
- * Plain FTP in passive mode (works on every model, Android 2.3 included); the settings come
- * from the remote control page, as the camera has no keyboard.
+ * Sends new pictures to an FTP server or an SMB share (NAS, Windows) over WLAN, one after the
+ * other in the background. Plain FTP in passive mode or SMB 2/3 (Smb2), both on every model,
+ * Android 2.3 included; the settings come from the remote control page, as the camera has no
+ * keyboard. The class keeps its name and the "ftp." settings from the time it only spoke FTP.
  *
  * Which files: new pictures in DCIM (all, only JPEG or only RAW) and, if wished, the results
  * of the processing in OMKAMERA (DNG, TIFF, films …). The last sent file is remembered, so
@@ -56,7 +57,12 @@ public final class FtpUpload {
 
     public boolean on() { return prefs.getBoolean("ftp.on", false); }
     public String server() { return prefs.getString("ftp.host", ""); }
-    public int port() { return prefs.getInt("ftp.port", 21); }
+    /** 0 = FTP, 1 = SMB (NAS or Windows share) */
+    public int proto() { return prefs.getInt("ftp.proto", 0) == 1 ? 1 : 0; }
+    public boolean smb() { return proto() == 1; }
+    public int defaultPort() { return smb() ? 445 : 21; }
+    public int port() { int p = prefs.getInt("ftp.port", 0); return p > 0 ? p : defaultPort(); }
+    public String protoName() { return smb() ? "SMB" : "FTP"; }
     public String user() { return prefs.getString("ftp.user", ""); }
     public boolean hasPassword() { return prefs.getString("ftp.pass", "").length() > 0; }
     public String dir() { return prefs.getString("ftp.dir", "/"); }
@@ -74,10 +80,13 @@ public final class FtpUpload {
      * Stores the settings from the remote page; null leaves a value as it is (the password
      * is never sent back to the page, an empty field keeps it).
      */
-    public void configure(String host, Integer port, String user, String pass, String dir, Integer what, Boolean results) {
+    public void configure(Integer proto, String host, Integer port, String user, String pass, String dir, Integer what,
+            Boolean results) {
         SharedPreferences.Editor e = prefs.edit();
+        if (proto != null) e.putInt("ftp.proto", proto == 1 ? 1 : 0);
         if (host != null) e.putString("ftp.host", host.trim());
         if (port != null && port > 0 && port < 65536) e.putInt("ftp.port", port);
+        else if (port != null && port == 0) e.remove("ftp.port"); // empty field: default port
         if (user != null) e.putString("ftp.user", user.trim());
         if (pass != null && pass.length() > 0) e.putString("ftp.pass", pass);
         if (dir != null) e.putString("ftp.dir", dir.trim().length() == 0 ? "/" : dir.trim());
@@ -267,9 +276,9 @@ public final class FtpUpload {
     }
 
     private void sendAll(List<File> files) throws IOException, InterruptedException {
-        Ftp f = new Ftp();
+        Transport f = transport();
         try {
-            f.open(server(), port(), user(), prefs.getString("ftp.pass", ""));
+            f.open(server(), port(), user(), prefs.getString("ftp.pass", ""), dir());
             for (File file : files) {
                 if (!running) {
                     return;
@@ -279,12 +288,12 @@ public final class FtpUpload {
                 host.redraw();
                 String sub = file.getParentFile().getName();
                 long t0 = SystemClock.elapsedRealtime();
-                f.store(file, join(dir(), sub), file.getName());
+                f.store(file, sub, file.getName());
                 long ms = Math.max(1, SystemClock.elapsedRealtime() - t0);
                 sent++;
                 waiting = Math.max(0, waiting - 1);
                 remember(file);
-                Log.info(String.format(Locale.US, "ftp %s/%s %d KB in %.1f s (%.0f KB/s)", sub, file.getName(),
+                Log.info(String.format(Locale.US, "%s %s/%s %d KB in %.1f s (%.0f KB/s)", protoName().toLowerCase(Locale.US), sub, file.getName(),
                         file.length() / 1024, ms / 1000.0, file.length() / 1024.0 / (ms / 1000.0)));
             }
             current = null;
@@ -299,20 +308,102 @@ public final class FtpUpload {
         return d + sub;
     }
 
-    /** Connects, logs in and changes to the target folder: for "Verbindung prüfen" */
+    /** The target folder as it is shown: /dir on FTP, \\server\share\dir on SMB */
+    public String target() {
+        if (!smb()) {
+            return server() + (port() != 21 ? ":" + port() : "") + " " + dir();
+        }
+        String[] sp = Smb2.splitShare(dir());
+        return "\\\\" + server() + (port() != 445 ? ":" + port() : "") + "\\" + sp[0] + (sp[1].length() > 0 ? "\\" + sp[1] : "");
+    }
+
+    /** Connects, logs in and creates the target folder: for "Verbindung prüfen" */
     public String test() {
         if (!configured()) {
-            return "FTP ist noch nicht eingerichtet (Fernsteuerungsseite im Browser)";
+            return "Übertragung ist noch nicht eingerichtet (Fernsteuerungsseite im Browser)";
         }
-        Ftp f = new Ftp();
+        Transport f = transport();
         try {
-            f.open(server(), port(), user(), prefs.getString("ftp.pass", ""));
-            f.cwdMake(dir());
-            return "FTP-Verbindung in Ordnung: " + server() + dir();
+            f.open(server(), port(), user(), prefs.getString("ftp.pass", ""), dir());
+            f.makeDir();
+            return "Verbindung in Ordnung: " + target() + f.info();
         } catch (Exception e) {
-            return "FTP: " + e.getMessage();
+            return protoName() + ": " + e.getMessage();
         } finally {
             f.close();
+        }
+    }
+
+    // ---- transports ----
+
+    private interface Transport {
+        void open(String host, int port, String user, String pass, String dir) throws IOException;
+
+        /** Creates the target folder */
+        void makeDir() throws IOException;
+
+        /** Writes the file into the sub folder of the target folder */
+        void store(File file, String sub, String name) throws IOException;
+
+        String info();
+
+        void close();
+    }
+
+    private Transport transport() {
+        return smb() ? new SmbTransport() : new FtpTransport();
+    }
+
+    private static final class FtpTransport implements Transport {
+        private final Ftp ftp = new Ftp();
+        private String dir;
+
+        public void open(String host, int port, String user, String pass, String dir) throws IOException {
+            this.dir = dir;
+            ftp.open(host, port, user, pass);
+        }
+
+        public void makeDir() throws IOException {
+            ftp.cwdMake(dir);
+        }
+
+        public void store(File file, String sub, String name) throws IOException {
+            ftp.store(file, join(dir, sub), name);
+        }
+
+        public String info() {
+            return "";
+        }
+
+        public void close() {
+            ftp.close();
+        }
+    }
+
+    private static final class SmbTransport implements Transport {
+        private final Smb2 smb = new Smb2();
+        private String base;
+
+        public void open(String host, int port, String user, String pass, String dir) throws IOException {
+            String[] sp = Smb2.splitShare(dir);
+            base = sp[1];
+            smb.open(host, port, sp[0], user, pass);
+        }
+
+        public void makeDir() throws IOException {
+            smb.makeDirs(base);
+        }
+
+        public void store(File file, String sub, String name) throws IOException {
+            smb.store(file, base.length() > 0 ? base + "\\" + sub : sub, name);
+        }
+
+        public String info() {
+            return " (" + smb.dialectName() + (smb.signing() ? ", signiert" : "") + ")";
+        }
+
+        public void close() {
+            smb.close();
         }
     }
 

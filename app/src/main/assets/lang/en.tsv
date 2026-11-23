@@ -709,3 +709,12 @@ Name im EXIF	Name in EXIF
 Objektivdaten für EXIF und SteadyShot aktiv	Lens data for EXIF and SteadyShot active
 Objektivdaten aus	Lens data off
 re:^Ein · (.+)$	On · $1
+Übertragung (FTP/SMB)	Transfer (FTP/SMB)
+Verbindung wird geprüft …	Checking connection …
+Übertragung ist noch nicht eingerichtet (Fernsteuerungsseite im Browser)	Transfer is not set up yet (remote control page in the browser)
+re:^Verbindung in Ordnung: (.*), signiert\)$	Connection OK: $1, signed)
+re:^Verbindung in Ordnung: (.*)$	Connection OK: $1
+Benutzer oder Passwort falsch	wrong user or password
+kein Schreibrecht	no write permission
+Freigabe nicht gefunden	share not found
+Datenträger voll	disk full

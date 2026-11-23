@@ -1826,12 +1826,12 @@ public class Ui {
         if (f == null) {
             return;
         }
-        out.add(Row.header("FTP-Übertragung"));
+        out.add(Row.header("Übertragung (FTP/SMB)"));
         if (!f.configured()) {
             out.add(Row.info("Einrichten", "in der Fernsteuerung (Browser)"));
             return;
         }
-        out.add(Row.info("Server", f.server() + (f.port() != 21 ? ":" + f.port() : "") + " " + f.dir()));
+        out.add(Row.info(f.protoName(), f.target()));
         out.add(Row.action("Neue Bilder senden", f.on() ? "Ein" : "Aus", new Runnable() {
             @Override
             public void run() {
@@ -1858,7 +1858,7 @@ public class Ui {
         out.add(Row.action("Verbindung prüfen", "", new Runnable() {
             @Override
             public void run() {
-                showMessage("FTP wird geprüft …", false);
+                showMessage("Verbindung wird geprüft …", false);
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -1866,7 +1866,7 @@ public class Ui {
                         host.later(new Runnable() {
                             @Override
                             public void run() {
-                                showMessage(r, !r.startsWith("FTP-Verbindung in Ordnung"));
+                                showMessage(r, !r.startsWith("Verbindung in Ordnung"));
                                 host.redraw();
                             }
                         }, 0);
