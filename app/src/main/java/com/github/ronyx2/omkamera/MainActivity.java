@@ -1469,7 +1469,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     @Override
     public void redraw() {
         if (overlay != null) {
-            overlay.invalidate();
+            // Android 4.x refuses invalidate() from other threads (web server, upload): post it there
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                overlay.invalidate();
+            } else {
+                overlay.postInvalidate();
+            }
         }
     }
 
