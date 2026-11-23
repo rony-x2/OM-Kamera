@@ -15,6 +15,7 @@
   .chip b { color: var(--text); font-weight: 600; }
   .chip.clock { display: none; cursor: pointer; font: inherit; font-size: 13.5px; color: var(--accent); border-color: var(--accent); }
   .chip.clock:hover { background: var(--panel2); }
+  .chip.upd { display: none; color: #111; background: var(--accent); border-color: var(--accent); font-weight: 650; text-decoration: none; }
   .chip.mode { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 700; }
   .chip.rec { color: #fff; border-color: var(--rec); display: none; }
   .chip.rec::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rec); margin-right: 6px; animation: pulse 1.1s ease-in-out infinite; }
@@ -108,6 +109,7 @@
   <span class="chip rec" id="rec">writing</span>
   <span class="chip" id="conn">connecting …</span>
   <button class="chip clock" id="clock" title="Set the camera clock to the time of this device">Clock</button>
+  <a class="chip upd" id="upd" target="_blank" rel="noopener" title="New version on GitHub – install with pmca-console over USB">Update</a>
   <span class="spacer"></span>
   <a href="/">Debug</a>
 </header>
@@ -336,7 +338,52 @@
         }
       }
       renderSettings(s.settings || []);
+      checkUpdate(s);
     }).catch(function () { $('conn').textContent = 'no connection'; });
+  }
+
+  // ---- update notice: the browser asks GitHub (the camera's old Android cannot), at most every 12 h ----
+  var updDone = false, updPending = null;
+  function newer(a, b) {
+    var x = String(a).replace(/^v/i, '').split(/[.-]/), y = String(b).replace(/^v/i, '').split(/[.-]/);
+    for (var i = 0; i < Math.max(x.length, y.length); i++) {
+      var u = parseInt(x[i] || '0', 10) || 0, v = parseInt(y[i] || '0', 10) || 0;
+      if (u !== v) return u > v;
+    }
+    return false;
+  }
+  function showUpdate(tag, url, s) {
+    if (!newer(tag, s.version)) return;
+    var a = $('upd');
+    a.textContent = 'Update ' + tag.replace(/^v/i, '');
+    a.href = url;
+    a.style.display = 'inline-block';
+    updPending = { tag: tag, url: url };
+    tellCamera(s);
+  }
+  // Tell the camera once a code is known (the remote page may still be waiting for it)
+  function tellCamera(s) {
+    if (!updPending || !code) return;
+    if (s.updateLatest !== updPending.tag.replace(/^v/i, '')) {
+      api('/api/update?v=' + encodeURIComponent(updPending.tag) + '&url=' + encodeURIComponent(updPending.url)).catch(function () {});
+    }
+    updPending = null;
+  }
+  function checkUpdate(s) {
+    tellCamera(s);
+    if (updDone || !s.version || s.updateCheck === false) return;
+    updDone = true;
+    var memo = null;
+    try { memo = JSON.parse(localStorage.getItem('omk.update') || 'null'); } catch (e) {}
+    if (memo && memo.tag && Date.now() - memo.t < 12 * 3600 * 1000) { showUpdate(memo.tag, memo.url, s); return; }
+    fetch('https://api.github.com/repos/rony-x2/OM-Kamera/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.tag_name) return;
+        var url = j.html_url || 'https://github.com/rony-x2/OM-Kamera/releases/latest';
+        try { localStorage.setItem('omk.update', JSON.stringify({ t: Date.now(), tag: j.tag_name, url: url })); } catch (e) {}
+        showUpdate(j.tag_name, url, s);
+      }).catch(function () {});
   }
 
   var built = false;

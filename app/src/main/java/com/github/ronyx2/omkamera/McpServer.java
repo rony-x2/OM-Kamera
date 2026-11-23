@@ -607,6 +607,10 @@ public class McpServer {
         JSONObject o = new JSONObject();
         o.put("modell", com.github.ma1co.openmemories.framework.DeviceInfo.getInstance().getModel());
         o.put("app", host.version());
+        String upd = ui.updateAvailable();
+        if (upd != null) {
+            o.put("update", upd + " verfügbar" + (ui.updateUrl() != null ? " · " + ui.updateUrl() : ""));
+        }
         o.put("modus", ui.modeName());
         o.put("zeit", s.shutterText());
         o.put("blende", s.apertureText());

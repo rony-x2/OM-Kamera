@@ -120,6 +120,19 @@ Download the APK from the [releases](../../releases) and install it with
 
     pmca-console install -f OM-Kamera-<version>.apk
 
+### Updates
+
+The remote page in the browser checks GitHub for a newer release (at most every 12 hours) and
+shows an "Update" chip; the camera then lists the new version under Setup → App version. The
+camera itself cannot reach GitHub – its Android is too old for current HTTPS – and apps can only
+be installed over USB, so the update itself runs on the computer:
+
+    .\tools\omk-update.ps1 -Pmca C:\path\to\pmca-console.exe
+
+It downloads the newest APK and installs it on the camera connected by USB. With the MCP bridge,
+the assistant can do the same with the bridge tools `update_pruefen` and `update_installieren`.
+The update notice can be switched off under Setup → Update notice.
+
 ## Building
 
 Requires the Android SDK (platform 10 is enough) and, for the native parts, NDK r14b.

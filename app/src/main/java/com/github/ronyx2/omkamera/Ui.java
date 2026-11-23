@@ -382,6 +382,58 @@ public class Ui {
     /** Experiment: playback key as resume key (back from playback into the app) */
     public boolean resumePlay() { return prefs.getBoolean("resume.play", false); }
 
+    // ---- update notice (the remote page asks GitHub, the camera remembers the answer) ----
+
+    public boolean updateCheck() { return prefs.getBoolean("update.check", true); }
+
+    /** Newest version the remote page found on GitHub, null if none is known */
+    public String updateLatest() { return prefs.getString("update.latest", null); }
+
+    public String updateUrl() { return prefs.getString("update.url", null); }
+
+    /** Newer version than the running app known, or null */
+    public String updateAvailable() {
+        String v = updateLatest();
+        return v != null && newerVersion(v, BuildConfig.VERSION_NAME) ? v : null;
+    }
+
+    public void setUpdateInfo(String version, String url) {
+        boolean fresh = version != null && !version.equals(updateLatest()) && newerVersion(version, BuildConfig.VERSION_NAME);
+        prefs.edit().putString("update.latest", version).putString("update.url", url)
+                .putLong("update.time", System.currentTimeMillis()).apply();
+        if (fresh) {
+            showMessage("Update " + version + " verfügbar – Setup → App-Version", false);
+        }
+    }
+
+    /** "0.17.10" > "0.17.9"; a leading "v" is ignored, missing parts count as 0 */
+    public static boolean newerVersion(String a, String b) {
+        int[] x = versionParts(a), y = versionParts(b);
+        for (int i = 0; i < Math.max(x.length, y.length); i++) {
+            int u = i < x.length ? x[i] : 0, v = i < y.length ? y[i] : 0;
+            if (u != v) {
+                return u > v;
+            }
+        }
+        return false;
+    }
+
+    private static int[] versionParts(String v) {
+        if (v == null) {
+            return new int[0];
+        }
+        String[] p = v.trim().replaceFirst("^[vV]", "").split("[.\\-]");
+        int[] out = new int[p.length];
+        for (int i = 0; i < p.length; i++) {
+            try {
+                out[i] = Integer.parseInt(p[i].replaceAll("\\D.*$", ""));
+            } catch (NumberFormatException e) {
+                out[i] = 0;
+            }
+        }
+        return out;
+    }
+
     public Beep.Mode beepMode() { return beepMode; }
 
     /** Remote control in the browser: live view, settings, shutter. Protected by a code shown on the camera. */
@@ -1905,6 +1957,16 @@ public class Ui {
             public void run() {
                 prefs.edit().putBoolean("resume.play", !resumePlay()).apply();
                 showMessage("Gilt ab dem nächsten Start der App", false);
+            }
+        }));
+        String upd = updateAvailable();
+        long checked = prefs.getLong("update.time", 0);
+        out.add(Row.info("App-Version", BuildConfig.VERSION_NAME + (upd != null ? " · " + upd + " verfügbar"
+                : checked > 0 ? " · aktuell" : "")));
+        out.add(Row.action("Update-Hinweis", updateCheck() ? "Ein · prüft über die Fernsteuerung" : "Aus", new Runnable() {
+            @Override
+            public void run() {
+                prefs.edit().putBoolean("update.check", !updateCheck()).apply();
             }
         }));
 

@@ -8,14 +8,24 @@ Es reicht jede JSON-RPC-Nachricht per HTTP an die App OM Kamera auf der Sony-Kam
 Ist die Kamera nicht erreichbar (App geschlossen, WLAN oder MCP aus), antwortet die Brücke
 selbst: Werkzeugliste aus dem Zwischenspeicher, Werkzeugaufrufe mit einer klaren Fehlermeldung.
 
+Dazu kommen zwei Werkzeuge der Brücke selbst, weil die Kamera kein aktuelles HTTPS spricht
+und Apps nur per USB installiert werden können:
+  update_pruefen       neuestes Release auf GitHub mit der Version auf der Kamera vergleichen
+  update_installieren  neueste APK laden und mit pmca-console auf die USB-Kamera installieren
+
 Umgebungsvariablen:
   OMKAMERA_URL    z. B. http://192.168.2.38:8080/mcp
   OMKAMERA_TOKEN  der MCP-Token aus dem App-Menü (App > MCP-Schnittstelle)
+  OMKAMERA_PMCA   Pfad zu pmca-console.exe (sonst neben der Brücke oder im PATH gesucht)
 """
 
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -71,6 +81,116 @@ def store_tools(tools):
         pass
 
 
+# ---- Werkzeuge der Brücke: Update ----
+
+REPO = os.environ.get("OMKAMERA_REPO", "rony-x2/OM-Kamera")
+BRIDGE_TOOLS = [
+    {
+        "name": "update_pruefen",
+        "description": "Prüft auf GitHub, ob es eine neuere Version von OM Kamera gibt, und vergleicht sie mit "
+                       "der Version auf der Kamera. Ändert nichts.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "update_installieren",
+        "description": "Lädt die neueste APK von GitHub und installiert sie mit pmca-console auf die Kamera, die "
+                       "per USB am Rechner hängt (WLAN reicht nicht). Dauert etwa eine Minute; danach muss OM Kamera "
+                       "an der Kamera neu gestartet werden. Nur auf ausdrücklichen Wunsch aufrufen.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+]
+BRIDGE_NAMES = {t["name"] for t in BRIDGE_TOOLS}
+
+
+def version_tuple(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
+
+
+def latest_release():
+    req = urllib.request.Request("https://api.github.com/repos/%s/releases/latest" % REPO,
+                                 headers={"Accept": "application/vnd.github+json", "User-Agent": "omkamera-bridge"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        rel = json.loads(resp.read().decode("utf-8"))
+    apk = next((a for a in rel.get("assets", []) if a.get("name", "").endswith(".apk")), None)
+    return rel, apk
+
+
+def camera_version():
+    """Version der App auf der Kamera per WLAN, None wenn nicht erreichbar."""
+    try:
+        status, answer = post({"jsonrpc": "2.0", "id": 0, "method": "tools/call",
+                               "params": {"name": "status", "arguments": {}}}, 6)
+        text = answer["result"]["content"][0]["text"]
+        return json.loads(text).get("app")
+    except Exception:
+        return None
+
+
+def find_pmca():
+    for c in (os.environ.get("OMKAMERA_PMCA"), os.path.join(HERE, "pmca-console.exe"),
+              shutil.which("pmca-console"), shutil.which("pmca-console.exe")):
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def bridge_tool(name):
+    """Führt ein Werkzeug der Brücke aus; liefert (text, fehler)."""
+    try:
+        rel, apk = latest_release()
+    except Exception as e:
+        return "GitHub nicht erreichbar: %s" % e, True
+    tag = rel.get("tag_name", "?")
+    cam = camera_version()
+    if name == "update_pruefen":
+        lines = ["Neueste Version auf GitHub: %s (%s)" % (tag, rel.get("html_url", ""))]
+        if cam is None:
+            lines.append("Kamera per WLAN nicht erreichbar – Version dort unbekannt.")
+        elif version_tuple(tag) > version_tuple(cam):
+            lines.append("Auf der Kamera: %s – Update verfügbar. Installation per USB mit update_installieren "
+                         "oder tools/omk-update.ps1." % cam)
+        else:
+            lines.append("Auf der Kamera: %s – aktuell." % cam)
+        return "\n".join(lines), False
+    # update_installieren
+    if apk is None:
+        return "Im Release %s ist keine APK." % tag, True
+    pmca = find_pmca()
+    if pmca is None:
+        return "pmca-console.exe nicht gefunden – OMKAMERA_PMCA setzen oder neben die Brücke legen.", True
+    target = os.path.join(tempfile.gettempdir(), apk["name"])
+    try:
+        req = urllib.request.Request(apk["browser_download_url"], headers={"User-Agent": "omkamera-bridge"})
+        with urllib.request.urlopen(req, timeout=120) as resp, open(target, "wb") as f:
+            shutil.copyfileobj(resp, f)
+        if os.path.getsize(target) != apk.get("size", os.path.getsize(target)):
+            return "Download unvollständig: %s" % target, True
+        run = subprocess.run([pmca, "install", "-f", target], stdin=subprocess.DEVNULL,
+                             capture_output=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        return "pmca-console hat nach 10 Minuten nicht geantwortet.", True
+    except Exception as e:
+        return "Installation fehlgeschlagen: %s" % e, True
+    out = (run.stdout + run.stderr).decode("utf-8", "replace")
+    shown = "\n".join(l for l in out.splitlines() if not re.match(r"^(Down|Up)loading \d+%|^Installing \d+%", l))
+    if "Task completed successfully" not in out:
+        return "Installation nicht bestätigt – hängt die Kamera per USB am Rechner?\n\n" + shown, True
+    return ("%s installiert (vorher %s). OM Kamera an der Kamera über das Anwendungsmenü neu starten.\n\n%s"
+            % (tag, cam or "unbekannt", shown)), False
+
+
+def bridge_call(message):
+    params = message.get("params") or {}
+    text, error = bridge_tool(params.get("name"))
+    return {"jsonrpc": "2.0", "id": message.get("id"),
+            "result": {"content": [{"type": "text", "text": text}], "isError": error}}
+
+
+def with_bridge_tools(tools):
+    names = {t.get("name") for t in tools}
+    return list(tools) + [t for t in BRIDGE_TOOLS if t["name"] not in names]
+
+
 def local_answer(message, reason):
     """Antwort der Brücke, wenn die Kamera nicht antwortet."""
     mid = message.get("id")
@@ -87,7 +207,7 @@ def local_answer(message, reason):
     elif method == "ping":
         result = {}
     elif method == "tools/list":
-        result = {"tools": cached_tools()}
+        result = {"tools": with_bridge_tools(cached_tools())}
     elif method == "tools/call":
         result = {
             "content": [{"type": "text", "text": "Kamera nicht erreichbar: " + reason
@@ -101,6 +221,8 @@ def local_answer(message, reason):
 
 def handle(message):
     is_request = "id" in message
+    if message.get("method") == "tools/call" and (message.get("params") or {}).get("name") in BRIDGE_NAMES:
+        return bridge_call(message) if is_request else None
     # Start und Werkzeugliste sollen Claude nicht aufhalten, wenn die Kamera aus ist
     quick = message.get("method") != "tools/call"
     try:
@@ -114,6 +236,7 @@ def handle(message):
     if status == 200 and isinstance(answer, dict):
         if message.get("method") == "tools/list" and "result" in answer:
             store_tools(answer["result"].get("tools", []))
+            answer["result"]["tools"] = with_bridge_tools(answer["result"].get("tools", []))
         return answer
     reason = "HTTP %s %s" % (status, answer if isinstance(answer, str) else "")
     if status == 401:

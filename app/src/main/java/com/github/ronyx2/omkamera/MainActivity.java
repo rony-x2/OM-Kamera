@@ -1063,6 +1063,21 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         if (ui.remoteCode() == null || !ui.remoteCode().equals(r.param("k"))) {
             return DebugServer.Response.text(403, "text/plain", "Code fehlt oder falsch");
         }
+        if (path.equals("/api/update")) {
+            // The remote page found a release on GitHub (the camera itself cannot speak modern TLS)
+            final String v = r.param("v"), u = r.param("url");
+            if (v == null || !v.matches("v?\\d+(\\.\\d+){0,3}") || (u != null && !u.startsWith("https://github.com/"))) {
+                return DebugServer.Response.text(400, "text/plain", "Version oder Link ungültig");
+            }
+            onMain(new java.util.concurrent.Callable<Void>() {
+                @Override
+                public Void call() {
+                    ui.setUpdateInfo(v.replaceFirst("^[vV]", ""), u);
+                    return null;
+                }
+            });
+            return json("{\"result\":\"ok\"}");
+        }
         if (path.equals("/api/i18n")) {
             // Texts that stayed German in the English display (for completing the translation)
             return DebugServer.Response.text(200, "text/plain; charset=utf-8", L.missing());
@@ -1326,6 +1341,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
         o.put("ui", ui.state().name());
         o.put("ael", ui.aeLocked());
         o.put("clock", CameraClock.nowUtc());
+        o.put("version", BuildConfig.VERSION_NAME);
+        o.put("updateCheck", ui.updateCheck());
+        if (ui.updateLatest() != null) {
+            o.put("updateLatest", ui.updateLatest());
+        }
         int[] fp = session.focusPoint();
         if (fp != null) {
             o.put("focusPoint", fp[0] + "," + fp[1]);

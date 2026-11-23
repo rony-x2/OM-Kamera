@@ -3,7 +3,9 @@
 # von Claude Desktop ein (vorher wird eine Sicherung angelegt).
 param(
     [string]$Token = $(Read-Host 'MCP-Token von der Kamera (Menü App > MCP-Schnittstelle)'),
-    [string]$Url = 'http://192.168.2.38:8080/mcp'
+    [string]$Url = 'http://192.168.2.38:8080/mcp',
+    # Optional: pmca-console.exe für das Brücken-Werkzeug update_installieren
+    [string]$Pmca = ''
 )
 $ErrorActionPreference = 'Stop'
 $src = $PSScriptRoot
@@ -23,6 +25,7 @@ $entry = [pscustomobject]@{
     args    = @('-3', (Join-Path $dst 'omkamera_mcp.py'))
     env     = [pscustomobject]@{ OMKAMERA_URL = $Url; OMKAMERA_TOKEN = $Token.Trim() }
 }
+if ($Pmca) { $entry.env | Add-Member -NotePropertyName OMKAMERA_PMCA -NotePropertyValue (Resolve-Path $Pmca).Path }
 $j.mcpServers | Add-Member -NotePropertyName omkamera -NotePropertyValue $entry -Force
 $j | ConvertTo-Json -Depth 20 | Set-Content $cfg -Encoding utf8NoBOM
 
