@@ -80,6 +80,21 @@ The display is available in **English and German** (Setup → Sprache / Language
 * Direct start: "Application" in the Sony menu opens OM Kamera directly (optional);
   open "Application" within 20 s after closing the app to get the normal app list
 
+## Cameras
+
+Sony offered PlayMemories Camera Apps on 28 models, from the NEX-5R (2012) to the a6500 and
+RX100 V (2016); the app store closed on 31 August 2025. OM Kamera installs without it. The camera
+interfaces differ between generations, so each model needs its own test:
+
+| Status | Models |
+|---|---|
+| Tested | ILCE-6000 (a6000), firmware 3.21 |
+| Supported by the code | ILCE-7M2 (a7II), ILCE-7RM2 (a7RII) |
+| Interchangeable lens, not tested yet | ILCE-5000, ILCE-5100, ILCE-6300, ILCE-6500, ILCE-7, ILCE-7R, ILCE-7S, ILCE-7SM2, NEX-5R, NEX-5T, NEX-6 |
+| Compact, not tested yet | DSC-RX100M3, RX100M4, RX100M5, RX10M2, RX10M3, RX1RM2, HX60(V), HX80, HX90(V), HX400(V), WX500 |
+
+Tried it on another model? Please open an [issue](../../issues) – what works, what does not.
+
 ## Installing
 
 Download the APK from the [releases](../../releases) and install it with
