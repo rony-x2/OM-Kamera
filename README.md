@@ -12,6 +12,20 @@ The display is available in **English and German** (Setup → Sprache / Language
 
 ## Screenshots
 
+![Overview: live view, zebra and focus peaking, focus magnifier, Holy Grail time-lapse](docs/screenshots/00-overview.jpg)
+
+| Zebra and focus peaking | Focus magnifier |
+|---|---|
+| ![Zebra and focus peaking](docs/screenshots/11-zebra-focus-peaking.png) | ![Focus magnifier](docs/screenshots/12-focus-magnifier.png) |
+
+| Time-lapse (LRT) with BULB | Daily time window and weekdays |
+|---|---|
+| ![Time-lapse](docs/screenshots/13-time-lapse.png) | ![Time window](docs/screenshots/14-time-lapse-window.png) |
+
+| Holy Grail exposure ramping | RAW processing on the camera |
+|---|---|
+| ![Holy Grail](docs/screenshots/15-holy-grail.png) | ![RAW processing](docs/screenshots/16-raw-processing.png) |
+
 | Live view with status line and RGB histogram | Fn menu |
 |---|---|
 | ![Live view](docs/screenshots/01-live-view.png) | ![Fn menu](docs/screenshots/02-fn-menu.png) |
