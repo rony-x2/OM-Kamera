@@ -86,6 +86,8 @@
   .ftpbtns button[type=submit] { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 650; }
   #ftpon.on { border-color: var(--ok); color: var(--ok); }
   .ftpstate { font-size: 13px; color: var(--mute); }
+  .ftpbar { height: 6px; border-radius: 3px; background: var(--panel2); overflow: hidden; }
+  .ftpbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
   .group { grid-column: 1 / -1; font-size: 12px; color: var(--accent); margin-top: 6px; text-transform: uppercase; letter-spacing: .05em; }
 
   #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(20px); background: var(--panel2); border: 1px solid var(--line);
@@ -184,6 +186,7 @@
           <button type="button" id="ftpon">Sending: off</button>
         </div>
         <div class="ftpstate wide" id="ftpstate">–</div>
+        <div class="ftpbar wide" id="ftpbar" hidden><i></i></div>
       </form>
     </div>
   </aside>
@@ -266,6 +269,24 @@
     $('ftpon').textContent = 'Sending: ' + (ftpOn ? 'on' : 'off');
     $('ftpon').classList.toggle('on', ftpOn);
     $('ftpstate').textContent = 'State: ' + (f.state || '–');
+    var bar = $('ftpbar'), pct = typeof f.percent === 'number' ? f.percent : -1;
+    bar.hidden = pct < 0;
+    if (pct >= 0) {
+      bar.firstChild.style.width = pct + '%';
+      var mb = function (b) { return (b / 1048576).toFixed(1).replace('.', ','); };
+      $('ftpstate').textContent = 'State: ' + (f.count > 1 ? 'File ' + f.index + ' of ' + f.count + ' · ' : '')
+        + (f.file || '') + ' · ' + mb(f.done || 0) + ' of ' + mb(f.total || 0) + ' MB · ' + pct + ' %'
+        + (f.speed ? ' · ' + mb(f.speed) + ' MB/s' : '');
+    }
+    ftpFast(pct >= 0);
+  }
+  // While a file is on its way the state is fetched every second, otherwise every 5 seconds
+  var ftpTimer = null, ftpIsFast = null;
+  function ftpFast(fast) {
+    if (fast === ftpIsFast) return;
+    ftpIsFast = fast;
+    clearInterval(ftpTimer);
+    ftpTimer = setInterval(ftpLoad, fast ? 1000 : 5000);
   }
   function ftpPost(extra) {
     var fm = $('ftpform');
@@ -522,7 +543,7 @@
   loadState();
   setInterval(loadState, 1000);
   ftpLoad();
-  setInterval(ftpLoad, 5000);
+  ftpFast(false);
   ltPost().catch(function () {});
   nextFrame();
 })();

@@ -982,6 +982,15 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             o.put("results", ftp.results());
             o.put("on", ftp.on());
             o.put("state", L.t(ftp.summary()));
+            o.put("percent", ftp.percent());
+            if (ftp.current() != null) {
+                o.put("file", ftp.current());
+                o.put("done", ftp.currentDone());
+                o.put("total", ftp.currentTotal());
+                o.put("speed", ftp.speed());
+                o.put("index", ftp.roundIndex());
+                o.put("count", ftp.roundSize());
+            }
             return "\"ftp\":" + o.toString();
         } catch (org.json.JSONException e) {
             return "\"ftp\":null";

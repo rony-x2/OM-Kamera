@@ -128,15 +128,24 @@ public final class Smb2 {
         madeDir = p;
     }
 
+    /** Reports how many bytes of the current file have been confirmed by the server */
+    public interface Progress {
+        void bytes(long done);
+    }
+
     /** Writes the file into the folder (relative to the share), replacing an existing one */
     public void store(File file, String dir, String name) throws IOException {
+        store(file, dir, name, null);
+    }
+
+    public void store(File file, String dir, String name, Progress progress) throws IOException {
         String d = clean(dir);
         makeDirs(d);
         String path = d.length() == 0 ? name : d + "\\" + name;
         byte[] id = create(path, 0x00120116, 0x80, 1, 5 /* FILE_OVERWRITE_IF */, 0x40 /* non-directory */);
         InputStream fin = new FileInputStream(file);
         try {
-            writeAll(id, fin);
+            writeAll(id, fin, progress);
         } catch (IOException e) {
             try {
                 fin.close();
@@ -149,10 +158,12 @@ public final class Smb2 {
     }
 
     /** Writes with up to 8 requests on the way, to keep the WLAN busy */
-    private void writeAll(byte[] fileId, InputStream fin) throws IOException {
+    private void writeAll(byte[] fileId, InputStream fin, Progress progress) throws IOException {
         int chunk = Math.min(maxWrite, 65536);
         long offset = 0;
         java.util.ArrayDeque<Long> open = new java.util.ArrayDeque<Long>();
+        java.util.ArrayDeque<Integer> sizes = new java.util.ArrayDeque<Integer>();
+        long confirmed = 0;
         byte[] buf = new byte[chunk];
         boolean eof = false;
         while (!eof || !open.isEmpty()) {
@@ -170,6 +181,7 @@ public final class Smb2 {
                 b.write(new byte[16]); // Channel, RemainingBytes, WriteChannelInfo, Flags
                 b.write(buf, 0, n);
                 open.add(send(WRITE, b.toByteArray()));
+                sizes.add(n);
                 offset += n;
                 if (n < chunk) {
                     eof = true;
@@ -177,6 +189,10 @@ public final class Smb2 {
             }
             if (!open.isEmpty()) {
                 receive(open.poll(), "Schreiben");
+                confirmed += sizes.poll();
+                if (progress != null) {
+                    progress.bytes(confirmed);
+                }
             }
         }
     }

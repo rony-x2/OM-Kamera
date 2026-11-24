@@ -47,6 +47,9 @@ public final class FtpUpload {
     private volatile int sent;
     private volatile int waiting;
     private volatile String current;
+    /** Progress of the file being sent and speed of the last second(s) */
+    private volatile long curDone, curTotal, speedBps;
+    private long speedT0, speedB0;
 
     public FtpUpload(SharedPreferences prefs, Host host) {
         this.prefs = prefs;
@@ -69,6 +72,21 @@ public final class FtpUpload {
     public int what() { return Math.max(0, Math.min(WHAT.length - 1, prefs.getInt("ftp.what", 0))); }
     public boolean results() { return prefs.getBoolean("ftp.results", false); }
     public String state() { return state; }
+    public String current() { return current; }
+    public long currentDone() { return curDone; }
+    public long currentTotal() { return curTotal; }
+    public long speed() { return speedBps; }
+
+    /** Progress of the current file in percent, -1 while nothing is sent */
+    public int percent() {
+        long t = curTotal;
+        return current == null || t <= 0 ? -1 : (int) Math.min(100, curDone * 100 / t);
+    }
+
+    /** Number of the current file and how many are in this round, e.g. 2 of 5 */
+    public int roundIndex() { return roundIdx; }
+    public int roundSize() { return roundSize; }
+    private volatile int roundIdx, roundSize;
     public int sent() { return sent; }
     public int waiting() { return waiting; }
 
@@ -125,7 +143,9 @@ public final class FtpUpload {
         if (!on()) {
             return "aus";
         }
-        return state + (sent > 0 ? " · " + sent + " gesendet" : "") + (waiting > 0 ? " · " + waiting + " offen" : "");
+        int pct = percent();
+        String run = pct >= 0 ? " · " + pct + " %" + (speedBps > 0 ? String.format(Locale.US, " · %.1f MB/s", speedBps / 1048576.0).replace('.', ',') : "") : "";
+        return state + run + (sent > 0 ? " · " + sent + " gesendet" : "") + (waiting > 0 ? " · " + waiting + " offen" : "");
     }
 
     // ---- running ----
@@ -201,8 +221,13 @@ public final class FtpUpload {
         File dcim = new File(Environment.getExternalStorageDirectory(), "DCIM");
         File[] dirs = dcim.listFiles();
         if (dirs != null) {
-            for (File d : dirs) {
-                if (!d.isDirectory() || d.lastModified() < last - 2000) {
+            // The camera does not update a folder's time when it adds pictures: always look into the
+            // three newest folders (by name), older ones only if their time says they changed
+            Arrays.sort(dirs);
+            for (int di = 0; di < dirs.length; di++) {
+                File d = dirs[di];
+                boolean newest = di >= dirs.length - 3;
+                if (!d.isDirectory() || (!newest && d.lastModified() < last - 2000)) {
                     continue;
                 }
                 File[] fs = d.listFiles();
@@ -279,16 +304,28 @@ public final class FtpUpload {
         Transport f = transport();
         try {
             f.open(server(), port(), user(), prefs.getString("ftp.pass", ""), dir());
+            roundSize = files.size();
+            roundIdx = 0;
             for (File file : files) {
                 if (!running) {
                     return;
                 }
+                roundIdx++;
+                curDone = 0;
+                curTotal = file.length();
+                speedT0 = SystemClock.elapsedRealtime();
+                speedB0 = 0;
                 current = file.getName();
                 state = "sendet " + current;
                 host.redraw();
                 String sub = file.getParentFile().getName();
                 long t0 = SystemClock.elapsedRealtime();
-                f.store(file, sub, file.getName());
+                f.store(file, sub, file.getName(), new Smb2.Progress() {
+                    @Override
+                    public void bytes(long done) {
+                        progress(done);
+                    }
+                });
                 long ms = Math.max(1, SystemClock.elapsedRealtime() - t0);
                 sent++;
                 waiting = Math.max(0, waiting - 1);
@@ -299,7 +336,30 @@ public final class FtpUpload {
             current = null;
             state = "wartet auf neue Bilder";
         } finally {
+            current = null;
+            curDone = 0;
+            curTotal = 0;
             f.close();
+            host.redraw();
+        }
+    }
+
+    /** Called while a file is written: progress and speed, the display at most 4 times a second */
+    private long lastDraw;
+
+    private void progress(long done) {
+        curDone = done;
+        long now = SystemClock.elapsedRealtime();
+        if (now - speedT0 >= 1000) {
+            long b = done - speedB0;
+            long bps = b * 1000 / Math.max(1, now - speedT0);
+            speedBps = speedBps == 0 ? bps : (speedBps * 2 + bps) / 3;
+            speedT0 = now;
+            speedB0 = done;
+        }
+        if (now - lastDraw >= 250) {
+            lastDraw = now;
+            host.redraw();
         }
     }
 
@@ -342,8 +402,8 @@ public final class FtpUpload {
         /** Creates the target folder */
         void makeDir() throws IOException;
 
-        /** Writes the file into the sub folder of the target folder */
-        void store(File file, String sub, String name) throws IOException;
+        /** Writes the file into the sub folder of the target folder, reporting the bytes sent */
+        void store(File file, String sub, String name, Smb2.Progress progress) throws IOException;
 
         String info();
 
@@ -367,8 +427,8 @@ public final class FtpUpload {
             ftp.cwdMake(dir);
         }
 
-        public void store(File file, String sub, String name) throws IOException {
-            ftp.store(file, join(dir, sub), name);
+        public void store(File file, String sub, String name, Smb2.Progress progress) throws IOException {
+            ftp.store(file, join(dir, sub), name, progress);
         }
 
         public String info() {
@@ -394,8 +454,8 @@ public final class FtpUpload {
             smb.makeDirs(base);
         }
 
-        public void store(File file, String sub, String name) throws IOException {
-            smb.store(file, base.length() > 0 ? base + "\\" + sub : sub, name);
+        public void store(File file, String sub, String name, Smb2.Progress progress) throws IOException {
+            smb.store(file, base.length() > 0 ? base + "\\" + sub : sub, name, progress);
         }
 
         public String info() {
@@ -454,7 +514,7 @@ public final class FtpUpload {
             made = path;
         }
 
-        void store(File file, String dir, String name) throws IOException {
+        void store(File file, String dir, String name, Smb2.Progress progress) throws IOException {
             cwdMake(dir);
             Socket data = passive();
             try {
@@ -467,8 +527,13 @@ public final class FtpUpload {
                 try {
                     byte[] buf = new byte[65536];
                     int n;
+                    long total = 0;
                     while ((n = fin.read(buf)) > 0) {
                         dout.write(buf, 0, n);
+                        total += n;
+                        if (progress != null) {
+                            progress.bytes(total);
+                        }
                     }
                     dout.flush();
                 } finally {

@@ -298,6 +298,20 @@ public class OverlayView extends View {
             drawText(c, wl, l - 6 * u - ww + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, connected ? Theme.FN_BLUE : Theme.WARN);
             leftEdge = l - 6 * u - ww;
         }
+        FtpUpload up = ui.ftp();
+        int pct = up != null ? up.percent() : -1;
+        if (pct >= 0) {
+            // Upload to FTP/NAS: arrow, file number and percent, a thin bar along the bottom
+            String upT = (up.smb() ? "NAS " : "FTP ") + (up.roundSize() > 1 ? up.roundIndex() + "/" + up.roundSize() + " " : "") + pct + " %";
+            textSize(Theme.TEXT_SMALL);
+            float upW = text.measureText(upT) + 2 * pad;
+            float upR = leftEdge - 6 * u, upL = upR - upW;
+            roundRect(c, upL, y, upR, y + h, Theme.PANEL);
+            drawText(c, upT, upL + pad, y + h / 2 + Theme.TEXT_SMALL * u * 0.36f, Theme.FN_BLUE);
+            fill.setColor(Theme.FN_BLUE);
+            c.drawRect(upL + pad * 0.6f, y + h - 4 * u, upL + pad * 0.6f + (upW - 1.2f * pad) * pct / 100f, y + h - 2 * u, fill);
+            leftEdge = upL;
+        }
         if (ui.writing()) {
             // Red dot while pictures are written to the card, gently pulsing
             float dotR = 9 * u;
