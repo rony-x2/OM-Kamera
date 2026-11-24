@@ -66,6 +66,14 @@ The display is available in **English and German** (Setup → Sprache / Language
 * Auto ISO with a minimum shutter speed (by focal length or fixed)
 * Long exposures beyond 30": own list of times (e.g. 40", 90", 5'), exposed with BULB and timed by the app;
   BULB timer
+* Level (electronic spirit level) where the camera delivers sensor data to apps (a7 models; the a6000 does not)
+
+**Extra on newer bodies** (only shown when the camera reports it, e.g. a7II)
+* Uncompressed RAW (14-bit)
+* Manual lenses: name, focal length and aperture written into the EXIF of every picture, SteadyShot set
+  to the focal length, shown in the status line and used by Auto ISO – set on the camera or via MCP
+  ("I have the Helios 44-2 on, 58 mm, F2, set to F4")
+* Expanded ISO 50–80
 
 **Sequences**
 * Interval shooting and time-lapse (LRT) with start delay, start at a time of day, daily time window and weekdays
@@ -81,7 +89,9 @@ The display is available in **English and German** (Setup → Sprache / Language
 **Connectivity**
 * Remote control in the browser (live view, settings, shutter) with an access code
 * MCP interface for AI assistants (token protected), bridge in `tools/mcp-bridge`
-* FTP upload of new pictures
+* Upload of new pictures to a NAS or Windows share (SMB 2.0 to 3.1.1 with signing and encryption,
+  own pure-Java client) or to an FTP server – set up in the remote page, with progress in the status line
+* Update notice: the remote page checks GitHub for new releases; `tools/omk-update.ps1` installs them over USB
 * Clock correction via NTP (the a6000 cannot set its clock from apps; the app keeps the offset)
 * Read-only system diagnostics with root rights (fixed queries, no free commands)
 
